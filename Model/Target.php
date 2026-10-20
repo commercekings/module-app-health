@@ -22,6 +22,13 @@ class Target
     ) {
     }
 
+    /** The same target under another name. */
+    public function withName(string $name): self
+    {
+        return new self($this->websiteId, $this->storeId, $this->channel, $this->recipient, $name, $this->timezone,
+            $this->ownChannel, $this->domain);
+    }
+
     public function isShopWide(): bool
     {
         return $this->websiteId === 0;

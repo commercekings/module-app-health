@@ -434,7 +434,7 @@ class Messages
     /** The shop's name (the global messages) or the website's (a website's own), and its domain: which shop it is. */
     private function where(Target $target): string
     {
-        return $target->name . ($target->domain !== '' ? ' · ' . $target->domain : '');
+        return implode(' · ', array_filter([$target->name, $target->domain])) ?: 'Magento';
     }
 
     /** A check's label; "code@<website>" (a website's check in the global summary): "Email sending (EU Store)". */

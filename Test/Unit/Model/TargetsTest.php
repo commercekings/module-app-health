@@ -23,7 +23,7 @@ class TargetsTest extends TestCase
         $lookup = function ($path, $scope = 'default', $id = null) use ($values) {
             $key = $scope === 'default' ? 'default' : ($scope === 'website' ? 'websites/' : 'stores/') . $id;
             // a website inherits the default
-            return $values[$key][$path] ?? ($scope === 'website' ? ($values['default'][$path] ?? null) : null);
+            return $values[$key][$path] ?? ($scope !== 'default' ? ($values['default'][$path] ?? null) : null);
         };
         $scopeConfig->method('getValue')->willReturnCallback($lookup);
         $scopeConfig->method('isSetFlag')->willReturnCallback(fn (...$args) => !empty($lookup(...$args)));
@@ -40,6 +40,7 @@ class TargetsTest extends TestCase
         foreach ([0, 1, 2] as $id) {
             $website = $this->createStub(Website::class);
             $website->method('getId')->willReturn($id);
+            $website->method('getName')->willReturn(['Admin', 'Main Website', 'Second Website'][$id]);
             $website->method('getDefaultStore')->willReturn($stores[$id] ?? null);
             $websites[$id] = $website;
         }
@@ -63,8 +64,9 @@ class TargetsTest extends TestCase
             'websites/2' => ['commercekings_app_health/general/recipient' => 'C-ignored'],
             'stores/2' => ['general/store_information/name' => 'Moj Planer']]);
         $shopWide = $targets->shopWide();
-        $this->assertSame([0, 1, 'C00', 'Main Website Store', 'Europe/Belgrade'], [$shopWide->websiteId,
-            $shopWide->storeId, $shopWide->recipient, $shopWide->name, $shopWide->timezone]);
+        $this->assertSame([0, 1, 'C00', '', 'Europe/Belgrade'], [$shopWide->websiteId,
+            $shopWide->storeId, $shopWide->recipient, $shopWide->name, $shopWide->timezone],
+            'no Store Information name at the default scope: not the default store\'s - the header says the domain');
         $websites = $targets->websites();
         $this->assertSame([1, 2], array_keys($websites));
         $this->assertSame(['C00', 'Main Website Store', false], [$websites[1]->recipient, $websites[1]->name,
@@ -76,6 +78,24 @@ class TargetsTest extends TestCase
             'its row; a website-scope setting is not read; the Store Information name first');
         $this->assertSame('C02', $targets->forWebsite(2)->recipient);
         $this->assertSame(0, $targets->forWebsite(0)->websiteId);
+    }
+
+    public function testTheGlobalNameIsTheShopsNotAWebsitesStoreName(): void
+    {
+        $named = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Moj Planer Group'],
+            'stores/1' => ['general/store_information/name' => 'Moj Planer EU']]);
+        $this->assertSame(['Moj Planer Group', 'Moj Planer EU'], [$named->shopWide()->name,
+            $named->websites()[1]->name], 'global: the default scope\'s Store Information name');
+        $this->assertSame('', $this->targets(['default' => self::ON])->shopWide()->name,
+            'none set: no store\'s name for the whole shop - the header says the domain');
+    }
+
+    public function testWebsitesWithTheSameStoreNameAreToldApart(): void
+    {
+        $targets = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Moj Planer']]);
+        $websites = $targets->websites();
+        $this->assertSame(['Moj Planer (Main Website)', 'Moj Planer (Second Website)'],
+            [$websites[1]->name, $websites[2]->name], 'both inherit the name: the website says which');
     }
 
     public function testOffOrWithoutARecipientIsNoTarget(): void

@@ -221,6 +221,12 @@ class MessagesTest extends TestCase
                 ['PCI: payment card number in system.log (1×, {t:' . (self::NOW - 960) . '})']));
     }
 
+    public function testWithoutANameTheHeaderSaysTheDomain(): void
+    {
+        $this->assertStringStartsWith('*Hourly status · shop.example.com*', $this->messages->status(new Target(0, 1,
+            'slack', 'C0', '', 'UTC', true, 'shop.example.com'), [], [], 0, [], 0));
+    }
+
     public function testResolvedSaysHowLongItFailed(): void
     {
         $this->assertSame("*Resolved: Cron · Main Website Store*\n\nFailed for 2 h; OK again since 09:52.",

@@ -54,6 +54,14 @@ class Targets
             }
         }
         ksort($targets);
+        // websites with the same store name (e.g. both inherit it): the website's own name says which
+        $names = array_count_values(array_map(fn (Target $target) => $target->name, $targets));
+        foreach ($targets as $websiteId => $target) {
+            if ($names[$target->name] > 1) {
+                $targets[$websiteId] = $target->withName($target->name . ' ('
+                    . (string)$this->storeManager->getWebsite($websiteId)->getName() . ')');
+            }
+        }
         return $targets;
     }
 
@@ -86,7 +94,10 @@ class Targets
         }
         $storeId = (int)$store->getId();
         $url = $store instanceof Store ? (string)$store->getBaseUrl(UrlInterface::URL_TYPE_WEB, true) : '';
-        return new Target($websiteId, $storeId, $channel, $recipient, $this->storeName($store),
+        // the whole shop's name: the default scope's Store Information name - never one store's ('': the domain)
+        $name = $websiteId === 0
+            ? trim((string)$this->scopeConfig->getValue('general/store_information/name')) : $this->storeName($store);
+        return new Target($websiteId, $storeId, $channel, $recipient, $name,
             (string)$this->timezone->getConfigTimezone(ScopeInterface::SCOPE_STORE, (string)$storeId), $ownChannel,
             strtolower((string)parse_url($url, PHP_URL_HOST)));
     }
