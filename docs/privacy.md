@@ -9,7 +9,7 @@ breach). Every new log entry – every level, every log source – is scanned be
 a high alert at once, with the rule, how often, the last time and where – never the value:
 
 ```
-*Security: sensitive data in logs · Main Website Store*
+*Security: sensitive data in logs · Acme Shop · shop.example.com*
 
 PCI: payment card number in system.log (3×, last 14:02)
 Where: app/code/Vendor/Pay/Model/Gateway.php:120

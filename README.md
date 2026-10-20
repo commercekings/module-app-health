@@ -75,7 +75,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | The daily summary | once a day at *Daily summary at*: a global one (the shared checks, and websites without a channel of their own, named) and one per website channel (its own items, in its time zone) | global, each website channel |
 
 ```
-*Hourly status · Main Website Store*
+*Hourly status · Acme Shop · shop.example.com*
 
 1 problem: Cron
 Warnings: Queue (commercekings.notification.send: 120 messages)
@@ -92,7 +92,7 @@ the alerts do.
 
 ## Where messages go
 
-Every header names the shop and its domain: *Problem: Cron stopped · Main Website Store · shop.example.com*. Every
+Every header names the shop and its domain: *Problem: Cron stopped · Acme Shop · shop.example.com*. Every
 setting is global (*Stores > Configuration > CommerceKings > App health*, default scope):
 
 | Messages | Go to |
