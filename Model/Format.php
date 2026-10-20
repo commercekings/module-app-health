@@ -31,6 +31,13 @@ class Format
         return number_format($number);
     }
 
+    /** "1 error", "2 errors": $plural without its last "s" for one. */
+    public static function many(int $number, string $plural): string
+    {
+        return self::number($number) . ' ' . ($number === 1 && str_ends_with($plural, 's')
+            ? substr($plural, 0, -1) : $plural);
+    }
+
     /**
      * "sitemap_generate x2, backup x1" - the largest first, at most $limit, "+N more" for the rest.
      *
@@ -68,7 +75,7 @@ class Format
         $parts = [];
         foreach ($totals as $total => $count) {
             $count ??= array_sum($items[$total] ?? []);
-            $parts[] = self::number($count) . ' ' . $total
+            $parts[] = self::many($count, (string)$total)
                 . (!empty($items[$total]) ? ' (' . self::top($items[$total]) . ')' : '');
         }
         return implode(', ', $parts);

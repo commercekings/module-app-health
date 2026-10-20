@@ -15,6 +15,7 @@
                 <enabled>1</enabled>
                 <stale_minutes>5</stale_minutes>
                 <running_minutes>60</running_minutes>
+                <quiet_minutes>60</quiet_minutes>
             </cron>
             <indexers>
                 <enabled>1</enabled>
@@ -58,6 +59,7 @@
             <email_failing>
                 <enabled>1</enabled>
                 <failed_reminders>3</failed_reminders>
+                <quiet_minutes>60</quiet_minutes>
             </email_failing>
             <sales_emails>
                 <enabled>1</enabled>

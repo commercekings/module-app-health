@@ -74,7 +74,7 @@ class Normalizer
             'location' => $this->location($entry->file, $entry->line, $root),
             'fingerprint' => substr(hash('sha256', strtolower($channel . '|' . min($rank, 3) . '|' . $class . '|'
                 . $normalized)), 0, 8),
-            'label' => $class !== '' ? $class : $this->label($normalized),
+            'label' => $class !== '' ? $class : $this->label($normalized, $entry->message),
             'message' => $withMessage ? $this->mask($entry->message) : null,
             'time' => $entry->time,
             'mail' => $mail = preg_match(self::MAIL_MESSAGE, $entry->message) === 1
@@ -98,7 +98,9 @@ class Normalizer
             '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/' => '<email>',
             '/"[^"]{0,500}"|\'[^\']{0,500}\'|“[^”]{0,500}”|`[^`]{0,500}`/u' => '<q>',
             '#(/[^\s/:()]+)(?:/[^\s:()]+)+#' => '$1/<path>',
-            '/\b0x[0-9a-f]+\b|\b[0-9a-f]{8}-[0-9a-f-]{27}\b|\b(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/i' => '<hex>',
+            // not \b: a hex token after "_" ("token=e2e_3fa9c1d2") is one placeholder too
+            '/\b0x[0-9a-f]+\b|(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f-]{27}(?![0-9a-f])'
+                . '|(?<![0-9a-f])(?=[0-9a-f]*\d)[0-9a-f]{8,}(?![0-9a-f])/i' => '<hex>',
             '/[+-]?\d+(?:[.,:\/-]\d+)*/' => '<n>',
         ];
         $normalized = (string)preg_replace(array_keys($patterns), array_values($patterns), $message);
@@ -149,11 +151,22 @@ class Normalizer
         return ['code' => 'other', 'reason' => 'the mail server could not be used', 'port' => $port];
     }
 
-    /** The first words, every placeholder and name-like word as ***. */
-    private function label(string $normalized): string
+    /**
+     * The first words, every placeholder and name-like word as ***. A lowercase first word with a short number in it
+     * ("e2e", "v2", "oauth2") stays as written: it names something, it is not a value.
+     */
+    private function label(string $normalized, string $message): string
     {
         $words = array_slice(preg_split('/ /', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [], 0, self::LABEL_WORDS);
+        $first = (string)strtok(trim($message), ' ');
+        if ($words !== [] && preg_match('/^[a-z][a-z0-9_-]{0,15}:?$/D', $first) && !preg_match('/\d{4}/', $first)
+            && str_contains($words[0], '<n>')) {
+            $words[0] = $first;
+        }
         foreach ($words as $i => $word) {
+            if ($i === 0 && $word === $first) {
+                continue;
+            }
             if (str_contains($word, '<') || ($i > 0 && preg_match('/\p{Lu}/u', $word))
                 || !preg_match('/^[\p{L}\p{P}]+$/u', $word)) {
                 $words[$i] = '***';

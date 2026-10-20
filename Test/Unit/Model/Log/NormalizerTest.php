@@ -133,4 +133,16 @@ class NormalizerTest extends TestCase
         $this->assertStringContainsString('established with host ***', $masked);
         $this->assertStringNotContainsString('*** ***', $masked, 'repeated *** collapsed');
     }
+
+    public function testAHexTokenAfterAnUnderscoreIsOnePlaceholder(): void
+    {
+        $this->assertSame($this->safe('payment sync failed token=e2e_3fa9c1d2e4b5')['fingerprint'],
+            $this->safe('payment sync failed token=e2e_99aa00bb11cc')['fingerprint']);
+    }
+
+    public function testALowercaseFirstWordWithAShortNumberStays(): void
+    {
+        $this->assertSame('e2e probe: payment sync failed', $this->safe('e2e probe: payment sync failed')['label']);
+        $this->assertSame('*** probe', $this->safe('1234 probe')['label'], 'a number is not a name');
+    }
 }

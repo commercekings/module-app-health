@@ -64,7 +64,7 @@ class PrivacyTest extends TestCase
         $checks = ['system_log' => new SystemLog($reader, $fingerprints, $config, $state, $clock),
             'exceptions' => new Exceptions($log, $fingerprints, $config, $state, $clock),
             'email_failing' => new EmailFailing($this->resource($this->db(['fetchPairs' => [[], []]])), $deliveryState,
-                $log, $reader, $config, $clock)];
+                $log, $reader, $config, $clock, $state)];
         $run = function () use ($state, $checks): array {
             $state->begin();
             $results = array_map(fn ($check) => $check->run(), $checks);

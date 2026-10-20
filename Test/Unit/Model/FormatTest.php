@@ -21,6 +21,8 @@ class FormatTest extends TestCase
             Format::counts(['runs' => 1437, 'errors' => 2, 'errors:sitemap_generate' => 2]));
         $this->assertSame('3 exceptions (X x3)', Format::counts(['exceptions:X' => 3]), 'a total from its items');
         $this->assertSame('a, b and c', Format::list(['a', 'b', 'c']));
+        $this->assertSame(['1 error', '2 errors', '1 critical', '1 run'], [Format::many(1, 'errors'),
+            Format::many(2, 'errors'), Format::many(1, 'critical'), Format::counts(['runs' => 1])]);
         $this->assertSame('a', Format::list(['a']));
     }
 }

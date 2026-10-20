@@ -79,6 +79,12 @@
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
+                <field id="quiet_minutes" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>A failing job counts as fixed after (minutes)</label>
+                    <comment>Without a successful run of it since its last error. Default: 60.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
             </group>
             <group id="indexers" translate="label comment" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Indexers (all websites)</label>
@@ -252,6 +258,12 @@
                 <field id="failed_reminders" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Alert at (failing notifications)</label>
                     <comment>Failed in the last hour, e.g. cart reminders. Default: 3.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="quiet_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Mail counts as working again after (minutes)</label>
+                    <comment>After a mail transport error it stays failing until a mail is seen going out (a sales email sent, a CommerceKings notification sent), or this long without a new error. Default: 60.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

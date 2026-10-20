@@ -9,6 +9,8 @@ use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\ExceptionLog;
 use CommerceKings\AppHealth\Model\Format;
 use CommerceKings\AppHealth\Model\Log\LogReader;
+use CommerceKings\AppHealth\Model\RunState;
+use Magento\Framework\DB\Select;
 use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\Notification\Api\DeliveryStateInterface;
 use Magento\Framework\App\ResourceConnection;
@@ -22,10 +24,15 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
  * (Notification's delivery state, changed in the last hour, on its updated_at index, at most CAP rows). Counts: mail
  * errors. Causes: the latest transport error (masked), the failing notification types. Unsent sales emails per
  * website: SalesEmails.
+ *
+ * No news is no recovery: after a transport error it stays failing until a mail is seen going out (a sales email
+ * marked sent, a CommerceKings notification sent) or "quiet_minutes" (60) pass without a new error.
  */
 class EmailFailing implements CheckInterface
 {
     public const CODE = 'email_failing';
+    /** While sending is broken: since, the last error, its reason and cause. */
+    private const CURSOR = 'cursor:email_failing';
     /** Where to look, by the kind of mail transport failure (Normalizer::mailReason()). */
     private const HINTS = [
         'refused' => 'Is the mail server running and reachable from this server (host, port, firewall)?',
@@ -44,7 +51,8 @@ class EmailFailing implements CheckInterface
         private readonly ExceptionLog $log,
         private readonly LogReader $reader,
         private readonly Config $config,
-        private readonly DateTime $dateTime
+        private readonly DateTime $dateTime,
+        private readonly RunState $state
     ) {
     }
 
@@ -71,18 +79,36 @@ class EmailFailing implements CheckInterface
         $failing = $this->failingNotifications();
         $parts = [];
         $causes = [];
+        $now = $this->dateTime->gmtTimestamp();
+        $broken = (array)($this->state->get(self::CURSOR) ?? []);
         if ($mail > 0) {
             usort($mailEntries, fn ($a, $b) => (int)($b['time'] ?? 0) <=> (int)($a['time'] ?? 0));
             $latest = $mailEntries[0];
             $reason = (array)($latest['mail_reason'] ?? []) + ['code' => 'other', 'reason' => 'mail sending failed',
                 'port' => null];
-            $parts[] = sprintf('%d new mail transport %s: %s', $mail, $mail === 1 ? 'error' : 'errors',
-                $reason['reason']);
-            $causes[] = new Cause('mail_' . $reason['code'], ucfirst((string)$reason['reason'])
+            $parts[] = sprintf('%s: %s', Format::many($mail, 'new mail transport errors'), $reason['reason']);
+            $cause = new Cause('mail_' . $reason['code'], ucfirst((string)$reason['reason'])
                 . ($reason['port'] ? ' (port ' . (int)$reason['port'] . ')' : '') . ': '
                 . ((string)($latest['message'] ?? '') !== '' ? $latest['message'] : $latest['label'])
                 . ($latest['location'] ? ' (' . $latest['location'] . ')' : ''),
                 (string)__(self::HINTS[$reason['code']] ?? self::HINTS['other']));
+            $causes[] = $cause;
+            // broken until a send succeeds or it stays quiet long enough: a quiet minute is no recovery
+            $this->state->set(self::CURSOR, ['since' => (int)($broken['since'] ?? $now), 'last' => $now,
+                'reason' => (string)$reason['reason'], 'cause' => $cause->toArray()]);
+        } elseif ($broken !== []) {
+            $last = (int)($broken['last'] ?? 0);
+            $quiet = $last <= $now - $this->config->getInt(self::CODE, 'quiet_minutes', 60) * 60;
+            if ($quiet || $this->sentSince($last)) {
+                $this->state->set(self::CURSOR, []);
+            } else {
+                $parts[] = sprintf('no successful send since the last mail transport error at %s: %s',
+                    Format::at($last), $broken['reason'] ?? 'mail sending failed');
+                [$code, $detail, $hint] = array_pad((array)($broken['cause'] ?? []), 3, '');
+                if ($code !== '') {
+                    $causes[] = new Cause((string)$code, (string)$detail, (string)$hint);
+                }
+            }
         }
         if (array_sum($failing) >= $this->config->getInt(self::CODE, 'failed_reminders', 3)) {
             $parts[] = sprintf('%d notifications failing (%s)', array_sum($failing), Format::top($failing));
@@ -93,6 +119,28 @@ class EmailFailing implements CheckInterface
         $counts = ['mail errors' => $mail];
         return $parts === [] ? CheckResult::ok('', $counts)
             : CheckResult::fail(implode('; ', $parts), $counts, 'Mail sending failing')->withCauses($causes);
+    }
+
+    /**
+     * A mail went out since $since: a sales email marked sent (each table's updated_at index), or a CommerceKings
+     * notification sent (the delivery state's updated_at index) - one bounded query, only while sending is broken.
+     */
+    private function sentSince(int $since): bool
+    {
+        $db = $this->resource->getConnection();
+        $from = gmdate('Y-m-d H:i:s', $since);
+        $parts = [];
+        foreach (['sales_order', 'sales_invoice', 'sales_shipment', 'sales_creditmemo'] as $table) {
+            $parts[] = $db->select()->from($this->resource->getTableName($table), ['sent' => new Expression('1')])
+                ->where('updated_at >= ?', $from)->where('email_sent = 1')->limit(1);
+        }
+        $parts[] = $db->select()->from($this->deliveryState->getTableName(), ['sent' => new Expression('1')])
+            ->where('updated_at >= ?', $from)->where('sent_at >= ?', $from)
+            ->where('type NOT LIKE ?', 'app\_health\_%')->limit(1);
+        $union = $db->select();
+        $union->union(array_map(fn ($part) => $db->select()->from(['s' => $part], ['sent']), $parts),
+            Select::SQL_UNION_ALL);
+        return (bool)$db->fetchOne($db->select()->from(['u' => $union], ['sent'])->limit(1));
     }
 
     /** @return array<string, int> by notification type, other modules' only */

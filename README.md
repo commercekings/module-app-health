@@ -28,14 +28,14 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 
 | Check | Alert when (default) | Sent to |
 |---|---|---|
-| Cron | no job has run for 5 min; a job running for over 60 min; jobs ending with an error (warning); cron was down (warning, when it is back) | all websites |
+| Cron | no job has run for 5 min; a job running for over 60 min; a job ending with an error (warning, until it succeeds again); cron was down (warning, when it is back) | all websites |
 | Indexers | an indexer invalid or stuck working for over 60 min | all websites |
 | Caches | a cache type disabled; invalidated for over 60 min (warning) | all websites |
 | Maintenance mode | on for over 15 min | all websites |
 | system.log | an error never seen before (NEW, with its file:line); a CRITICAL entry (again after 6 h); 20 or more errors in 5 min | all websites |
 | exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | all websites |
 | Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | all websites |
-| Sending | a mail transport error in `exception.log`; 3 or more CommerceKings notifications failing | all websites |
+| Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | all websites |
 | Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | all websites |
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
 | Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min | the website |

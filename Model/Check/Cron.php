@@ -18,7 +18,8 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
  * Magento cron from cron_schedule: no other job has run for "stale_minutes" (fail), a job has been running for over
  * "running_minutes" (fail), jobs ended with an error since the last run (warn, job codes and counts), MISSED or more
  * jobs missed in the last hour (warn), or this check itself did not run for GAP_MINUTES up to GAP_MAX_HOURS (warn:
- * cron was down and is back). Counts: runs and errors.
+ * cron was down and is back). A job that ended with an error stays a warning until it succeeds again (or
+ * "quiet_minutes" pass): no news is no recovery. Counts: runs and errors.
  *
  * Causes: nothing scheduled at all (cron not started) or scheduled but not started; a stuck job and how many jobs of
  * its group wait; a job failing REPEATED times in 2 hours, with its latest error masked; too many missed jobs.
@@ -72,8 +73,9 @@ class Cron implements CheckInterface
     public function run(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
-        $last = (int)($this->state->get('cursor:' . self::CODE)['last'] ?? 0);
-        $this->state->set('cursor:' . self::CODE, ['last' => $now]);
+        $cursor = (array)($this->state->get('cursor:' . self::CODE) ?? []);
+        $last = (int)($cursor['last'] ?? 0);
+        $this->state->set('cursor:' . self::CODE, ['last' => $now] + $cursor);
         if ($last > 0 && $now - $last > self::GAP_MAX_HOURS * 3600) {
             $last = 0; // not run for a long time: start afresh
         }
@@ -121,9 +123,18 @@ class Cron implements CheckInterface
                 : new Cause('cron_not_running', 'jobs are scheduled but none has started', (string)__('cron:run may'
                     . ' fail as it starts: run bin/magento cron:run by hand and read its output.'));
         }
+        $failing = $this->stillFailing((array)($cursor['failing'] ?? []), $errors, $now);
+        $this->state->set('cursor:' . self::CODE, ['last' => $now, 'failing' => $failing]);
+        $quietFailing = array_diff_key($failing, $errors);
+        if ($quietFailing !== []) {
+            // no news is no recovery: still failing until the job succeeds again
+            ksort($quietFailing);
+            $warn[] = implode(', ', array_map(fn ($job, $at) => sprintf('%s failing since %s', $job, Format::at($at)),
+                array_keys(array_slice($quietFailing, 0, 3, true)), array_slice($quietFailing, 0, 3, true)))
+                . ' (no successful run since)';
+        }
         if ($errors !== []) {
-            $warn[] = sprintf('%d new cron %s (%s)', array_sum($errors), array_sum($errors) === 1 ? 'error' : 'errors',
-                Format::top($errors));
+            $warn[] = sprintf('%s (%s)', Format::many(array_sum($errors), 'new cron errors'), Format::top($errors));
             foreach ($this->failingRepeatedly(array_keys($errors), $now) as $job => [$times, $message]) {
                 $causes[] = new Cause('cron_job_failing', sprintf('job %s failed %d times in 2 h%s', $job, $times,
                     $message !== '' ? ': ' . $message : ''), (string)__('Fix the cause of the job\'s error (in'
@@ -144,13 +155,42 @@ class Cron implements CheckInterface
         $result = match (true) {
             $fail !== [] => CheckResult::fail($detail, $counts, $stuck ? 'Cron jobs stuck' : 'Cron stopped'),
             $warn !== [] => CheckResult::warn($detail, $counts, match (true) {
-                $errors !== [] => 'Cron job errors',
+                $errors !== [] || $quietFailing !== [] => 'Cron job errors',
                 $missed >= self::MISSED => 'Cron jobs missed',
                 default => 'Cron was down',
             }),
             default => CheckResult::ok('', $counts),
         };
         return $causes === [] ? $result : $result->withCauses($causes);
+    }
+
+    /**
+     * The jobs that ended with an error and have not succeeded since: this run's errors, and the earlier ones without
+     * a success after their last error and newer than "quiet_minutes" - one indexed query, only while there are some.
+     *
+     * @param array<string, int> $failing job code => last error time
+     * @param array<string, int> $errors this run's errors by job code
+     * @return array<string, int>
+     */
+    private function stillFailing(array $failing, array $errors, int $now): array
+    {
+        $quiet = $now - $this->config->getInt(self::CODE, 'quiet_minutes', 60) * 60;
+        $earlier = array_filter(array_diff_key(array_map('intval', $failing), $errors), fn ($at) => $at > $quiet);
+        if ($earlier !== []) {
+            $db = $this->resource->getConnection();
+            $succeeded = $db->fetchPairs($db->select()
+                ->from($this->resource->getTableName('cron_schedule'), ['job_code', 'last' => 'MAX(finished_at)'])
+                ->where('job_code IN (?)', array_keys($earlier))
+                ->where('status = ?', 'success')
+                ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', min($earlier) - self::LATE_START_SECONDS))
+                ->group('job_code'));
+            foreach ($succeeded as $job => $at) {
+                if ((int)strtotime($at . ' UTC') > $earlier[$job]) {
+                    unset($earlier[$job]);
+                }
+            }
+        }
+        return $earlier + array_fill_keys(array_keys($errors), $now);
     }
 
     /** Pending jobs of the stuck job's group already due (the last day), the group's codes only. */

@@ -20,6 +20,7 @@ class CronTest extends TestCase
     use \CommerceKings\AppHealth\Test\Unit\Stub\Sensitive;
 
     private const NOW = 1792483200;
+    private const JOBS = ['catalog_index_refresh_price', 'sitemap_generate', Cron::OWN_JOB];
 
     private RunState $state;
 
@@ -31,9 +32,10 @@ class CronTest extends TestCase
      * @param array<int, array<string, mixed>> $finished rows of job_code, status, count
      */
     private function check(array $finished, array $pairs, array $one, ?int $lastRun = null,
-        array $jobs = ['catalog_index_refresh_price', 'sitemap_generate', Cron::OWN_JOB]): CheckResult
+        array $jobs = self::JOBS, array $failing = []): CheckResult
     {
-        $store = (new MemoryStore())->seed($lastRun ? ['cursor:cron' => ['last' => $lastRun]] : []);
+        $store = (new MemoryStore())->seed($lastRun ? ['cursor:cron' => ['last' => $lastRun, 'failing' => $failing]]
+            : []);
         $this->state = new RunState($store);
         $this->state->begin();
         $cronConfig = $this->createStub(ConfigInterface::class);
@@ -46,7 +48,8 @@ class CronTest extends TestCase
         $cronConfig->method('getJobs')->willReturn($groups);
         $db = $this->db(['fetchAll' => [$finished], 'fetchPairs' => $pairs, 'fetchOne' => $one]);
         return (new Cron($this->resource($db), $cronConfig, $this->config(['cron/stale_minutes' => '5',
-            'cron/running_minutes' => '60']), $this->state, new Clock(self::NOW), $this->normalizer()))->run();
+            'cron/running_minutes' => '60', 'cron/quiet_minutes' => '60']), $this->state, new Clock(self::NOW),
+            $this->normalizer()))->run();
     }
 
     private function ago(int $seconds): string
@@ -67,7 +70,7 @@ class CronTest extends TestCase
         $this->assertSame(CheckResult::OK, $result->status);
         $this->assertSame(['runs' => 7, 'errors' => 0], $result->counts);
         $this->assertSame([], $result->causes);
-        $this->assertSame(['last' => self::NOW], $this->state->get('cursor:cron'));
+        $this->assertSame(['last' => self::NOW, 'failing' => []], $this->state->get('cursor:cron'));
     }
 
     public function testEveryQueryUsesTheJobCodeStatusScheduledAtIndex(): void
@@ -148,5 +151,23 @@ class CronTest extends TestCase
     {
         $result = $this->check([], [[]], ['0'], self::NOW - 300, [Cron::OWN_JOB]);
         $this->assertSame(CheckResult::OK, $result->status, 'no other job configured: nothing to compare');
+    }
+
+    public function testAFailingJobStaysAWarningUntilItSucceeds(): void
+    {
+        $error = [['job_code' => 'sitemap_generate', 'status' => 'error', 'count' => '1']];
+        $this->check($error, [[], []], [$this->ago(30), '0'], self::NOW - 300);
+        $this->assertSame(['sitemap_generate' => self::NOW], $this->state->get('cursor:cron')['failing']);
+        $quiet = $this->check([], [[], []], [$this->ago(30), '0'], self::NOW - 300, self::JOBS,
+            ['sitemap_generate' => self::NOW - 600]);
+        $this->assertSame([CheckResult::WARN, 'Cron job errors'], [$quiet->status, $quiet->title]);
+        $this->assertSame('sitemap_generate failing since {t:' . (self::NOW - 600) . '} (no successful run since)',
+            $quiet->detail);
+        $fixed = $this->check([], [[], ['sitemap_generate' => $this->ago(60)]], [$this->ago(30), '0'],
+            self::NOW - 300, self::JOBS, ['sitemap_generate' => self::NOW - 600]);
+        $this->assertSame(CheckResult::OK, $fixed->status, 'it ran successfully after its error');
+        $old = $this->check([], [[]], [$this->ago(30), '0'], self::NOW - 300, self::JOBS,
+            ['sitemap_generate' => self::NOW - 3601]);
+        $this->assertSame(CheckResult::OK, $old->status, 'quiet for over an hour: no query, fixed');
     }
 }

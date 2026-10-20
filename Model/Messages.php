@@ -192,8 +192,9 @@ class Messages
             }
             $c = $counts[$code] ?? [];
             $lines[] = $this->pool->getLabel($code) . ': ' . ($code === 'system_log'
-                ? sprintf('%s critical, %s errors, %s warnings', Format::number((int)($c['critical'] ?? 0)),
-                    Format::number((int)($c['errors'] ?? 0)), Format::number((int)($c['warnings'] ?? 0)))
+                ? sprintf('%s critical, %s, %s', Format::number((int)($c['critical'] ?? 0)),
+                    Format::many((int)($c['errors'] ?? 0), 'errors'),
+                    Format::many((int)($c['warnings'] ?? 0), 'warnings'))
                 : Format::number((int)($c['exceptions'] ?? 0)));
             foreach ($c as $key => $count) {
                 if (str_starts_with((string)$key, 'fp:')) {
