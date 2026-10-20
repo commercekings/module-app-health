@@ -22,11 +22,12 @@ use Psr\Log\LoggerInterface;
  * last send, the retry time and the failures in a row.
  *
  * queue() marks the website "queued" in the statement that checks it is free (not queued, or queued for over
- * STUCK_MINUTES; no retry pending) and publishes "<type>|<scope>". deliver(), in the consumer, composes the text
- * on fresh state, claims the delivery version and sends it as a service message: no cooldown, no stop list, no quiet
- * hours. A provider's temporary refusal waits its Retry-After (within bounds); any other failure waits longer each
- * time (RETRY_MINUTES, then the last one again - a team alert is never given up), so a channel outage retries until
- * it ends. Only the type, the scope and exception classes are logged, never the text or the recipient.
+ * STUCK_MINUTES; no retry pending) and publishes "<type>|<scope>". deliver(), in the consumer, composes the text on
+ * fresh state, claims the delivery version and sends it as a service message: no cooldown, no stop list, no quiet hours
+ * - or, when the type says so, delivers it quietly: recorded as sent, the channel not called (the hourly status with
+ * nothing to say). A provider's temporary refusal waits its Retry-After (within bounds); any other failure waits longer
+ * each time (RETRY_MINUTES, then the last one again - a team alert is never given up), so a channel outage retries
+ * until it ends. Only the type, the scope and exception classes are logged, never the text or the recipient.
  */
 class TeamMessage
 {
@@ -74,8 +75,9 @@ class TeamMessage
     }
 
     /**
-     * @param \Closure(Target, array<string, mixed>): ?array{0: string, 1: \Closure(): void} $compose the text and what
-     *     to record once it is out, or null when there is nothing to send (anymore)
+     * @param \Closure(Target, array<string, mixed>): ?array{0: string, 1: \Closure(): void, 2?: bool} $compose the
+     *     text, what to record once it is out and whether to post it (false: delivered quietly - recorded as sent, the
+     *     channel not called), or null when there is nothing to send (anymore)
      * @return bool whether it was sent (or may have been: MessageSentException)
      */
     public function deliver(string $type, string $reference, \Closure $compose): bool
@@ -90,6 +92,7 @@ class TeamMessage
             return false;
         }
         [$text, $sent] = $composed;
+        $post = $composed[2] ?? true;
         $db = $this->resource->getConnection();
         $version = (int)$row['delivery_version'] + 1;
         $key = $this->deliveryState->keyCondition($type, $websiteId);
@@ -101,6 +104,12 @@ class TeamMessage
             return false;
         }
         $mine = $key + ['delivery_version = ?' => $version];
+        if (!$post) {
+            $this->recordSent($sent, $mine);
+            $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d delivered quietly (not posted)',
+                $type, $websiteId));
+            return true;
+        }
         try {
             $status = $this->sender->send(Delivery::text($target->storeId, $target->channel, $target->recipient,
                 fn () => new DeliveryContent([], null, null, $text), useCooldown: false, stoppable: false,

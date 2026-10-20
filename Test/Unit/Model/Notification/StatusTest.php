@@ -7,6 +7,7 @@ use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
+use CommerceKings\AppHealth\Model\Status\DefaultPolicy;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
@@ -24,6 +25,9 @@ class StatusTest extends TestCase
 
     /** @var string[] */
     private array $sent = [];
+    /** @var bool[] whether each was posted */
+    private array $posted = [];
+    private ?\CommerceKings\AppHealth\Api\StatusPolicyInterface $policy = null;
 
     private function send(MemoryStore $store, ?string $sentAt = null, array $settings = []): void
     {
@@ -39,12 +43,14 @@ class StatusTest extends TestCase
                 return false;
             }
             $this->sent[] = $composed[0];
+            $this->posted[] = $composed[2] ?? true;
+            ($composed[1])();
             return true;
         });
         $pool = $this->pool(['cron' => 'Cron', 'queues' => 'Queue', 'caches' => 'Caches'],
             ['email_disabled' => 'Email sending']);
         (new Status($teamMessage, $store, new Messages($pool, new Clock(self::NOW)), $pool, $this->config($settings),
-            new Clock(self::NOW)))->process('0');
+            new Clock(self::NOW), $this->policy ?? new DefaultPolicy($this->config($settings))))->process('0');
     }
 
     public function testAllChecksOkAndNoErrors(): void
@@ -98,7 +104,7 @@ class StatusTest extends TestCase
         });
         $pool = $this->pool([]);
         (new Status($teamMessage, new MemoryStore(), new Messages($pool, new Clock(self::NOW)), $pool, $this->config(),
-            new Clock(self::NOW)))->process('2');
+            new Clock(self::NOW), new DefaultPolicy($this->config())))->process('2');
         $this->assertSame(['2'], $this->sent, 'shop-wide alerts off: the first website\'s recipient');
     }
 
@@ -107,6 +113,63 @@ class StatusTest extends TestCase
         $this->assertSame([60, 15, 180, 90], array_map(fn ($minutes) => $this->config($minutes === null ? []
             : ['general/hourly_status_minutes' => $minutes])->getHourlyStatusMinutes(), [null, '5', '600', '90']),
             'at most 3 hours: what errors:recent keeps');
+    }
+
+    public function testAllOkIsPostedOnceADayElseDeliveredQuietly(): void
+    {
+        $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'ok']]]]);
+        $this->send($store);
+        $this->assertSame([true], $this->posted, 'never posted as all OK: posted');
+        $this->assertSame(['at' => self::NOW, 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0]);
+        $this->send($store);
+        $this->assertSame([true, false], $this->posted, 'again today: delivered quietly');
+        $this->assertSame(['at' => self::NOW, 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0],
+            'a quiet one changes nothing');
+        $store->seed(['checks' => [0 => ['cron' => ['status' => 'fail']]]]);
+        $this->send($store);
+        $this->assertSame([true, false, true], $this->posted, 'a problem: posted');
+    }
+
+    public function testAnotherModulesPolicyDecides(): void
+    {
+        $this->policy = new class implements \CommerceKings\AppHealth\Api\StatusPolicyInterface {
+            public ?\CommerceKings\AppHealth\Api\Data\StatusReport $seen = null;
+
+            public function getIntervalMinutes(int $scopeId): int
+            {
+                return 60;
+            }
+
+            public function shouldPost(\CommerceKings\AppHealth\Api\Data\StatusReport $report): bool
+            {
+                $this->seen = $report;
+                return false; // e.g. outside opening hours
+            }
+        };
+        $this->send((new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'fail']]],
+            Fingerprints::KEY => ['aaaaaaaa' => ['label' => 'Unable to send']],
+            Fingerprints::ERRORS_KEY => [[self::NOW - 60, 'aaaaaaaa', 2, 1]]]));
+        $this->assertSame([false], $this->posted, 'quiet, though Cron fails: its own alert went at once');
+        $report = $this->policy->seen;
+        $this->assertSame([0, ['Cron'], 2, [['label' => 'Unable to send', 'count' => 2, 'new' => true]], 'UTC'],
+            [$report->scopeId, $report->problems, $report->errorCount, $report->errors,
+                $report->now->getTimezone()->getName()]);
+    }
+
+    public function testTheIntervalStaysWithinFifteenMinutesAndThreeHours(): void
+    {
+        $policy = $this->createStub(\CommerceKings\AppHealth\Api\StatusPolicyInterface::class);
+        $policy->method('getIntervalMinutes')->willReturnOnConsecutiveCalls(5, 600, 45);
+        $this->assertSame([15, 180, 45], [Status::intervalMinutes($policy, 0), Status::intervalMinutes($policy, 0),
+            Status::intervalMinutes($policy, 0)]);
+    }
+
+    public function testUrgentAlertsNeverAskThePolicy(): void
+    {
+        $parameters = (new \ReflectionMethod(\CommerceKings\AppHealth\Model\Notification\Alert::class,
+            '__construct'))->getParameters();
+        $this->assertSame([], array_filter($parameters, fn ($p) => (string)$p->getType()
+            === \CommerceKings\AppHealth\Api\StatusPolicyInterface::class), 'the alert type has no policy');
     }
 
     public function testNothingWhenItIsOff(): void

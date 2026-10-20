@@ -14,13 +14,15 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
   *Repeat a failing check after* (6 hours). Shop-wide checks alert the default scope's recipient once, a website's own
   checks its recipient. New critical log entries and sensitive data at once (at most one message per check every 30
   minutes), log errors in the hourly status, warnings in the daily summary.
-- **Hourly status:** "All checks OK" or the problems, and the hour's log errors, through the same queue – the proof
-  that alerts can go out.
+- **Hourly status:** the problems, warnings and the hour's log errors, through the same queue every hour – the proof
+  that alerts can go out; posted when something is not OK and once a day as "All checks OK", else delivered quietly.
+  When it is posted: `Api\StatusPolicyInterface` (`Model\Status\DefaultPolicy`).
 - **Daily summary** per website at its time: counts of the last 24 hours, what had problems, what was ok all day.
 - **Sending** through Notification's queue and consumer as service messages (no cooldown, stop list or quiet hours),
   once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; any
   Notification channel works.
-- **Heartbeat:** an encrypted URL pinged after every run while the last hourly status went out.
+- **Heartbeat:** an encrypted URL pinged after every run while the hourly status goes out (not when it has been due
+  for 10 minutes and is not delivered).
 - **Admin:** *Stores > Configuration > CommerceKings > App health*, with *Send test alert*.
 - **Stable extension points (`@api`):** `Api\CheckInterface`, `Api\WebsiteCheckInterface`, `Api\Data\CheckResult` and
   `Model\CheckPool`'s "checks" argument.

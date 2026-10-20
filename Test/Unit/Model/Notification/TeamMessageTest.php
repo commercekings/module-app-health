@@ -86,6 +86,21 @@ class TeamMessageTest extends TestCase
             : $value, $update[1]), $this->updates);
     }
 
+    public function testAQuietDeliveryIsRecordedAsSentWithoutTheChannel(): void
+    {
+        $this->assertTrue($this->teamMessage(self::ROW)->deliver('app_health_status', '0', fn () => ['All checks OK',
+            function () {
+                $this->recorded++;
+            }, false]));
+        $this->assertSame([], $this->sent, 'the provider is not called');
+        $this->assertSame(1, $this->recorded);
+        [$claim, $sent] = $this->updateData();
+        $this->assertSame(['delivery_version' => 5], $claim, 'claimed like any message: the queue and consumer worked');
+        $this->assertSame('NOW()', $sent['sent_at'], 'sent_at: the heartbeat\'s proof');
+        $this->assertStringContainsString('info: CommerceKings_AppHealth: app_health_status for scope 0 delivered'
+            . ' quietly', implode("\n", $this->logs));
+    }
+
     public function testQueueMarksFreeStateInOneStatementThenPublishes(): void
     {
         $this->assertTrue($this->teamMessage(null)->queue('app_health_alert', 1));

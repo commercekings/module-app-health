@@ -5,6 +5,7 @@ namespace CommerceKings\AppHealth\Model;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Api\StatusPolicyInterface;
 use CommerceKings\AppHealth\Model\Notification\Alert;
 use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
@@ -48,6 +49,7 @@ class Runner
         private readonly DateTime $dateTime,
         private readonly LoggerInterface $logger,
         private readonly DeliveryStateInterface $deliveryState,
+        private readonly StatusPolicyInterface $statusPolicy,
         private readonly float $budgetSeconds = self::BUDGET_SECONDS
     ) {
     }
@@ -135,8 +137,8 @@ class Runner
         $this->state->set('checks', $checks);
         $this->state->set($hour, $tally);
         // the hourly status: to the default recipient, else the first website's with alerts on
-        $statusMinutes = $this->config->getHourlyStatusMinutes();
         $statusScope = $this->config->isHourlyStatusEnabled() ? array_key_first($targets) : null;
+        $statusMinutes = Status::intervalMinutes($this->statusPolicy, (int)$statusScope);
         $statusDue = false;
         $statusLate = false;
         if ($statusScope !== null) {

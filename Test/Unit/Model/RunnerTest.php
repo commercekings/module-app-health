@@ -8,6 +8,7 @@ use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Heartbeat;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Runner;
+use CommerceKings\AppHealth\Model\Status\DefaultPolicy;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
@@ -42,6 +43,7 @@ class RunnerTest extends TestCase
     private array $statusQueued = [];
     /** @var int[] the scopes whose status row was read */
     private array $statusLoaded = [];
+    private ?\CommerceKings\AppHealth\Api\StatusPolicyInterface $policy = null;
     /** @var array<string, mixed> */
     private array $settings = [];
 
@@ -92,7 +94,8 @@ class RunnerTest extends TestCase
         });
         return new Runner($this->pool(['cron' => 'Cron', 'caches' => 'Caches'], ['email_disabled' => 'Email']),
             $this->config($this->settings), new RunState($this->store), $this->store, $targets, $teamMessage,
-            $heartbeat, $this->clock, $logger, $deliveryState, 0.05);
+            $heartbeat, $this->clock, $logger, $deliveryState, $this->policy ?? new DefaultPolicy($this->config(
+                $this->settings)), 0.05);
     }
 
     /** @return array<string, mixed> */

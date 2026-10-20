@@ -111,7 +111,8 @@ class PrivacyTest extends TestCase
         $store->seed(['checks' => [0 => $checksRow]]);
         (new \CommerceKings\AppHealth\Model\Notification\Status($teamMessage, $store, $messages, $this->pool([
             'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending']), $config,
-            new Clock(self::MESSAGES_NOW)))->process('0');
+            new Clock(self::MESSAGES_NOW), new \CommerceKings\AppHealth\Model\Status\DefaultPolicy($config)))
+            ->process('0');
         return implode("\n", $out);
     }
 

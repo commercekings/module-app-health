@@ -53,16 +53,21 @@ the scope):
 **Pace:** a check going to FAIL is sent at once, and its "resolved" at its first OK run – for the checks that count
 in a time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing) only after *Recovered
 after* OK runs in a row (the `runs` in the checks row). A WARN is not sent at once: the hourly status and the daily
-summary list it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions, sensitive data – at most once per
-*New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10 shown). ERROR
+summary list it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions,
+sensitive data – at most once per *New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10 shown). ERROR
 log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`, and the
 hourly status lists them. WARNING entries only count, for the daily summary.
 
-**The hourly status** (`Model\Notification\Status`, reference 0, to the default scope's recipient): the Runner tries
-to queue it once per *Hourly status every* (the `status` row; a statement only then), and only when none went out
-within the interval. Its text: "All checks OK" or the checks not OK in every scope, then "New errors this hour" since
-the last status. It proves the sending path works: with it on, the heartbeat is pinged only while the last status went
-out within its interval plus `Runner::STATUS_GRACE_MINUTES` (one read of its delivery state per run).
+**The hourly status** (`Model\Notification\Status`, reference = its scope: 0, the default scope's recipient, or with
+shop-wide alerts off the first website with alerts on): every run reads its delivery state (one query); once its
+interval (`Api\StatusPolicyInterface::getIntervalMinutes()`, kept within 15 to 180 minutes) has passed since the last
+delivery, every run queues it until it is delivered. Its text: "All checks OK" or the checks failing in every scope,
+the warnings, then "New errors this hour" since the last status. The consumer builds an `Api\Data\StatusReport` and
+asks the policy (`Model\Status\DefaultPolicy`: posted with problems, warnings or errors, and "All checks OK" once a
+day from the summary time): posted, or delivered quietly – claimed and recorded as sent (`sent_at`) without calling the
+provider. With the hourly status on, the heartbeat is pinged unless the status has been due for
+`Runner::STATUS_GRACE_MINUTES` and is still not delivered (the `status` row keeps since when it is due). A quiet
+delivery proves the queue and its consumer, not the channel: the posted statuses and the alerts do.
 
 The daily summary covers the last 24 hourly tallies of the shop-wide checks and the website's own: checks not ok now,
 counts, checks that had problems and checks ok all day. It is sent from its time until 12 hours later, once a day.
@@ -77,7 +82,7 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `maintenance` | `var/.maintenance.flag` | a file check |
 | `system_log` | new bytes of `var/log/system.log` (and the extra files, and other modules' sources) | *Read at most* (1 MB) per source; only WARNING and above are parsed |
 | `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); of a larger backlog the newest 1 MB (from its first whole line), the count marked "at least" and the size not read in the detail; rotation starts the new file from its beginning |
-| `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other); no message is read or consumed |
+| `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other; on MariaDB 11.8 with 200,000 completed rows each part is a range on `(status, updated_at)`, ~50 rows); no message is read or consumed |
 | `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
 | `email_disabled` | `system/smtp/disable` per store view | configuration only |
 | `sales_emails` | orders (not cancelled or closed), invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |
@@ -185,7 +190,8 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 | `fingerprints` | the log errors seen: label, level, channel, where, first and last seen, count, last told, the run that last saw it (at most 500) |
 | `fingerprints:recent` | errors pushed out of `fingerprints`: first seen and when dropped, for a day (at most 2,000) – not "NEW" again |
 | `errors:recent` | ERROR entries per run and error: time, fingerprint, count, new (3 hours, at most 500) – for the hourly status |
-| `status` | when the hourly status was last tried |
+| `status` | since when the hourly status is due and not yet delivered |
+| `status:posted` | per scope, when a status was last posted, and last posted as "All checks OK" |
 | `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
 | `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW critical errors) waiting for the next alert, and the last told per check (id and time) |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |

@@ -58,7 +58,7 @@
                 <field id="hourly_status" translate="label comment" type="select" sortOrder="63" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Hourly status</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>A short message to the default recipient every hour: "All checks OK" or the problems, and the log errors of the hour. It goes the same way as the alerts, so when it stops coming, alerts can't go out either (the queue, its consumer or the channel). With a heartbeat URL, the heartbeat is pinged only while the last hourly status went out. Default: Yes.</comment>
+                    <comment>A short status of all websites to the default recipient every hour, through the same queue as the alerts: posted when a check fails or warns or there were new log errors, and once a day as "All checks OK" (at the summary time); otherwise delivered quietly (recorded, not posted). With a heartbeat URL, the heartbeat stops when the status can't be delivered (the queue or its consumer down). Default: Yes.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="hourly_status_minutes" translate="label comment" type="text" sortOrder="64" showInDefault="1" showInWebsite="0" showInStore="0">

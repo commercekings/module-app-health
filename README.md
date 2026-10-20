@@ -13,8 +13,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 - **Only news, at the right pace.** A problem at once, "resolved" once it is OK (for the log, queue and sending checks
   two runs in a row); a check still failing is repeated every 6 hours; a check's warning in the hourly status.
   Critical log errors and sensitive data at once, log errors in the hourly status, log warnings in the daily summary.
-- **Proof that alerts can go out.** An hourly status ("All checks OK", or the problems) through the same queue and
-  channel: when it stops coming, so does the heartbeat.
+- **Proof that alerts can go out.** An hourly status through the same queue: posted when something is not OK, once a
+  day as "All checks OK", delivered quietly otherwise – when it stops going out, so does the heartbeat.
 - **The right channel.** Checks for the whole shop go to one channel; each website's own (its email settings, its
   unsent order emails, its daily summary) to its own.
 - **A daily summary.** Cron runs and errors, exceptions by class, and what had problems – at the time you choose.
@@ -82,7 +82,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | default recipient |
 | ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | default recipient |
 | WARNING log entries | the daily summary | each website's recipient |
-| The hourly status | every hour, always – "All checks OK" or the problems: the proof that alerts can go out | default recipient |
+| The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with problems, warnings or new errors – and "All checks OK" once a day, at the first status from *Daily summary at* | default recipient – for all websites |
 | The daily summary | once a day at *Daily summary at* | each website's recipient |
 
 ```
@@ -95,6 +95,11 @@ New errors this hour: 14
 • Unable to send (9×, new)
 • NoSuchEntityException (5×)
 ```
+
+The hourly status covers **all websites**: their problems and warnings go to the default scope's recipient (with
+shop-wide alerts off, to the first website with alerts on). An hour with nothing to say is delivered quietly – recorded
+as sent through the queue and its consumer, without calling the channel – so the heartbeat still proves that the queue
+works, but not the channel itself: the daily "All checks OK" post and the alerts do.
 
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
@@ -184,9 +189,10 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
   or cron is down, no check runs. Create a heartbeat check in an uptime service (e.g. Healthchecks.io, Better Stack or
   UptimeRobot) expecting a ping every 5 minutes, connect that service's **Slack integration**, and paste its URL into
-  *Heartbeat URL*. With the hourly status on, a run pings only while the last hourly status went out (within its hour
-  and 10 minutes): when alerts can't be sent – the queue, its consumer or the channel down – the pings stop too, and
-  the service tells you. The first ping follows the first hourly status. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
+  *Heartbeat URL*. With the hourly status on, a run pings only while the hourly status goes out: due and still not
+  delivered after 10 minutes (each run tries it again), the pings stop – the queue or its consumer is down – and the
+  service tells you. A quiet status proves the queue, not the channel: the daily "All checks OK" post and the alerts
+  show that the channel works. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
   `/checkout/cart/`): they catch a site that is up for cron but down for shoppers.
 
 ## Extending
@@ -203,7 +209,8 @@ Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth`
 | Sensitive-data rules, no PHP | `etc/app_health_rules.xml` in any module (schema `etc/app_health_rules.xsd`), merged by rule set and rule code: add a set or a rule, override a shipped one, or turn it off (`enabled="false"`) |
 | A validator for rules | `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
-| Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, per website: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert` and `app_health_summary` |
+| Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, per website: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
+| When the hourly status is posted | `Api\StatusPolicyInterface` (`getIntervalMinutes($scopeId)`, kept within 15 to 180; `shouldPost(Api\Data\StatusReport)`), shipped as `Model\Status\DefaultPolicy`; replace it with a `<preference>`. The status is still delivered every interval (quietly when not posted); urgent alerts never ask the policy |
 
 A check, in your module's `etc/di.xml`:
 
@@ -231,6 +238,29 @@ A rule set, in your module's `etc/app_health_rules.xml` – a set of its own, a 
     <ruleset code="pci"><rule code="card_cvv" severity="warning"/></ruleset>
     <ruleset code="personal" enabled="false"/>
 </config>
+```
+
+A status policy that posts only during opening hours – `etc/di.xml`
+`<preference for="CommerceKings\AppHealth\Api\StatusPolicyInterface" type="Vendor\Shop\Model\OpeningHours"/>`:
+
+```php
+class OpeningHours implements \CommerceKings\AppHealth\Api\StatusPolicyInterface
+{
+    public function __construct(private readonly \CommerceKings\AppHealth\Model\Status\DefaultPolicy $default)
+    {
+    }
+
+    public function getIntervalMinutes(int $scopeId): int
+    {
+        return $this->default->getIntervalMinutes($scopeId);
+    }
+
+    public function shouldPost(\CommerceKings\AppHealth\Api\Data\StatusReport $report): bool
+    {
+        $hour = (int)$report->now->format('G'); // the scope's time zone
+        return $hour >= 8 && $hour < 20 && $this->default->shouldPost($report);
+    }
+}
 ```
 
 How to use them – a run, the state, a log source and its parser, the rules: [how it works](docs/how-it-works.md).

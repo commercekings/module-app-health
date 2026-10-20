@@ -49,6 +49,15 @@ class ConfigFilesTest extends TestCase
         }
     }
 
+    public function testTheStatusPolicyIsAPreference(): void
+    {
+        $preferences = $this->xml('di.xml')->xpath('//preference[@for="CommerceKings\\AppHealth\\Api\\'
+            . 'StatusPolicyInterface"]');
+        $this->assertSame(['CommerceKings\\AppHealth\\Model\\Status\\DefaultPolicy'],
+            array_map(fn ($p) => (string)$p['type'], $preferences),
+            'another module replaces it with one <preference>');
+    }
+
     public function testNothingOnTheStorefront(): void
     {
         $root = dirname(__DIR__, 2);
