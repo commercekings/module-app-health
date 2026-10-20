@@ -49,7 +49,7 @@ class PrivacyTest extends TestCase
     /** @return string everything the run stored and every message it would send */
     private function runWith(bool $withMessage): string
     {
-        $store = new MemoryStore();
+        $store = (new MemoryStore())->seed([Fingerprints::KEY => []]); // past its first day
         $state = new RunState($store);
         $clock = new Clock();
         $config = $this->config(['general/include_log_message' => $withMessage ? '1' : '0',

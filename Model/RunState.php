@@ -10,7 +10,7 @@ namespace CommerceKings\AppHealth\Model;
  */
 class RunState
 {
-    /** @var array<string, array<mixed>> */
+    /** @var array<string, array<mixed>|null> null: deleted at commit() */
     private array $rows = [];
 
     /** @var array<string, true> */
@@ -41,6 +41,13 @@ class RunState
     public function set(string $key, array $value): void
     {
         $this->rows[$key] = $value;
+        $this->changed[$key] = true;
+    }
+
+    /** The key gone at commit(). */
+    public function delete(string $key): void
+    {
+        $this->rows[$key] = null;
         $this->changed[$key] = true;
     }
 

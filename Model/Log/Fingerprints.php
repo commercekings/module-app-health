@@ -25,6 +25,9 @@ class Fingerprints
     public const RECENT_LIMIT = 2000;
     public const RECENT_SECONDS = 86400;
     public const ERRORS_KEY = 'errors:recent';
+    /** The first day after install: {until, seen: [labels]} - new criticals counted, not told one by one. */
+    public const LEARNING_KEY = 'fingerprints:learning';
+    public const LEARNING_SECONDS = 86400;
     public const RECENT_ERRORS_HOURS = 3;
     public const RECENT_ERRORS_LIMIT = 500;
     public const LEVELS = ['CRITICAL' => 'Critical', 'ERROR' => 'Error', 'WARNING' => 'Warning'];
@@ -51,10 +54,31 @@ class Fingerprints
             $runs[$fp]['last'] = max($runs[$fp]['last'], (int)($entry['time'] ?? $now));
             $runs[$fp]['message'] = $entry['message'] ?? $runs[$fp]['message']; // the latest
         }
-        if ($runs === []) {
-            return [];
+        $learning = $this->state->get(self::LEARNING_KEY);
+        if ($learning === null && $this->state->get(self::KEY) === null) {
+            // a fresh install: the first day's "new" errors are what this shop logs anyway - one digest, no burst
+            $this->state->set(self::LEARNING_KEY, $learning = ['until' => $now + self::LEARNING_SECONDS, 'seen' => []]);
         }
         $known = (array)($this->state->get(self::KEY) ?? []);
+        $digest = [];
+        if ($learning !== null && (int)($learning['until'] ?? 0) <= $now) {
+            // the day is over: one digest, and it counts as telling them (their repeats wait from now)
+            $digest = [['kind' => 'DIGEST', 'seen' => array_values((array)($learning['seen'] ?? []))]];
+            foreach (array_keys((array)($learning['seen'] ?? [])) as $fp) {
+                if (isset($known[$fp])) {
+                    $known[$fp]['told'] = $now;
+                }
+            }
+            $this->state->set(self::KEY, $known);
+            $this->state->delete(self::LEARNING_KEY);
+            $learning = null;
+        }
+        if ($runs === []) {
+            if ($learning !== null && $this->state->get(self::KEY) === null) {
+                $this->state->set(self::KEY, []);
+            }
+            return $digest;
+        }
         $recent = (array)($this->state->get(self::RECENT_KEY) ?? []);
         $recentChanged = false;
         $repeat = $this->config->getRepeatHours() * 3600;
@@ -78,6 +102,15 @@ class Fingerprints
                 $repeatCritical && $level === 'CRITICAL' && (int)($seen['told'] ?? 0) <= $now - $repeat => 'CRITICAL',
                 default => null,
             };
+            if ($kind === 'NEW' && $learning !== null) {
+                // learning: counted for the digest, and told now as far as repeats go
+                if (count($learning['seen']) < self::LIMIT) {
+                    $learning['seen'][(string)$fp] = self::name($run);
+                }
+                $this->state->set(self::LEARNING_KEY, $learning);
+                $kind = null;
+                $seen = ['first' => $now, 'told' => $now];
+            }
             $known[$fp] = ['label' => $run['label'], 'level' => $level, 'channel' => $run['channel'],
                 'location' => $run['location'], 'message' => $run['message'] ?? null,
                 'first' => (int)($seen['first'] ?? $now), 'last' => max((int)($seen['last'] ?? 0), $run['last']),
@@ -110,7 +143,7 @@ class Fingerprints
                 -self::RECENT_ERRORS_LIMIT));
         }
         usort($news, fn ($a, $b) => $b['count'] <=> $a['count']);
-        return $news;
+        return array_merge($digest, $news);
     }
 
     /**
@@ -134,6 +167,14 @@ class Fingerprints
      */
     public static function notice(array $news): string
     {
+        if (($news['kind'] ?? '') === 'DIGEST') {
+            $seen = (array)$news['seen'];
+            return $seen === [] ? 'First day over: no error seen for the first time. A new one is sent at once from'
+                . ' now on.' : sprintf('First day: %s seen for the first time: %s. The daily summary lists them; a'
+                . ' new one is sent at once from now on.', Format::many(count($seen), 'errors'),
+                implode(', ', array_slice($seen, 0, 5)) . (count($seen) > 5 ? ' and ' . (count($seen) - 5)
+                . ' more' : ''));
+        }
         $count = (int)$news['count'];
         $lines = [(self::LEVELS[$news['level'] ?? 'ERROR'] ?? 'Error') . ': ' . self::name($news) . ' ('
             . ($count > 1 ? Format::number($count) . '×, ' : '') . Format::at((int)$news['last']) . ')'];

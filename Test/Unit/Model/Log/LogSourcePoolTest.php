@@ -62,7 +62,8 @@ class LogSourcePoolTest extends TestCase
 
     public function testAnotherModulesSourceFeedsTheSystemLogCheckThroughTheNormalizer(): void
     {
-        $state = new RunState(new MemoryStore());
+        // past its first day
+        $state = new RunState((new MemoryStore())->seed([Fingerprints::KEY => []]));
         $config = $this->config(['system_log/error_count' => '20', 'system_log/window_minutes' => '5',
             'system_log/max_read_kb' => '1024']);
         $feed = $this->thirdParty([

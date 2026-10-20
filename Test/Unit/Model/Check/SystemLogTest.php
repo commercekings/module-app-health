@@ -25,7 +25,7 @@ class SystemLogTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->store = new MemoryStore();
+        $this->store = (new MemoryStore())->seed([Fingerprints::KEY => []]); // past its first day
         $this->state = new RunState($this->store);
         $this->clock = new Clock();
         $config = $this->config(['system_log/error_count' => '3', 'system_log/window_minutes' => '5',
@@ -87,6 +87,25 @@ class SystemLogTest extends TestCase
         $this->assertMatchesRegularExpression('/^4 errors in 5 min \(Unable to send x3, Payment gateway down x1\)$/',
             $again->detail, 'errors and criticals');
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the window passed');
+    }
+
+    public function testTheFirstDayIsOneDigestNotABurst(): void
+    {
+        $this->store->rows = []; // a fresh install: nothing known yet
+        $this->run5();
+        $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices,
+            'the first day: learning what this shop logs anyway');
+        $this->assertSame([], $this->run5(self::line('CRITICAL', 'Disk full on 7'))->notices);
+        $this->clock->now += 86400;
+        $digest = $this->run5()->notices;
+        $this->assertSame('First day: 2 errors seen for the first time: Payment gateway down, Disk full on.'
+            . ' The daily summary lists them; a new one is sent at once from now on.', $digest[0], 'one digest');
+        $this->assertCount(2, $digest, 'and where to look');
+        $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices,
+            'known from the first day: told again only after the repeat interval');
+        $this->assertStringStartsWith('Critical: Brand new failure',
+            $this->run5(self::line('CRITICAL', 'Brand new failure'))->notices[0] ?? '', 'new: at once');
+        $this->assertNull($this->store->row(Fingerprints::LEARNING_KEY), 'learned');
     }
 
     public function testACriticalIsToldAgainAfterTheRepeatInterval(): void

@@ -25,7 +25,7 @@ class ExceptionsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->state = new RunState(new MemoryStore());
+        $this->state = new RunState((new MemoryStore())->seed([Fingerprints::KEY => []])); // past its first day
         $this->clock = new Clock();
         $config = $this->config(['exceptions/count' => '5', 'exceptions/window_minutes' => '15',
             'exceptions/max_read_kb' => '1024']);
