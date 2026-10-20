@@ -160,7 +160,8 @@ class StatusNowTest extends TestCase
             [null, SenderInterface::SENT, 'Set a channel and recipient under Alerts first.'],
             [$t = new Target(0, 1, 'slack', 'nope', 'Shop', 'UTC'), new \InvalidArgumentException('x'),
                 '"nope" is not a recipient the "slack" channel takes.'],
-            [$t, new \RuntimeException('channel_not_found'), 'Not posted (RuntimeException): channel_not_found'],
+            [$t, new \RuntimeException('Slack refused the message (channel_not_found): check the channel ID'),
+                'Not posted: Slack refused the message (channel_not_found): check the channel ID'],
             [$t, SenderInterface::COOLDOWN, 'Not posted: recipient cooldown.'],
         ] as [$target, $answer, $message]) {
             [$this->target, $this->answer, $this->snapshotTaken] = [$target, $answer, false];

@@ -101,7 +101,7 @@ Label,Label
 "No job has run for (minutes)","No job has run for (minutes)"
 "No job has run, a job runs too long, or jobs end with an error.","No job has run, a job runs too long, or jobs end with an error."
 "No status for (minutes)","No status for (minutes)"
-"Not posted (%1): %2","Not posted (%1): %2"
+"Not posted: %1","Not posted: %1"
 "Not posted: %1.","Not posted: %1."
 "Not saved. Try again.","Not saved. Try again."
 "Not sent (%1): %2","Not sent (%1): %2"

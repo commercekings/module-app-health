@@ -87,8 +87,8 @@ class StatusNow
             throw new LocalizedException(__('"%1" is not a recipient the "%2" channel takes.', $target->recipient,
                 $target->channel));
         } catch (\Throwable $e) {
-            throw new LocalizedException(__('Not posted (%1): %2', get_class($e), $e->getMessage()),
-                $e instanceof \Exception ? $e : null);
+            // the provider's own words (e.g. Slack's code and what to fix), never a PHP class name
+            throw new LocalizedException(__('Not posted: %1', $e->getMessage()), $e instanceof \Exception ? $e : null);
         }
         if ($result !== SenderInterface::SENT) {
             throw new LocalizedException(__('Not posted: %1.', $result));
