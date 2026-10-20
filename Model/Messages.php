@@ -171,8 +171,8 @@ class Messages
             $containers,
             $this->section('All OK', $okAllDay !== [] ? [implode(', ', $okAllDay)] : []),
         ];
-        return new TeamMessageContent($this->where($target) . ' · daily summary · ' . $this->local($target, $now, 'j M'),
-            TeamMessageContent::SUMMARY, array_values(array_filter($sections)));
+        return new TeamMessageContent($this->where($target) . ' · daily summary · '
+            . $this->local($target, $now, 'j M'), TeamMessageContent::SUMMARY, array_values(array_filter($sections)));
     }
 
     /**

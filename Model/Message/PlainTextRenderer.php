@@ -37,7 +37,7 @@ class PlainTextRenderer implements TeamMessageRendererInterface
             $parts[] = $section->heading;
         }
         foreach ($section->tables as $table) {
-            $parts[] = $table->title . "\n" . SlackRenderer::table($table);
+            $parts[] = $table->title . "\n" . TextTable::lines($table);
         }
         if ($section->lines !== []) {
             $parts[] = implode($section->spaced ? "\n\n" : "\n", array_map(fn (string $line) => $section->bullets

@@ -25,7 +25,8 @@ class MessagesTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->messages = new SlackMessages(new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
+        $this->messages = new SlackMessages(new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers',
+            'caches' => 'Caches',
             'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending',
             'external' => 'Server status'],
             ['email_disabled' => 'Email sending', 'sales_emails' => 'Sales emails']), new Clock(self::NOW)));

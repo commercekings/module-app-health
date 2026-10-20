@@ -90,7 +90,8 @@ class PrivacyTest extends TestCase
         $results = $run();
         $this->assertSame(['fail', 'fail', 'fail'], array_values(array_map(fn ($r) => $r->status, $results)));
         $target = new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC');
-        $messages = new SlackMessages(new Messages($this->pool(['system_log' => 'system.log', 'exceptions' => 'exception.log',
+        $messages = new SlackMessages(new Messages($this->pool(['system_log' => 'system.log',
+            'exceptions' => 'exception.log',
             'email_failing' => 'Sending']), new Clock(self::MESSAGES_NOW)));
         $out = [json_encode($store->rows)];
         $checksRow = [];

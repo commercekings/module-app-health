@@ -5,13 +5,13 @@ namespace CommerceKings\AppHealth\Model\Notification;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Api\Data\StatusReport;
+use CommerceKings\AppHealth\Api\Data\TeamMessageContent;
 use CommerceKings\AppHealth\Api\StatusPolicyInterface;
 use CommerceKings\AppHealth\Model\CheckPool;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\AppHealth\Model\Messages;
-use CommerceKings\AppHealth\Api\Data\TeamMessageContent;
 use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\Notification\Api\NotificationTypeInterface;

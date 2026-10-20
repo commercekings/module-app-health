@@ -83,7 +83,8 @@ class SensitiveDataTest extends TestCase
             $notices);
         $this->assertStringContainsString('Check: Stop logging it at the source, then rotate or remove the log: card'
             . ' data in logs breaks PCI DSS.', $notices);
-        $text = (new SlackMessages(new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock)))
+        $text = (new SlackMessages(new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']),
+            $this->clock)))
             ->notices(new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC'), 'sensitive_data',
                 $result->notices);
         $this->assertStringStartsWith("*Security: sensitive data in logs · Main Website Store*\n\n"

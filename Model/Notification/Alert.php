@@ -70,8 +70,8 @@ class Alert implements NotificationTypeInterface
         $gap = $this->config->getNoticeMinutes() * 60;
         foreach (AlertPlan::pendingNotices($rows[$keys[1]] ?? [], $noticed, $now, $gap) as $code => $notices) {
             return [$this->renderers->render($target->channel, $this->messages->notices($target, $code, $notices)),
-                fn () => $this->store->save([$keys[2]
-                => AlertPlan::noticed($noticed, (string)$code, max(array_keys($notices)), $now)])];
+                fn () => $this->store->save([$keys[2] => AlertPlan::noticed($noticed, (string)$code,
+                    max(array_keys($notices)), $now)])];
         }
         return null;
     }

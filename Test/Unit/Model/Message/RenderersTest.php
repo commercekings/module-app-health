@@ -26,9 +26,11 @@ class RenderersTest extends TestCase
     private function message(): TeamMessageContent
     {
         return new TeamMessageContent('Shop · daily summary · 20 Oct', TeamMessageContent::SUMMARY, [
-            new TeamMessageSection(['Cron: stopped', 'Indexers: failed earlier, OK now'], 'Needs attention', true, true),
-            new TeamMessageSection(['…and 2 more'], null, false, false, false, [new TeamMessageTable('Containers · web-1',
-                ['NAME', 'CPU'], [['php-fpm', '1.5%'], ['a-container-name-longer-than-the-cut', '12.0%']])]),
+            new TeamMessageSection(['Cron: stopped', 'Indexers: failed earlier, OK now'], 'Needs attention', true,
+                true),
+            new TeamMessageSection(['…and 2 more'], null, false, false, false, [new TeamMessageTable(
+                'Containers · web-1', ['NAME', 'CPU'], [['php-fpm', '1.5%'],
+                ['a-container-name-longer-than-the-cut', '12.0%']])]),
             new TeamMessageSection(['New errors this hour'], null),
             new TeamMessageSection([]),
         ], ['Restart cron.']);
