@@ -80,8 +80,8 @@ class RegexGuard
                     str_repeat('Ab3', 14));
                 $lines[] = sprintf('#%d /var/www/html/vendor/magento/framework/Interception/Interceptor.php(%d):'
                     . ' Magento\\Framework\\App\\Http->launch()', $i, $i);
-                $lines[] = sprintf("SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'x-%d' for key"
-                    . " 'PRIMARY', query was: INSERT INTO `quote` (`a`, `b`) VALUES (?, ?)", $i);
+                $lines[] = sprintf("SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'x-%d'"
+                    . " for key 'PRIMARY', query was: INSERT INTO `quote` (`a`, `b`) VALUES (?, ?)", $i);
             }
             $lines[] = str_repeat('=', 200);
             $lines[] = str_repeat('-', 200) . ' ' . str_repeat('9', 40) . ' '
