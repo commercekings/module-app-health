@@ -225,6 +225,19 @@ class RunnerTest extends TestCase
         $this->assertSame([1], $this->run5()['queued'], 'on: website 1, a channel of its own, gets it too');
     }
 
+    public function testOnWithNowhereToSendHoldsTheHeartbeat(): void
+    {
+        $this->heartbeat = true;
+        $this->shopWide = false; // no channel or recipient: no global target
+        $this->websites = [];
+        $this->settings = ['general/enabled' => '1'];
+        $this->assertSame('held: App health is on but has nowhere to send (no channel or recipient)',
+            $this->run5()['heartbeat'], 'alerts could not reach anyone: the outside service should say so');
+        $this->assertSame(0, $this->pings);
+        $this->settings = ['general/enabled' => '0'];
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'off on purpose: the heartbeat still says cron runs');
+    }
+
     public function testACopyOfTheShopRunsNothingAndPingsNothing(): void
     {
         $copy = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
