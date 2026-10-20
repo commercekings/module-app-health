@@ -20,7 +20,9 @@ class AlertPlan
     public const NOTICES_HOURS = 24;
 
     /** Checks that count in a time window: "recovered" only after Config::getRecoverRuns() OK runs in a row. */
-    public const WINDOW_CHECKS = ['exceptions', 'system_log', 'queues', 'email_failing'];
+    public const WINDOW_CHECKS = ['exceptions', 'system_log', 'queues', 'email_failing', 'external'];
+    /** A problem back this soon after its "Resolved" waits until then, so a flapping check is not told again. */
+    public const REPOST_SECONDS = 1800;
 
     /** Checks whose news goes to the global channel only (security findings), never to a website channel. */
     public const GLOBAL_ONLY = ['sensitive_data'];
@@ -32,7 +34,8 @@ class AlertPlan
     /**
      * What to send at once: a check going to FAIL (a problem), or back to OK after a told problem (recovered), or a
      * fail still going on after the repeat interval. A WARN is not sent at once (the hourly status and the daily
-     * summary list it): ok to warn is no news, and fail to warn waits for the OK. A check in WINDOW_CHECKS (counts in
+     * summary list it): ok to warn is no news, and fail to warn waits for the OK. A fail within REPOST_SECONDS of its
+     * "Resolved" waits too (no flapping). A check in WINDOW_CHECKS (counts in
      * a time window) recovers only after $recoverRuns OK runs in a row; the others (a state) at their first OK run.
      *
      * @param array<string, array<mixed>> $checks code => ['status' => ..., ...] (the "checks" row)
@@ -52,6 +55,10 @@ class AlertPlan
                     $changes[$code] = self::REPEAT;
                 }
                 continue;
+            }
+            if ($status === CheckResult::FAIL && $told === CheckResult::OK
+                && (int)($alerted[$code]['at'] ?? 0) > $now - self::REPOST_SECONDS) {
+                continue; // resolved a moment ago: told again only if it still fails REPOST_SECONDS after that
             }
             if ($status === CheckResult::OK && in_array($code, self::WINDOW_CHECKS, true)
                 && (int)($check['runs'] ?? $recoverRuns) < $recoverRuns) {
@@ -75,11 +82,7 @@ class AlertPlan
         $alerted = array_intersect_key($alerted, $checks);
         foreach (array_keys($changes) as $code) {
             $status = (string)($checks[$code]['status'] ?? CheckResult::OK);
-            if ($status === CheckResult::OK) {
-                unset($alerted[$code]);
-            } else {
-                $alerted[$code] = ['status' => $status, 'at' => $now];
-            }
+            $alerted[$code] = ['status' => $status, 'at' => $now]; // ok: when it was resolved
         }
         return $alerted;
     }

@@ -43,7 +43,7 @@ class AlertPlanTest extends TestCase
         $changes = AlertPlan::changes($checks, $told, self::NOW, self::REPEAT);
         $this->assertSame(['cron' => AlertPlan::RECOVERED], $changes);
         $after = AlertPlan::told($checks, $told, $changes, self::NOW);
-        $this->assertSame([], $after);
+        $this->assertSame(['cron' => ['status' => 'ok', 'at' => self::NOW]], $after, 'when it was resolved');
         $this->assertSame([], AlertPlan::changes($checks, $after, self::NOW + 300, self::REPEAT));
     }
 
@@ -57,7 +57,8 @@ class AlertPlanTest extends TestCase
         $checks['system_log']['runs'] = 2;
         $this->assertSame(['system_log' => AlertPlan::RECOVERED, 'maintenance' => AlertPlan::RECOVERED],
             AlertPlan::changes($checks, $told, self::NOW, self::REPEAT, 2));
-        $this->assertSame(['exceptions', 'system_log', 'queues', 'email_failing'], AlertPlan::WINDOW_CHECKS);
+        $this->assertSame(['exceptions', 'system_log', 'queues', 'email_failing', 'external'],
+            AlertPlan::WINDOW_CHECKS, 'a server\'s load or memory comes and goes too');
     }
 
     public function testNoticesOfACheckAtMostOncePerIntervalTheRestFoldedIntoTheNext(): void
@@ -72,6 +73,18 @@ class AlertPlanTest extends TestCase
         $noticed = AlertPlan::noticed($noticed, 'system_log', 4, self::NOW + 1200);
         $this->assertSame(['exceptions'], array_keys(AlertPlan::pendingNotices($row, $noticed, self::NOW + 4000,
             1800)));
+    }
+
+    public function testAProblemBackSoonAfterItsResolvedWaitsSoItDoesNotFlap(): void
+    {
+        $resolved = ['external' => ['status' => 'ok', 'at' => self::NOW - 600]];
+        $failing = $this->checks(['external' => 'fail']);
+        $this->assertSame([], AlertPlan::changes($failing, $resolved, self::NOW, self::REPEAT),
+            'failing again 10 minutes after "Resolved": not yet');
+        $this->assertSame(['external' => AlertPlan::PROBLEM], AlertPlan::changes($failing, $resolved,
+            self::NOW + AlertPlan::REPOST_SECONDS - 600, self::REPEAT), '30 minutes after it: told');
+        $this->assertSame([], AlertPlan::changes($this->checks(['external' => 'ok']), $resolved, self::NOW,
+            self::REPEAT), 'still ok: no news');
     }
 
     public function testAWebsiteChannelGetsItsOwnChecksAndTheSharedOnesWhenAsked(): void
