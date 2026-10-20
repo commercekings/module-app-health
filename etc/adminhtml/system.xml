@@ -221,8 +221,8 @@
                 </field>
                 <field id="immediate_files" translate="label comment" type="textarea" sortOrder="95" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Errors at once from</label>
-                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFiles</backend_model>
-                    <comment>ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none.</comment>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\ImmediateLogFiles</backend_model>
+                    <comment>ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status: system.log, exception.log or Extra log files. Default: none.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
             </group>

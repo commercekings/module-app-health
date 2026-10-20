@@ -70,13 +70,17 @@ Cron,Cron
 "Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.","Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels."
 "Do the consumers run? In app/etc/env.php cron_consumers_runner > cron_run must be true (or they run under supervisor); bin/magento queue:consumers:list names them.","Do the consumers run? In app/etc/env.php cron_consumers_runner > cron_run must be true (or they run under supervisor); bin/magento queue:consumers:list names them."
 "ERROR and above. Default: 20.","ERROR and above. Default: 20."
-"ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none.","ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none."
+"ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status: system.log, exception.log or Extra log files. Default: none.","ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status: system.log, exception.log or Extra log files. Default: none."
 "Email communications disabled","Email communications disabled"
 Enabled,Enabled
 "Enter one log file only (e.g. system.log); more files go in *Extra log files*.","Enter one log file only (e.g. system.log); more files go in *Extra log files*."
 "Errors at once from","Errors at once from"
+"Errors at once from: App health does not read %1; add it to Extra log files first (or use system.log or exception.log).","Errors at once from: App health does not read %1; add it to Extra log files first (or use system.log or exception.log)."
 Exceptions,Exceptions
 "Extra log files","Extra log files"
+"Extra log files: ""%1"" and ""%2"" would be one source (%3); keep one.","Extra log files: ""%1"" and ""%2"" would be one source (%3); keep one."
+"Extra log files: %1 is always read; list other files only.","Extra log files: %1 is always read; list other files only."
+"Extra log files: at most %1 files (%2 given).","Extra log files: at most %1 files (%2 given)."
 "Failed in the last hour, e.g. cart reminders. Default: 3.","Failed in the last hour, e.g. cart reminders. Default: 3."
 "Fix the cause of the job's error (in cron_schedule.messages and var/log), or disable the job.","Fix the cause of the job's error (in cron_schedule.messages and var/log), or disable the job."
 "For over (minutes)","For over (minutes)"

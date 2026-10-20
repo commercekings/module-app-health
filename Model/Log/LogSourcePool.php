@@ -49,14 +49,20 @@ class LogSourcePool extends TypedPool
         return 'an array of a "source" (LogSourceInterface), a "parser" (LogParserInterface) and a "check" (a code)';
     }
 
+    /** An extra var/log file's source code: "payment.log" is "file_payment" (lower case, at most CODE_LENGTH). */
+    public static function fileCode(string $file): string
+    {
+        return substr('file_' . preg_replace('/[^a-z0-9]+/', '_', strtolower(substr($file, 0, -4))), 0,
+            self::CODE_LENGTH);
+    }
+
     /** @return array<string, array{source: LogSourceInterface, parser: LogParserInterface, check: string}> */
     public function forCheck(string $check): array
     {
         $sources = array_filter($this->getAll(), fn ($item) => $item['check'] === $check);
         if ($check === 'system_log') {
             foreach ($this->config->getExtraLogFiles() as $file) {
-                $code = substr('file_' . preg_replace('/[^a-z0-9]+/', '_', strtolower(substr($file, 0, -4))), 0, 32);
-                $sources[$code] ??= ['source' => new FileLogSource($this->filesystem, $this->scopeConfig, $file),
+                $sources[self::fileCode($file)] ??= ['source' => new FileLogSource($this->filesystem, $this->scopeConfig, $file),
                     'parser' => $this->monolog, 'check' => $check];
             }
         }
