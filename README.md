@@ -224,8 +224,13 @@ A log line never leaves the server as it is. An error is shown by file:line (rel
 
 ## Tested (as of 0.1.0)
 
-- **Automated tests:** 89 unit tests (on every push), PHPStan level 5 and the Magento2 coding standard.
-- **Not tested yet:** a real Slack workspace (the end-to-end suite uses a simulated Slack API).
+- **Automated tests:** 137 unit tests (on every push), PHPStan level 5 and the Magento2 coding standard.
+- **End to end on Magento 2.4.9:** cron, indexers, caches, maintenance, email, exceptions, queues and sales emails
+  triggered for real against a simulated Slack API – one alert, then one "recovered", the daily summary, the test
+  button, the heartbeat, Slack's error modes, no private data in any message – and live to a real Slack channel.
+- **Not tested end to end yet:** the system.log and sensitive-data checks (unit-tested).
+- **Cost:** a run with every check on takes about 47 ms and 11 queries; with a new 1 MB backlog in both system.log and
+  exception.log, about 5 MB of memory (sensitive-data rules: about 13 ms per MB of log).
 
 ## More
 
