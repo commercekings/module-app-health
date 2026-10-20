@@ -5,7 +5,7 @@ namespace CommerceKings\AppHealth\Test\Unit\Stub;
 
 use CommerceKings\AppHealth\Model\StateStore;
 
-/** ck_app_health_state in memory, as JSON like the table; counts the statements. */
+/** The state (Magento's flag rows) in memory, as JSON by key; counts the statements. */
 class MemoryStore extends StateStore
 {
     /** @var array<string, string> key => JSON */
@@ -57,7 +57,11 @@ class MemoryStore extends StateStore
         }
         $this->statements++;
         foreach ($rows as $key => $value) {
-            $this->rows[$key] = json_encode($value, JSON_THROW_ON_ERROR);
+            if ($value === null) {
+                unset($this->rows[$key]);
+            } else {
+                $this->rows[$key] = json_encode($value, JSON_THROW_ON_ERROR);
+            }
         }
     }
 

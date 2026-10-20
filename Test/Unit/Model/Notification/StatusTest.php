@@ -132,7 +132,7 @@ class StatusTest extends TestCase
 
     public function testAnotherModulesPolicyDecides(): void
     {
-        $this->policy = new class implements \CommerceKings\AppHealth\Api\StatusPolicyInterface {
+        $this->policy = $policy = new class implements \CommerceKings\AppHealth\Api\StatusPolicyInterface {
             public ?\CommerceKings\AppHealth\Api\Data\StatusReport $seen = null;
 
             public function getIntervalMinutes(int $scopeId): int
@@ -150,7 +150,8 @@ class StatusTest extends TestCase
             Fingerprints::KEY => ['aaaaaaaa' => ['label' => 'Unable to send']],
             Fingerprints::ERRORS_KEY => [[self::NOW - 60, 'aaaaaaaa', 2, 1]]]));
         $this->assertSame([false], $this->posted, 'quiet, though Cron fails: its own alert went at once');
-        $report = $this->policy->seen;
+        $report = $policy->seen;
+        $this->assertNotNull($report);
         $this->assertSame([0, ['Cron'], 2, [['label' => 'Unable to send', 'count' => 2, 'new' => true]], 'UTC'],
             [$report->scopeId, $report->problems, $report->errorCount, $report->errors,
                 $report->now->getTimezone()->getName()]);

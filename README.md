@@ -8,8 +8,9 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 
 - **Sensitive data in your logs.** A card number, a secret or personal data in bulk written into a log is a high
   alert at once – the rule and where, never the value.
-- **Ten checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
-  `exception.log` (new errors, with where they happened), queue backlogs, and sales emails that don't go out.
+- **Twelve checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
+  `exception.log` (new errors, with where they happened), sensitive data in logs, mail sending, queue backlogs, sales
+  emails that don't go out, and your servers' own status (disk, services, ... – *Server status*).
 - **Only news, at the right pace.** A problem at once, "resolved" once it is OK (for the log, queue and sending checks
   two runs in a row); a check still failing is repeated every 6 hours; a check's warning in the hourly status.
   Critical log errors and sensitive data at once, log errors in the hourly status, log warnings in the daily summary.
@@ -173,6 +174,10 @@ bin/magento setup:upgrade
 
 Messages go through Notification's queue: run the consumer `commerceKingsNotificationSend` (Magento's cron runs it
 when `cron_consumers_runner` is on), or a Slack outage delays the alerts instead of retrying them.
+
+No table of its own: the state lives in about 10 rows of Magento's `flag` table. **Uninstall:** remove the module, then
+delete those rows (`DELETE FROM flag WHERE flag_code LIKE 'commercekings\_app\_health\_%'`) and, if you like, the
+delivery state rows of the types `app_health_*` in `ck_notification_delivery_state`.
 
 ## Settings
 
@@ -431,7 +436,7 @@ Always masked, in the label and the message, as `***`:
 
 - **The masked message:** its first 160 characters, one line. PHP's function prefixes go first, and a long message
   keeps its trailing reason ("… (Connection refused)"). **Not masked:** other free text, e.g. a capitalized name with no
-  key word before it, or SQL. The latest per error is kept in the module's table (at most 500 errors).
+  key word before it, or SQL. The latest per error is kept in the module's state (at most 500 errors).
 - **The label:** at most 3 words, with URLs, emails, quoted values, hex strings, numbers and paths after their first
   segment – and any capitalized word after the first (often a name) – as `***`. The daily summary shows labels only.
 - **Off** (*Add the masked log message* = No): labels only, everywhere; a cron job's error text is not read either.

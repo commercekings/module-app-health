@@ -26,7 +26,7 @@ trait LogDir
     private string $logDir = '';
     private Filesystem $filesystem;
     /** The reader's clock; the default Clock when unset. */
-    private ?\Magento\Framework\Stdlib\DateTime\DateTime $logClock = null;
+    private ?\CommerceKings\AppHealth\Test\Unit\Stub\Clock $logClock = null;
     /** @var string[] the reader's warnings */
     private array $logWarnings = [];
 

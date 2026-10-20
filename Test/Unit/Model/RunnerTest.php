@@ -103,6 +103,7 @@ class RunnerTest extends TestCase
     {
         $this->queued = [];
         $report = $this->runner()->run();
+        $this->assertSame($this->queued, $report['queued'], 'what the report says was queued, was');
         $this->clock->now += 300;
         return $report;
     }

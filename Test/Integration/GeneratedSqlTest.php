@@ -7,6 +7,7 @@ use CommerceKings\AppHealth\Model\Check\EmailFailing;
 use CommerceKings\AppHealth\Model\Check\Queues;
 use CommerceKings\AppHealth\Model\Check\SalesEmails;
 use CommerceKings\AppHealth\Model\RunState;
+use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
@@ -25,7 +26,7 @@ class GeneratedSqlTest extends TestCase
     use Settings;
 
     private const TABLES = ['queue', 'queue_message_status', 'sales_order', 'sales_invoice', 'sales_shipment',
-        'sales_creditmemo', 'ck_notification_delivery_state'];
+        'sales_creditmemo', 'ck_notification_delivery_state', 'flag'];
 
     private AdapterInterface $db;
     private ResourceConnection $resource;
@@ -40,7 +41,8 @@ class GeneratedSqlTest extends TestCase
     {
         $root = getenv('MAGENTO_ROOT') ?: (defined('BP') ? BP : getcwd());
         require_once $root . '/app/bootstrap.php';
-        $real = Bootstrap::create(BP, $_SERVER)->getObjectManager()->get(ResourceConnection::class);
+        $real = Bootstrap::create((string)\constant('BP'), $_SERVER)->getObjectManager()
+            ->get(ResourceConnection::class);
         $this->db = $real->getConnection();
         foreach (self::TABLES as $name) {
             $this->db->query('DROP TABLE IF EXISTS ' . $this->table($name));
@@ -127,5 +129,33 @@ class GeneratedSqlTest extends TestCase
         $this->db->insert($this->table('sales_invoice'), ['entity_id' => 1, 'store_id' => 1, 'order_id' => 1,
             'created_at' => $this->at(900), 'updated_at' => $this->at(60), 'email_sent' => 1]);
         $this->assertTrue($this->call($check, 'sentSince', $this->now - 600), 'an invoice emailed since');
+    }
+
+    public function testTheStateLivesInAFewFlagRowsAndAWriteChangesOnlyItsKeys(): void
+    {
+        $this->db->insert($this->table('flag'), ['flag_code' => 'someone_else', 'flag_data' => '{"x":1}']);
+        $store = new StateStore($this->resource);
+        $this->assertSame([], $store->loadAll());
+        $store->save(['checks' => [0 => ['cron' => ['status' => 'ok']]], 'cursor:cron' => ['last' => 1],
+            'cursor:log:system' => ['offset' => 5], 'alerted:0' => ['cron' => ['status' => 'fail', 'at' => 2]],
+            'tally:2026102008' => [0 => []], 'tally:2026102009' => [0 => []], 'external' => ['a' => ['ok' => 1]]]);
+        $codes = $this->db->fetchCol($this->db->select()->from($this->table('flag'), ['flag_code'])
+            ->order('flag_code'));
+        $this->assertSame(['commercekings_app_health_checks', 'commercekings_app_health_cursors',
+            'commercekings_app_health_external', 'commercekings_app_health_tallies', 'commercekings_app_health_told',
+            'someone_else'], $codes, 'grouped; another module\'s flag untouched');
+        // the consumer writes what it told while the run writes its cursors: neither undoes the other
+        $store->save(['alerted:0' => ['cron' => ['status' => 'ok', 'at' => 3]]]);
+        $store->save(['cursor:cron' => ['last' => 4]]);
+        $this->assertSame(['cron' => ['status' => 'ok', 'at' => 3]], $store->load(['alerted:0'])['alerted:0']);
+        $this->assertSame(['cursor:cron' => ['last' => 4], 'cursor:log:system' => ['offset' => 5]],
+            $store->loadPrefix('cursor:'));
+        $store->delete('cursor:log:system');
+        $this->assertSame(1, $store->deleteOldTallies((int)strtotime('2026-10-21 11:30:00 UTC')),
+            'older than 26 hours: the 08 hour of the day before');
+        $this->assertSame(['checks', 'cursor:cron', 'alerted:0', 'tally:2026102009', 'external'],
+            array_keys($store->loadAll()));
+        $this->assertSame('{"x":1}', $this->db->fetchOne($this->db->select()->from($this->table('flag'), ['flag_data'])
+            ->where('flag_code = ?', 'someone_else')));
     }
 }

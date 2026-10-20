@@ -17,7 +17,7 @@ Nothing runs on the storefront: no plugins, observers, layout or frontend routes
 ## A run
 
 1. Nothing happens while alerts are off everywhere and no heartbeat is set (a few configuration reads).
-2. `Model\RunState` reads the module's table once (`ck_app_health_state`, a few dozen rows).
+2. `Model\RunState` reads the module's state once (about 10 rows of Magento's `flag` table, one query).
 3. The enabled checks run in `Model\CheckPool`'s order. Shop-wide checks (`Api\CheckInterface`) run once; checks per
    website (`Api\WebsiteCheckInterface`) run once for all websites with alerts on. A check that would start after
    `Runner::BUDGET_SECONDS` (5 s) is skipped and keeps its last result; one that throws becomes a warning ("could not
@@ -182,7 +182,11 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 
 ## State
 
-`ck_app_health_state` (`state_key`, JSON `value`, `updated_at`):
+No table of its own: Magento's core `flag` table, rows `commercekings_app_health_<group>` with the keys as JSON
+(`flag_data`, MEDIUMTEXT). The keys are grouped into about 10 rows – `cursors` (every `cursor:*`), `told` (`alerted:*`,
+`noticed:*`), `notices`, `tallies`, `status` (`status`, `status:posted`); every other key a row of its own. A write
+changes only its keys: SELECT … FOR UPDATE, then one UPDATE (an INSERT for a new row), in one transaction – the run and
+the consumer write different keys of a row without undoing each other. Keys:
 
 | Key | Holds |
 |---|---|
@@ -199,5 +203,5 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 | `external` | each server's last good status from `var/app-health/status-<source>.json` (source => generated_at, its lines – code, label, status, value, unit, masked detail – the file's hash, read_at); at most 20, written only when a file changed |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
-To start over (e.g. in a test), truncate the table and delete the delivery state rows of the types `app_health_alert`,
-`app_health_summary` and `app_health_status`.
+To start over (e.g. in a test), delete the `flag` rows whose `flag_code` starts with `commercekings_app_health_` and
+the delivery state rows of the types `app_health_alert`, `app_health_summary` and `app_health_status`.

@@ -33,7 +33,11 @@ class TeamMessageTest extends TestCase
     private array $published = [];
     private int $recorded = 0;
 
-    /** @param array<int, mixed>|\Throwable|string $send what the sender answers */
+    /**
+     * @param array<string, mixed>|null $row the delivery state row
+     * @param \Throwable|string $send what the sender answers
+     * @param int[] $updates what update() answers, in order
+     */
     private function teamMessage(?array $row, \Throwable|string $send = SenderInterface::SENT, ?Target $target = null,
         array $updates = [], ?\Throwable $publish = null): TeamMessage
     {
@@ -79,11 +83,11 @@ class TeamMessageTest extends TestCase
         }];
     }
 
-    /** @return array<string, mixed> the data of the update() calls, in order */
+    /** @return list<array<string, mixed>> the data of the update() calls, in order */
     private function updateData(): array
     {
-        return array_map(fn ($update) => array_map(fn ($value) => $value instanceof Expression ? (string)$value
-            : $value, $update[1]), $this->updates);
+        return array_values(array_map(fn ($update) => array_map(fn ($value) => $value instanceof Expression
+            ? (string)$value : $value, $update[1]), $this->updates));
     }
 
     public function testAQuietDeliveryIsRecordedAsSentWithoutTheChannel(): void

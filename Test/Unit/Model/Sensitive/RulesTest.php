@@ -142,7 +142,7 @@ class RulesTest extends TestCase
             [['code' => 'pci/card_cvv', 'severity' => 'urgent']],
             [['code' => 'pci', 'enabled' => 'yes']],
         ] as $rows) {
-            $backend->setValue($rows);
+            $backend->setData('value', $rows); // dynamic rows arrive as an array
             try {
                 $backend->beforeSave();
                 $this->fail('saved ' . json_encode($rows));

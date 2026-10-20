@@ -78,10 +78,10 @@ class ConfigFilesTest extends TestCase
             'commercekings_app_health_summary' => '*/15 * * * *'], $jobs);
     }
 
-    public function testOneTableOfOurOwn(): void
+    public function testNoTableOfOurOwn(): void
     {
-        $tables = $this->xml('db_schema.xml')->xpath('//table');
-        $this->assertCount(1, $tables);
-        $this->assertSame('ck_app_health_state', (string)$tables[0]['name']);
+        $this->assertFileDoesNotExist(dirname(__DIR__, 2) . '/etc/db_schema.xml',
+            'the state is in Magento\'s flag table');
+        $this->assertFileDoesNotExist(dirname(__DIR__, 2) . '/etc/db_schema_whitelist.json');
     }
 }
