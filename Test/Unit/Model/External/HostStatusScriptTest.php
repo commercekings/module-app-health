@@ -120,6 +120,21 @@ class HostStatusScriptTest extends TestCase
             $lines['container_nginx']['detail']]);
     }
 
+    public function testOneOddLineNeverCostsTheWholeReport(): void
+    {
+        $long = 'a-container-with-a-name-far-longer-than-sixty-characters-for-a-label-x';
+        $lines = $this->report(['CK_CONTAINERS' => $long, 'FAKE_DOCKER' => $long . "\trunning\tUp 1 hour",
+            'CK_SERVICES' => 'getty@tty1.service', 'CK_DISKS' => '/ /no/such/mount']);
+        $container = array_values(array_filter($lines, fn ($line) => str_starts_with($line['code'], 'container_')));
+        $this->assertSame(['ok', 60], [$container[0]['status'], mb_strlen($container[0]['label'])]);
+        $this->assertSame(['fail', 'Service getty_tty1.service'], [$lines['service_getty_tty1_service']['status'],
+            $lines['service_getty_tty1_service']['label']], 'no systemctl here: not active');
+        $this->assertSame(['fail', 'Disk /no/such/mount', 'not found (CK_DISKS)'],
+            [$lines['disk_no_such_mount']['status'], $lines['disk_no_such_mount']['label'],
+            $lines['disk_no_such_mount']['detail']]);
+        $this->assertArrayHasKey('disk_root', $lines);
+    }
+
     public function testNothingToWatchNeedsNoDocker(): void
     {
         $lines = $this->report(['CK_CONTAINERS' => ' '], false); // blank: proc_open leaves an empty value out

@@ -57,12 +57,16 @@ if (( ! dry_run )) && [[ -z "${CK_STATUS_DIR:-}" ]]; then
 fi
 
 checks='[]'
-# add CODE LABEL STATUS VALUE UNIT DETAIL [METRICS] (VALUE may be "" for none; METRICS a JSON object of numbers)
+# add CODE LABEL STATUS VALUE UNIT DETAIL [METRICS] (VALUE may be "" for none; METRICS a JSON object of numbers).
+# The label is made what App health takes - letters, digits, space and . _ / : ( ) % # + -, at most 60 (a systemd
+# unit's "@", a long container name) - and the detail at most 160: one odd line never costs the whole report.
 add() {
     # $a_* names: "label" is a jq keyword (jq 1.5+ can't take $label)
     checks=$(jq -c --arg a_code "$1" --arg a_label "$2" --arg a_status "$3" --arg a_value "$4" --arg a_unit "$5" \
-        --arg a_detail "$6" --argjson a_metrics "${7:-null}" '. + [{code: $a_code, label: $a_label, status: $a_status,
-            value: (if $a_value == "" then null else ($a_value | tonumber) end), unit: $a_unit, detail: $a_detail}
+        --arg a_detail "$6" --argjson a_metrics "${7:-null}" '. + [{code: $a_code,
+            label: ($a_label | gsub("[^A-Za-z0-9 ._/:()%#+-]"; "_") | .[:60]), status: $a_status,
+            value: (if $a_value == "" then null else ($a_value | tonumber) end), unit: $a_unit,
+            detail: ($a_detail | .[:160])}
             + (if $a_metrics == null or $a_metrics == {} then {} else {metrics: $a_metrics} end)]' \
         <<< "$checks")
 }
@@ -190,9 +194,13 @@ done
 
 # disks: percent used
 for mount in ${CK_DISKS:-/}; do
-    used=$(df -P "$mount" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
-    free=$(df -Ph "$mount" | awk 'NR == 2 { print $4 }')
     name="${mount#/}"
+    # a path that is not there (a typo in CK_DISKS) is its own failure, not the end of the report
+    if ! used=$(df -P "$mount" 2>/dev/null | awk 'NR == 2 { sub("%", "", $5); print $5 }') || [[ -z "$used" ]]; then
+        add "$(code "${name:-root}" disk_)" "Disk $mount" fail "" "" "not found (CK_DISKS)"
+        continue
+    fi
+    free=$(df -Ph "$mount" | awk 'NR == 2 { print $4 }')
     add "$(code "${name:-root}" disk_)" "Disk $mount" "$(level "$used" "${CK_DISK_WARN:-80}" "${CK_DISK_FAIL:-90}" up)" \
         "$used" "%" "$free free"
 done
