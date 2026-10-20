@@ -28,17 +28,20 @@ class StatusTest extends TestCase
     /** @var bool[] whether each was posted */
     private array $posted = [];
     private ?\CommerceKings\AppHealth\Api\StatusPolicyInterface $policy = null;
+    private bool $failing = false;
+    private int $failedSends = 0;
 
     private function send(MemoryStore $store, ?string $sentAt = null, array $settings = []): void
     {
         $target = new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC');
         $teamMessage = $this->createStub(TeamMessage::class);
+        $teamMessage->method('isFailing')->willReturnCallback(fn () => $this->failing);
         $teamMessage->method('deliver')->willReturnCallback(function ($type, $reference, \Closure $compose) use (
             $target,
             $sentAt
         ): bool {
             $this->assertSame([Status::CODE, '0'], [$type, $reference]);
-            $composed = $compose($target, ['sent_at' => $sentAt]);
+            $composed = $compose($target, ['sent_at' => $sentAt, 'failed_sends' => (string)$this->failedSends]);
             if ($composed === null) {
                 return false;
             }
@@ -145,6 +148,21 @@ class StatusTest extends TestCase
         $this->send($store);
         $this->assertStringEndsWith("New errors this hour: 10\n• Unable to send (10×)", $this->sent[0],
             'Slow (9×, seen before) is in the daily summary, not here');
+    }
+
+    public function testAfterAFailedSendTheStatusIsPostedNotDeliveredQuietly(): void
+    {
+        $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'ok']]]]);
+        $this->send($store);
+        $this->send($store);
+        $this->assertSame([true, false], $this->posted, 'all OK posted today already: quiet');
+        $this->failing = true; // e.g. an alert failing into retry: the token revoked
+        $this->send($store);
+        $this->failing = false;
+        $this->failedSends = 2; // or the status's own sends
+        $this->send($store);
+        $this->assertSame([true, false, true, true], $this->posted,
+            'while a message fails, the status goes through the channel: only a real post proves it works again');
     }
 
     public function testAllOkIsPostedOnceADayElseDeliveredQuietly(): void

@@ -130,6 +130,19 @@ class TeamMessageTest extends TestCase
         $this->assertContains('(skip_until IS NULL OR skip_until <= NOW())', $where, 'a retry waits its turn');
     }
 
+    public function testFailingWhileAnAppHealthMessageHasFailuresOrAWaitingRetry(): void
+    {
+        $this->calls = [];
+        $teamMessage = new TeamMessage($this->resource($this->db(['fetchOne' => ['1', false]])),
+            $this->createStub(DeliveryStateInterface::class), $this->createStub(QueueInterface::class),
+            $this->createStub(SenderInterface::class), $this->createStub(Targets::class),
+            $this->createStub(LoggerInterface::class));
+        $this->assertTrue($teamMessage->isFailing());
+        $this->assertFalse($teamMessage->isFailing());
+        $this->assertContains('type LIKE ?', $this->wheres(), 'App health\'s own messages: a prefix of the key');
+        $this->assertContains('(failed_sends > 0 OR skip_until > NOW())', $this->wheres());
+    }
+
     public function testQueueAlreadyMarkedPublishesNothing(): void
     {
         $this->assertFalse($this->teamMessage(null, updates: [0])->queue('app_health_alert', 1));

@@ -37,6 +37,7 @@ class RunnerTest extends TestCase
     private array $websites = [1];
     private bool $heartbeat = false;
     private bool $queueThrows = false;
+    private bool $failing = false;
     private ?\CommerceKings\AppHealth\Model\SiteDomain $siteDomain = null;
     /** The hourly status's sent_at (UTC), null: never sent; queued: its queue() calls and their conditions. */
     private ?string $statusSentAt = 'recent';
@@ -62,6 +63,7 @@ class RunnerTest extends TestCase
         $targets->method('websites')->willReturn(array_combine($this->websites, array_map(
             fn ($id) => new Target($id, $id, 'slack', 'C' . $id, 'Shop', 'UTC'), $this->websites)) ?: []);
         $teamMessage = $this->createStub(TeamMessage::class);
+        $teamMessage->method('isFailing')->willReturnCallback(fn () => $this->failing);
         $teamMessage->method('queue')->willReturnCallback(function ($type, $scope, $condition = '') {
             if ($type === 'app_health_status') {
                 $this->statusQueued[] = $scope . ' ' . $condition;
@@ -223,6 +225,16 @@ class RunnerTest extends TestCase
         $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => $this->clock->now]]]);
         $this->settings = ['general/shared_to_websites' => '1'];
         $this->assertSame([1], $this->run5()['queued'], 'on: website 1, a channel of its own, gets it too');
+    }
+
+    public function testTheHeartbeatIsHeldWhileMessagesFailToGoOut(): void
+    {
+        $this->heartbeat = true;
+        $this->failing = true; // a revoked token: alerts fail into retry, the quiet status alone would look fine
+        $this->assertSame('held: messages are failing to go out (the channel or the recipient)',
+            $this->run5()['heartbeat']);
+        $this->failing = false;
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'a real post went out again');
     }
 
     public function testOnWithNowhereToSendHoldsTheHeartbeat(): void

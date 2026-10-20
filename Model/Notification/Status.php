@@ -25,9 +25,11 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
  *
  * Every interval it is queued and delivered; it is posted to the channel only when the policy
  * (Api\StatusPolicyInterface; shipped: Model\Status\DefaultPolicy) says so, else delivered quietly - recorded as
- * sent, the channel not called. A quiet delivery still proves the queue and its consumer work (the heartbeat), not
- * the channel itself: the posted statuses (at least the daily "All checks OK") and the alerts do. "status:posted"
- * keeps when it was last posted, and last posted as all OK, per scope.
+ * sent, the channel not called - never while an App health message is failing to go out (TeamMessage::isFailing(),
+ * or this status's own failed sends): then it is posted, and only that real post proves the channel again. A quiet
+ * delivery still proves the queue and its consumer work (the heartbeat), not the channel itself: the posted statuses
+ * (at least the daily "All checks OK") and the alerts do. "status:posted" keeps when it was last posted, and last
+ * posted as all OK, per scope.
  */
 class Status implements NotificationTypeInterface
 {
@@ -87,7 +89,9 @@ class Status implements NotificationTypeInterface
                 array_map(fn ($e) => ['label' => $e[0], 'count' => $e[1], 'new' => $e[2]], $parts['errors']),
                 isset($mine['at']) ? (int)$mine['at'] : null, isset($mine['ok_at']) ? (int)$mine['ok_at'] : null,
                 $parts['known']);
-            $post = $this->policy->shouldPost($report);
+            // after a failed send (any App health message), only a real post proves the channel works again
+            $post = (int)($row['failed_sends'] ?? 0) > 0 || $this->teamMessage->isFailing()
+                || $this->policy->shouldPost($report);
             $text = $this->text($target, $parts);
             return [$text, function () use ($post, $report, $posted, $now, $target, $open, $mine): void {
                 if ($post) {

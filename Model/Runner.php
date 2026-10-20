@@ -30,8 +30,9 @@ use Psr\Log\LoggerInterface;
  * no heartbeat ping - a staging copy must not alert the team, nor ping production's heartbeat.
  *
  * A finished run pings the heartbeat - also when a check threw or the budget left one out ("degraded" in the report):
- * cron runs and the run got to its end - unless an alert could not be queued, App health is on with no channel or
- * recipient (nowhere to send), or (with the hourly status on) the
+ * cron runs and the run got to its end - unless an alert could not be queued, a message is failing to go out (its
+ * sends fail or wait to be retried: TeamMessage::isFailing()), App health is on with no channel or recipient
+ * (nowhere to send), or (with the hourly status on) the
  * hourly status has been due for STATUS_GRACE_MINUTES (the "status" row) and is still not out: alerts can't reach
  * the team, and the outside service is the one to tell them. Nothing runs while app health is off and no heartbeat
  * is set.
@@ -203,6 +204,9 @@ class Runner
         if ($this->heartbeat->isConfigured()) {
             $report['heartbeat'] = match (true) {
                 !empty($report['queue_failed']) => 'held: an alert could not be queued',
+                // the quiet hourly status alone would look fine while alerts fail into retry
+                $this->teamMessage->isFailing()
+                    => 'held: messages are failing to go out (the channel or the recipient)',
                 // on, but no global channel or recipient: an alert could not reach anyone
                 $shopWide === null && $this->config->isEnabled()
                     => 'held: App health is on but has nowhere to send (no channel or recipient)',

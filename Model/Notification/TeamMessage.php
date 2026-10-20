@@ -182,6 +182,19 @@ class TeamMessage
         }
     }
 
+    /**
+     * Whether an App health message is failing to go out: a delivery row of an app_health_* type with failures in a
+     * row, or a retry waiting (e.g. a revoked token, a recipient the channel no longer takes) - until a send of it
+     * succeeds (markSent()). One query, on the key's type prefix.
+     */
+    public function isFailing(): bool
+    {
+        $db = $this->resource->getConnection();
+        return (bool)$db->fetchOne($db->select()->from($this->deliveryState->getTableName(), ['failing' => new
+            Expression('1')])->where('type LIKE ?', 'app\\_health\\_%')
+            ->where('(failed_sends > 0 OR skip_until > NOW())')->limit(1));
+    }
+
     /** @param array<int|string, mixed> $mine */
     private function markSent(array $mine): void
     {

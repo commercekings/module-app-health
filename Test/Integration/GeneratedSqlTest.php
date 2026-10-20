@@ -117,6 +117,26 @@ class GeneratedSqlTest extends TestCase
         $this->assertSame($this->at(7200), $rows[0]['oldest']);
     }
 
+    public function testTeamMessageSeesAnAppHealthMessageFailingToGoOut(): void
+    {
+        $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
+        $deliveryState->method('getTableName')->willReturn($this->table('ck_notification_delivery_state'));
+        $teamMessage = new \CommerceKings\AppHealth\Model\Notification\TeamMessage($this->resource, $deliveryState,
+            $this->createStub(\CommerceKings\Notification\Api\QueueInterface::class),
+            $this->createStub(\CommerceKings\Notification\Api\SenderInterface::class),
+            $this->createStub(\CommerceKings\AppHealth\Model\Targets::class),
+            $this->createStub(\Psr\Log\LoggerInterface::class));
+        $row = ['reference_id' => 0, 'subject_key' => '', 'delivery_version' => 1];
+        $this->db->insertMultiple($this->table('ck_notification_delivery_state'), [
+            ['type' => 'app_health_status', 'failed_sends' => 0] + $row,
+            ['type' => 'cart_reminder', 'failed_sends' => 3] + $row]);
+        $this->assertFalse($teamMessage->isFailing(), 'another type\'s failures are not App health\'s');
+        $this->db->insert($this->table('ck_notification_delivery_state'), ['type' => 'app_health_alert',
+            'reference_id' => 0, 'subject_key' => '', 'delivery_version' => 1, 'failed_sends' => 0,
+            'skip_until' => gmdate('Y-m-d H:i:s', $this->now + 600)]);
+        $this->assertTrue($teamMessage->isFailing(), 'a retry waiting');
+    }
+
     public function testEmailFailingSeesASendSinceInOneUnion(): void
     {
         $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
