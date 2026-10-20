@@ -1,39 +1,45 @@
-# App health's server status for a Warden project: add these services to the project's .warden/warden-env.yml.
-# Off by default (the profile "host-status"); start: warden env up -d host-status (it starts its proxy too),
-# stop: warden env rm -sf host-status docker-socket-proxy.
+# App health's server status for a Warden project: add these services to the project's .warden/warden-env.yml and
+# copy ../docker-socket-proxy/haproxy.cfg, ../host-status-image/Dockerfile and ../host-status.sh into .warden/
+# (keeping the folder names). Off by default (the profile "host-status"); start: warden env up -d --build host-status
+# (it starts its proxy too), stop: warden env rm -sf host-status docker-socket-proxy, then
+# docker network rm <WARDEN_ENV_NAME>_host-status. Needs Docker Compose 2.23 or later (volume subpath).
 #
-# Why the proxy: Docker's socket - even mounted :ro - is the whole Docker API, so a container holding it can start a
-# privileged container, i.e. it is root on the host. The proxy (HAProxy) hands the script only what it needs: GET on
-# /containers (state, health, restarts, stats), plus /_ping and /version for the Docker CLI. POST is off (nothing can
-# be created, started, stopped or exec'd), and the proxy sits on an internal network of its own - nothing else reaches
-# it, and it reaches nothing.
-#
-# The sidecar runs host-status.sh every minute as the web server's user (1000:1000 in Warden's php-fpm; `id` in it
-# tells), mounts only Magento's var/app-health (a subpath of Warden's "appdata" volume, the Magento root) and talks to
-# Docker through the proxy (DOCKER_HOST). Copy docs/examples/host-status.sh next to this file (./.warden/), or mount it
-# from vendor/commercekings/module-app-health/docs/examples/host-status.sh.
+# Why a proxy, and this one: Docker's socket - even mounted :ro - is the whole Docker API (start a privileged
+# container = root on the host), and even its GETs leak: a container's /json has its environment (database and queue
+# passwords), /archive any file, /logs and /export the rest. HAProxy with haproxy.cfg passes exactly the container
+# list and each container's stats (plus the CLI's /_ping and /version); everything else gets 403. Restarts would need
+# /json, so the script runs without them here. Both containers sit on an internal network only; the script's tools
+# are built into its image (nothing is installed at runtime). It runs as Warden php-fpm's www-data (1000) and mounts
+# only Magento's var/app-health (a subpath of Warden's "appdata" volume, the Magento root).
 services:
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    image: haproxy:3.2.25-alpine@sha256:5d97434a423c2533cfeb42874d45cf6d69a840b60334582dfbfd5008e94c80be
     profiles: [host-status]
     restart: unless-stopped
-    environment:
-      CONTAINERS: 1
-      POST: 0
-      EVENTS: 0
-      PING: 1
-      VERSION: 1
+    user: "0:0" # only to open Docker's socket; no capabilities beyond that
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./.warden/docker-socket-proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     networks: [host-status]
 
   host-status:
-    image: alpine:3.20
+    build: ./.warden/host-status-image
+    image: commercekings/host-status:local
     profiles: [host-status]
     restart: unless-stopped
     depends_on: [docker-socket-proxy]
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      DOCKER_CONFIG: /tmp/.docker
+      CK_CONTAINER_RESTARTS: "0"
       CK_SOURCE: dev-box
       CK_STATUS_DIR: /status
       CK_COMPOSE_PROJECT: ${WARDEN_ENV_NAME}
@@ -45,8 +51,7 @@ services:
         volume:
           subpath: var/app-health
       - ./.warden/host-status.sh:/usr/local/bin/host-status.sh:ro
-    networks: [default, host-status]
-    entrypoint: ["/bin/sh", "-c", "apk add --no-cache -q bash jq coreutils docker-cli su-exec && exec su-exec 1000:1000 bash -c 'while :; do bash /usr/local/bin/host-status.sh || echo host-status failed >&2; sleep 60; done'"]
+    networks: [host-status]
 
 networks:
   host-status:

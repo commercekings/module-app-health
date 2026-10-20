@@ -277,8 +277,8 @@ run. No token, port, URL or Magento command: nothing is exposed and Magento is n
 | Setup | Runs | Docker access | Files |
 |---|---|---|---|
 | A server you run (VM, bare metal, Docker host) | on the host, every minute (systemd timer or cron) | the host's own Docker CLI, as root | [systemd/](docs/examples/systemd) – service, timer, env example |
-| A Docker Compose stack | a sidecar container next to Magento's | through a socket proxy (read-only API) | [docker-compose/](docs/examples/docker-compose) |
-| Warden (development) | a sidecar in the project's `.warden/warden-env.yml`, opt-in profile `host-status` | through a socket proxy | [warden/](docs/examples/warden) |
+| A Docker Compose stack | a sidecar container next to Magento's | through a proxy passing only the container list and stats | [docker-compose/](docs/examples/docker-compose) |
+| Warden (development) | a sidecar in the project's `.warden/warden-env.yml`, opt-in profile `host-status` | through a proxy passing only the container list and stats | [warden/](docs/examples/warden) |
 
 On a host, root only collects the readings (Docker needs it); the file is written as the owner of `var/app-health` –
 the web server's user, by its numeric id, also under Docker's user namespaces. That folder is the web user's to write,
@@ -286,10 +286,18 @@ so root never works in it: a temporary file there could be swapped for a link to
 would write through it. The script refuses when the folder (or `var/`, before the folder exists) is owned by root. A
 sidecar runs as the web server's user from the start.
 
-**Why a proxy in a container:** Docker's socket – even mounted `:ro` – is the whole Docker API, so whoever holds it can
-start a privileged container: root on the host. The examples give the sidecar `tecnativa/docker-socket-proxy`
-instead: `GET` on `/containers` only (state, health, restarts, stats; plus `/_ping` and `/version` for the Docker CLI),
-`POST` off – nothing can be created, started, stopped or exec'd – on an internal network that nothing else reaches.
+**Why a proxy in a container, and which:** Docker's socket – even mounted `:ro` – is the whole Docker API, so whoever
+holds it can start a privileged container: root on the host. And even a read-only API leaks: a container's
+`/containers/<id>/json` has its environment (database and queue passwords), `/archive` any file in it, `/logs` and
+`/export` the rest. A proxy that allows "every GET under /containers" lets all of that through. The examples use
+HAProxy with [an exact list](docs/examples/docker-socket-proxy/haproxy.cfg) instead: `GET /containers/json` (the
+list: names, states, health), `GET /containers/<id>/stats` and the Docker CLI's `/_ping` and `/version` – everything
+else, any other path or method, gets 403. The list still shows each container's command line, labels and mounts:
+keep secrets out of them (environment variables or files, not arguments). Restart counts would need
+`/containers/<id>/json`, so behind the proxy the table shows them as "-" (`CK_CONTAINER_RESTARTS=0`); on a host the
+script reads them. Proxy and script share an internal network that nothing else reaches, and neither reaches the
+internet: the script's tools are built into [its image](docs/examples/host-status-image/Dockerfile), and both images
+are pinned.
 
 1. Copy [docs/examples/host-status.sh](docs/examples/host-status.sh) (mode 0755); on a host it needs `bash`, `jq`,
    `setpriv` (util-linux) and `docker`; the sidecars install theirs.

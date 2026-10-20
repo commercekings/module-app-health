@@ -14,6 +14,7 @@
 #                    varnish nginx); or CK_COMPOSE_PROJECT: every container of that Compose project (its label)
 #   CK_CONTAINER_MEM_WARN / CK_CONTAINER_CPU_WARN  a container's memory % of its limit / CPU % (one core = 100) above
 #                    which it warns (default: 85 / 90); down, restarting or unhealthy fails
+#   CK_CONTAINER_RESTARTS  0: no restart counts (they need docker inspect, which a socket proxy must refuse)
 #   DOCKER_HOST      (the environment) another Docker endpoint, e.g. tcp://docker-socket-proxy:2375 in a container
 #   CK_DISKS         mount points (default: /); CK_DISK_WARN / CK_DISK_FAIL percent used (default: 80 / 90)
 #   CK_MEM_WARN / CK_MEM_FAIL  percent of memory available below which it warns / fails (default: 10 / 5)
@@ -79,19 +80,20 @@ level() {
         print s }'
 }
 
-# containers: state, health and restarts (docker inspect), and while running CPU, memory, network and block I/O
-# (one docker stats for all) - through the Docker CLI, so DOCKER_HOST (e.g. a socket proxy) works too
+# containers: state and health from the container list (one docker ps), CPU, memory, network and block I/O of the
+# running ones (one docker stats) - through the Docker CLI, so DOCKER_HOST and a read-only socket proxy work: neither
+# needs more than the list and the stats. Restarts need docker inspect, which a proxy must not allow (it has the
+# containers' environment): CK_CONTAINER_RESTARTS=0 there.
+list=$(docker ps -a --format '{{.Names}}	{{.State}}	{{.Status}}' \
+    ${CK_COMPOSE_PROJECT:+--filter "label=com.docker.compose.project=$CK_COMPOSE_PROJECT"} 2>/dev/null || true)
 if [[ -n "${CK_COMPOSE_PROJECT:-}" ]]; then
-    containers=$(docker ps -a --filter "label=com.docker.compose.project=$CK_COMPOSE_PROJECT" --format '{{.Names}}' \
-        | sort)
+    containers=$(cut -f1 <<< "$list" | sort)
 else
     containers=${CK_CONTAINERS-mariadb php cron rabbitmq opensearch cache session varnish nginx}
 fi
 running=()
 for name in $containers; do
-    if docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null | grep -qx running; then
-        running+=("$name")
-    fi
+    [[ "$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' <<< "$list")" == running ]] && running+=("$name")
 done
 stats='{}'
 if (( ${#running[@]} )); then
@@ -108,17 +110,33 @@ if (( ${#running[@]} )); then
 fi
 for name in $containers; do
     code="$(code "$name" container_)"
-    if ! state=$(docker inspect --format '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null); then
+    line=$(awk -F'\t' -v n="$name" '$1 == n' <<< "$list")
+    if [[ -z "$line" ]]; then
         add "$code" "Container $name" fail "" "" "not found"
         continue
     fi
-    read -r running_state restarts health <<< "$state"
+    running_state=$(cut -f2 <<< "$line")
+    status_text=$(cut -f3 <<< "$line")
+    # Docker's status: "Up 2 hours (healthy)", "Up 5 seconds (health: starting)", "Exited (137) 3 minutes ago"
+    case "$status_text" in
+        *"(unhealthy)"*) health=unhealthy ;;
+        *"(healthy)"*) health=healthy ;;
+        *"(health: starting)"*) health=starting ;;
+        *) health=none ;;
+    esac
+    restarts=null
+    if [[ "${CK_CONTAINER_RESTARTS:-1}" != 0 ]]; then
+        restarts=$(docker inspect --format '{{.RestartCount}}' "$name" 2>/dev/null || echo null)
+    fi
     detail="$running_state"
     [[ "$health" != none ]] && detail="$detail, $health"
-    metrics=$(jq -c --arg n "$name" --argjson r "$restarts" '.[$n] // {} | if . == {} then {restarts: $r} else
-        {cpu_percent: (.cpu_percent * 100 | round / 100), mem_used_bytes: .mem[0], mem_limit_bytes: .mem[1],
-            net_rx_bytes: .net[0], net_tx_bytes: .net[1], blk_read_bytes: .blk[0], blk_write_bytes: .blk[1],
-            restarts: $r} end' <<< "$stats")
+    if [[ "$running_state" == exited && "$status_text" =~ \(([0-9]+)\) ]]; then
+        detail="exited (code ${BASH_REMATCH[1]})"
+    fi
+    metrics=$(jq -c --arg n "$name" --argjson r "$restarts" '(.[$n] // {}) as $s
+        | (if $s == {} then {} else {cpu_percent: ($s.cpu_percent * 100 | round / 100), mem_used_bytes: $s.mem[0],
+            mem_limit_bytes: $s.mem[1], net_rx_bytes: $s.net[0], net_tx_bytes: $s.net[1], blk_read_bytes: $s.blk[0],
+            blk_write_bytes: $s.blk[1]} end) + (if $r == null then {} else {restarts: $r} end)' <<< "$stats")
     cpu=$(jq -r '.cpu_percent // empty' <<< "$metrics")
     mem=$(jq -r --arg n "$name" '.[$n].mem_percent // empty' <<< "$stats")
     status=ok

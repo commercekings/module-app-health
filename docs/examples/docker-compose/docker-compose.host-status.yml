@@ -1,48 +1,57 @@
 # App health's server status for a Docker Compose stack: use it next to your stack's own file,
-#   docker compose -f docker-compose.yml -f docker-compose.host-status.yml --profile host-status up -d
-# (stop: docker compose ... rm -sf host-status docker-socket-proxy). Set the three values marked "yours".
+#   docker compose -f docker-compose.yml -f docker-compose.host-status.yml --profile host-status up -d --build
+# stop: docker compose ... rm -sf host-status docker-socket-proxy && docker network rm <project>_host-status
+# Copy next to it: ../docker-socket-proxy/haproxy.cfg, ../host-status-image/Dockerfile and ../host-status.sh, keeping
+# the folder names. Set the three values marked "yours".
 #
-# Why the proxy: Docker's socket - even mounted :ro - is the whole Docker API, so a container holding it can start a
-# privileged container, i.e. it is root on the host. The proxy (HAProxy) hands the script only what it needs: GET on
-# /containers, plus /_ping and /version for the Docker CLI; POST is off, and it sits on an internal network of its own.
-# On a server you run yourself, the host timer (../systemd/) needs no proxy at all and is the better choice.
+# Why a proxy, and this one: Docker's socket - even mounted :ro - is the whole Docker API (start a privileged
+# container = root on the host), and even its GETs leak: a container's /json has its environment (database and queue
+# passwords), /archive any file, /logs and /export the rest. HAProxy with haproxy.cfg passes exactly the container
+# list and each container's stats (plus the CLI's /_ping and /version); everything else gets 403. Restarts would need
+# /json, so the script runs without them here (CK_CONTAINER_RESTARTS=0). Both containers sit on an internal network
+# only: the proxy is reachable from the script alone, and neither reaches the internet (the script's tools are built
+# into its image, nothing is installed at runtime). On a server you run yourself, the host timer (../systemd/) needs
+# no proxy at all and is the better choice.
 services:
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    image: haproxy:3.2.25-alpine@sha256:5d97434a423c2533cfeb42874d45cf6d69a840b60334582dfbfd5008e94c80be
     profiles: [host-status]
     restart: unless-stopped
-    environment:
-      CONTAINERS: 1
-      POST: 0
-      EVENTS: 0
-      PING: 1
-      VERSION: 1
+    user: "0:0" # only to open Docker's socket (root:docker 0660); no capabilities beyond that
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker-socket-proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     networks: [host-status]
 
   host-status:
-    image: alpine:3.20
+    build: ./host-status-image
+    image: commercekings/host-status:local
     profiles: [host-status]
     restart: unless-stopped
     depends_on: [docker-socket-proxy]
-    # starts as root to install its tools, then runs the script as CK_UID:CK_GID
+    # yours: the uid:gid PHP runs as in your Magento container (it owns var/; `id` in it tells)
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      DOCKER_CONFIG: /tmp/.docker
+      CK_CONTAINER_RESTARTS: "0"
       CK_SOURCE: shop-1
       CK_STATUS_DIR: /status
       CK_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-shop}
       CK_DISKS: /
-      # yours: the uid:gid PHP runs as in your Magento container (it owns var/; `id` in it tells)
-      CK_UID: "1000"
-      CK_GID: "1000"
     volumes:
       # yours: the host folder or volume that is Magento's var/ (here a bind mount of it)
       - ./var/app-health:/status
       # yours: where you keep the script
       - ./host-status.sh:/usr/local/bin/host-status.sh:ro
-    networks: [default, host-status]
-    entrypoint: ["/bin/sh", "-c", "apk add --no-cache -q bash jq coreutils docker-cli su-exec && exec su-exec \"$$CK_UID:$$CK_GID\" bash -c 'while :; do bash /usr/local/bin/host-status.sh || echo host-status failed >&2; sleep 60; done'"]
+    networks: [host-status]
 
 networks:
   host-status:

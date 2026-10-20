@@ -25,8 +25,9 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
 - **Containers:** the script reports each container (`CK_CONTAINERS` or a Compose project) with its CPU, memory
   (used/limit), network and block I/O and restarts (optional `metrics` per line, strictly checked); down, restarting
   or unhealthy fails, memory over 85 % or CPU over 90 % warns; *Send status now* and the daily summary show a table per
-  server. Ready setups in `docs/examples`: systemd (a host), Docker Compose and Warden (a sidecar behind a read-only
-  Docker socket proxy).
+  server. Ready setups in `docs/examples`: systemd (a host), Docker Compose and Warden (a sidecar in a pre-built,
+  pinned image behind HAProxy that passes only the container list and stats - not a container's environment, files or
+  logs; restart counts only on a host).
 - **Daily summary** per website at its time: counts of the last 24 hours, what had problems, what was ok all day.
 - **Sending** through Notification's queue and consumer as service messages (no cooldown, stop list or quiet hours),
   once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; any
