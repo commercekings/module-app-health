@@ -65,6 +65,8 @@ class SalesEmailsTest extends TestCase
             array_values(array_map(fn ($call) => $call[1], $from)));
         $wheres = $this->wheres();
         $this->assertSame(4, count(array_keys($wheres, 'created_at >= ?', true)));
+        $this->assertSame(1, count(array_keys($wheres, "COALESCE(state, '') NOT IN ('canceled', 'closed')", true)),
+            'cancelled and closed orders left out - on orders only, outside the state index');
         $this->assertSame(4, count(array_keys($wheres, 'created_at < ?', true)));
         $this->assertSame(4, count(array_keys($wheres, 'COALESCE(email_sent, 0) <= 0', true)),
             'only the created_at index can bound the rows');

@@ -105,6 +105,10 @@ class SalesEmails implements WebsiteCheckInterface
                 ->where('COALESCE(send_email, 0) = 1')
                 ->where('COALESCE(email_sent, 0) <= 0')
                 ->limit(self::CAP);
+            if ($entity === 'order') {
+                // a cancelled or closed order's confirmation no longer matters; COALESCE keeps the state index out
+                $rows->where("COALESCE(state, '') NOT IN ('canceled', 'closed')");
+            }
             $parts[] = $db->select()->from(['t' => $rows], ['entity' => new Expression($db->quote($entity)),
                 'store_id', 'count' => new Expression('COUNT(*)'), 'oldest' => new Expression('MIN(created_at)')])
                 ->group('store_id');

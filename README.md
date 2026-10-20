@@ -42,7 +42,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | all websites |
 | Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | all websites |
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
-| Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min | the website |
+| Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website |
 
 ### Why it fails
 
