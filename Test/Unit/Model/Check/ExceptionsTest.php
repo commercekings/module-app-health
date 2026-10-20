@@ -6,6 +6,7 @@ namespace CommerceKings\AppHealth\Test\Unit\Model\Check;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Check\Exceptions;
 use CommerceKings\AppHealth\Model\ExceptionLog;
+use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\LogDir;
@@ -28,8 +29,8 @@ class ExceptionsTest extends TestCase
         $this->clock = new Clock();
         $config = $this->config(['exceptions/count' => '5', 'exceptions/window_minutes' => '15',
             'exceptions/max_read_kb' => '1024']);
-        $this->check = new Exceptions(new ExceptionLog($this->logFilesystem(), $this->state, $config), $config,
-            $this->state, $this->clock);
+        $this->check = new Exceptions(new ExceptionLog($this->logReader($this->state, $config)),
+            new Fingerprints($this->state, $config), $config, $this->state, $this->clock);
     }
 
     protected function tearDown(): void
@@ -53,10 +54,18 @@ class ExceptionsTest extends TestCase
         $first = $this->run5(str_repeat(self::entry('A\\PaymentException', 'p'), 2) . self::entry('B\\NoSuch', 'n'));
         $this->assertSame(CheckResult::OK, $first->status);
         $this->assertSame(['exceptions' => 3, 'exceptions:A\\PaymentException' => 2, 'exceptions:B\\NoSuch' => 1],
-            $first->counts);
+            array_filter($first->counts, fn ($key) => !str_starts_with($key, 'fp:'), ARRAY_FILTER_USE_KEY));
+        $this->assertSame([2, 1], array_values(array_filter($first->counts,
+            fn ($key) => str_starts_with($key, 'fp:'), ARRAY_FILTER_USE_KEY)), 'by fingerprint, for the summary');
+        $this->assertCount(2, $first->notices, 'two exceptions never seen before');
+        $this->assertMatchesRegularExpression('/^NEW CRITICAL main: A\\\\PaymentException x2'
+            . ' at vendor\/magento\/x.php:12'
+            . ' #[0-9a-f]{8}$/', $first->notices[0]);
         $spike = $this->run5(self::entry('A\\PaymentException', 'p') . self::entry('C\\Other', 'o'));
         $this->assertSame(CheckResult::FAIL, $spike->status);
         $this->assertSame('5 exceptions in 15 min (A\\PaymentException x3, B\\NoSuch x1, C\\Other x1)', $spike->detail);
+        $this->assertCount(1, $spike->notices, 'only C is new');
+        $this->assertSame('Exception spike', $spike->title);
         $this->assertSame(CheckResult::FAIL, $this->run5()->status, 'still within the window');
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the first entries left the window');
     }

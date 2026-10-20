@@ -14,6 +14,37 @@
                 <item name="queues" xsi:type="object">CommerceKings\AppHealth\Model\Check\Queues</item>
                 <item name="email_failing" xsi:type="object">CommerceKings\AppHealth\Model\Check\EmailFailing</item>
                 <item name="sales_emails" xsi:type="object">CommerceKings\AppHealth\Model\Check\SalesEmails</item>
+                <item name="system_log" xsi:type="object">CommerceKings\AppHealth\Model\Check\SystemLog</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- the log sources and their parsers, by the check that reads them (argument "sources": name =>
+         [source => LogSourceInterface, parser => LogParserInterface, check => code]); another module adds its own -->
+    <virtualType name="CommerceKingsAppHealthSystemLogSource" type="CommerceKings\AppHealth\Model\Log\FileLogSource">
+        <arguments>
+            <argument name="code" xsi:type="string">system</argument>
+            <argument name="fileConfigPath" xsi:type="string">commercekings_app_health/system_log/file</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="CommerceKingsAppHealthExceptionLogSource" type="CommerceKings\AppHealth\Model\Log\FileLogSource">
+        <arguments>
+            <argument name="code" xsi:type="string">exception</argument>
+            <argument name="fileConfigPath" xsi:type="string">commercekings_app_health/exceptions/file</argument>
+        </arguments>
+    </virtualType>
+    <type name="CommerceKings\AppHealth\Model\Log\LogSourcePool">
+        <arguments>
+            <argument name="sources" xsi:type="array">
+                <item name="system" xsi:type="array">
+                    <item name="source" xsi:type="object">CommerceKingsAppHealthSystemLogSource</item>
+                    <item name="parser" xsi:type="object">CommerceKings\AppHealth\Model\Log\MonologLineParser</item>
+                    <item name="check" xsi:type="string">system_log</item>
+                </item>
+                <item name="exception" xsi:type="array">
+                    <item name="source" xsi:type="object">CommerceKingsAppHealthExceptionLogSource</item>
+                    <item name="parser" xsi:type="object">CommerceKings\AppHealth\Model\Log\MonologLineParser</item>
+                    <item name="check" xsi:type="string">exceptions</item>
+                </item>
             </argument>
         </arguments>
     </type>

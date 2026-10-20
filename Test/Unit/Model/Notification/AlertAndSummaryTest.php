@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Test\Unit\Model\Notification;
 
+use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Notification\Alert;
 use CommerceKings\AppHealth\Model\Notification\Summary;
@@ -15,48 +16,57 @@ use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
 use PHPUnit\Framework\TestCase;
 
-/** What the consumer composes on fresh state, and what it records once sent. */
+/** What the consumer composes on fresh state - one message per piece of news - and what it records once sent. */
 class AlertAndSummaryTest extends TestCase
 {
-    private const MESSAGES_NOW = 1792483200;
-
     use Pool;
     use Settings;
 
     private const NOW = 1792483200; // 08:00 UTC
 
     private MemoryStore $store;
-    /** @var array{0: string, 1: \Closure}|null */
-    private ?array $composed = null;
+    /** @var string[] sent texts */
+    private array $sent = [];
+    private bool $failing = false;
 
     protected function setUp(): void
     {
         $this->store = (new MemoryStore())->seed(['checks' => [
-            0 => ['cron' => ['status' => 'fail', 'detail' => 'no job has run for 12 min', 'since' => self::NOW - 720],
+            0 => ['cron' => ['status' => 'fail', 'title' => 'Cron stopped', 'detail' => 'no job has run since {t:'
+                . (self::NOW - 720) . '} (12 min)', 'since' => self::NOW - 600],
+                'indexers' => ['status' => 'warn', 'detail' => 'x invalid for 2 h', 'since' => self::NOW],
                 'caches' => ['status' => 'ok', 'since' => self::NOW]],
             1 => ['email_disabled' => ['status' => 'ok', 'since' => self::NOW]],
-            2 => ['email_disabled' => ['status' => 'fail', 'detail' => 'emails are disabled', 'since' => self::NOW]],
+            2 => ['email_disabled' => ['status' => 'fail', 'title' => 'Emails disabled',
+                'detail' => 'emails are disabled', 'since' => self::NOW]],
         ], 'tally:' . gmdate('YmdH', self::NOW - 3600) => [0 => ['cron' => ['w' => 2, 'c' => ['runs' => 10]]],
             2 => ['email_disabled' => ['w' => 2, 'c' => []]]],
             'tally:' . gmdate('YmdH', self::NOW - 25 * 3600) => [0 => ['cron' => ['w' => 0, 'c' => ['runs' => 99]]]]]);
     }
 
+    /** Sends what $compose returns, as the real TeamMessage does, while the channel takes it. */
     private function teamMessage(Target $target, array $row = []): TeamMessage
     {
         $teamMessage = $this->createStub(TeamMessage::class);
         $teamMessage->method('deliver')->willReturnCallback(function ($type, $reference, \Closure $compose) use (
             $target,
             $row
-        ) {
-            $this->composed = $compose($target, $row + ['sent_at' => null]);
+        ): bool {
+            $composed = $compose($target, $row + ['sent_at' => null]);
+            if ($composed === null || $this->failing) {
+                return false;
+            }
+            $this->sent[] = $composed[0];
+            ($composed[1])();
+            return true;
         });
         return $teamMessage;
     }
 
     private function messages(): Messages
     {
-        return new Messages($this->pool(['cron' => 'Cron', 'caches' => 'Caches'],
-            ['email_disabled' => 'Email sending']), new Clock(self::MESSAGES_NOW));
+        return new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
+            'system_log' => 'system.log'], ['email_disabled' => 'Email sending']), new Clock(self::NOW));
     }
 
     private function alert(int $scope): void
@@ -65,26 +75,53 @@ class AlertAndSummaryTest extends TestCase
             $this->messages(), $this->config(), new Clock(self::NOW)))->process((string)$scope);
     }
 
-    public function testTheShopWideAlertCarriesTheShopWideChecksAndRecordsWhatItTold(): void
+    public function testOneMessagePerProblemFailsFirstEachRecordedOnce(): void
     {
         $this->alert(0);
-        $this->assertSame("App health - Shop (all websites)\n"
-            . "FAIL Cron: no job has run for 12 min (first seen 07:48)\nOK Caches", $this->composed[0]);
-        ($this->composed[1])();
-        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $this->store->row('alerted:0'));
-        $this->composed = null;
+        $this->assertCount(2, $this->sent);
+        $this->assertStringStartsWith('🔴 *Cron stopped – Shop (all websites)*', $this->sent[0]);
+        $this->assertStringStartsWith('🟡 *Indexers warning – Shop (all websites)*', $this->sent[1]);
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW],
+            'indexers' => ['status' => 'warn', 'at' => self::NOW]], $this->store->row('alerted:0'));
+        $this->sent = [];
         $this->alert(0);
-        $this->assertNull($this->composed, 'told already: nothing to send');
+        $this->assertSame([], $this->sent, 'told already: nothing to send');
+    }
+
+    public function testNoticesGoOncePerCheckAfterTheProblems(): void
+    {
+        $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => self::NOW],
+            'indexers' => ['status' => 'warn', 'at' => self::NOW]],
+            AlertPlan::NOTICES . '0' => AlertPlan::addNotices([], ['system_log' => ['NEW ERROR main: a x1 #11111111',
+                'NEW ERROR main: b x2 #22222222']], self::NOW)]);
+        $this->alert(0);
+        $this->assertCount(1, $this->sent);
+        $this->assertStringContainsString("NEW ERROR main: a x1 #11111111\nNEW ERROR main: b x2 #22222222",
+            $this->sent[0]);
+        $this->assertSame(['system_log' => 2], $this->store->row(AlertPlan::NOTICED . '0'));
+        $this->sent = [];
+        $this->alert(0);
+        $this->assertSame([], $this->sent);
+    }
+
+    public function testAFailedSendStopsAndKeepsTheNewsForTheNextTry(): void
+    {
+        $this->failing = true;
+        $this->alert(0);
+        $this->assertNull($this->store->row('alerted:0'));
+        $this->failing = false;
+        $this->alert(0);
+        $this->assertCount(2, $this->sent);
     }
 
     public function testAWebsitesAlertCarriesOnlyItsOwnChecks(): void
     {
         $this->alert(2);
-        $this->assertSame("App health - Shop\nFAIL Email sending: emails are disabled (first seen 08:00)",
-            $this->composed[0]);
-        $this->composed = null;
+        $this->assertSame(["🔴 *Emails disabled – Shop*\nEmails are disabled.\nCheck: Look at Email sending."],
+            $this->sent);
+        $this->sent = [];
         $this->alert(1);
-        $this->assertNull($this->composed, 'website 1 is fine');
+        $this->assertSame([], $this->sent, 'website 1 is fine');
     }
 
     private function summary(array $settings, array $row = []): void
@@ -97,17 +134,19 @@ class AlertAndSummaryTest extends TestCase
     public function testTheSummaryCoversTheShopWideChecksAndTheWebsitesOwnForTheLastDay(): void
     {
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
-        $this->assertSame("Daily summary - Shop - 20 Oct\nFAIL Cron: no job has run for 12 min (first seen 07:48)\n"
-            . "FAIL Email sending: emails are disabled (first seen 08:00)\nCron: 10 runs\nOK all day: Caches",
-            $this->composed[0], 'the tally of 25 hours ago is left out');
+        $this->assertCount(1, $this->sent);
+        $this->assertStringStartsWith("*Daily summary – Shop – 20 Oct*\n\n*Problems (3)*\n"
+            . "🔴 Cron: no job has run since 07:48 (12 min)\n🟡 Indexers: x invalid for 2 h\n"
+            . '🔴 Email sending: emails are disabled', $this->sent[0]);
+        $this->assertStringEndsWith("*OK all day*\nCaches", $this->sent[0], 'the tally of 25 hours ago is left out');
     }
 
     public function testTheSummaryOnlyWhenDueAndOn(): void
     {
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00'],
             ['sent_at' => gmdate('Y-m-d H:i:s', self::NOW - 600)]);
-        $this->assertNull($this->composed, 'sent since 07:30');
+        $this->assertSame([], $this->sent, 'sent since 07:30');
         $this->summary(['general/summary' => '0', 'general/summary_time' => '07,30,00']);
-        $this->assertNull($this->composed, 'off');
+        $this->assertSame([], $this->sent, 'off');
     }
 }

@@ -8,12 +8,14 @@ use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\ExceptionLog;
 use CommerceKings\AppHealth\Model\Format;
+use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\RunState;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
- * "count" or more new exception.log entries within "window_minutes" (fail), with the top 3 exception classes. The
- * check keeps each run's count and classes for the window. Counts: exceptions, by class.
+ * "count" or more new exception.log entries within "window_minutes" (fail), with the top 3 exception classes, and a
+ * notice for an exception never seen before ("NEW CRITICAL", with where it happened and its fingerprint). The check
+ * keeps each run's count and classes for the window. Counts: exceptions, by class, and by fingerprint.
  */
 class Exceptions implements CheckInterface
 {
@@ -23,6 +25,7 @@ class Exceptions implements CheckInterface
 
     public function __construct(
         private readonly ExceptionLog $log,
+        private readonly Fingerprints $fingerprints,
         private readonly Config $config,
         private readonly RunState $state,
         private readonly DateTime $dateTime
@@ -34,9 +37,14 @@ class Exceptions implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('var/log/exception.log: look for the class or the fingerprint around that time.');
+    }
+
     public function getLabel(): string
     {
-        return 'Exceptions';
+        return 'exception.log';
     }
 
     public function run(): CheckResult
@@ -57,6 +65,17 @@ class Exceptions implements CheckInterface
         foreach ($classes as $class => $count) {
             $counts['exceptions:' . $class] = $count;
         }
+        $byFingerprint = array_count_values(array_column($new['safe'], 'fingerprint'));
+        arsort($byFingerprint);
+        foreach (array_slice($byFingerprint, 0, self::CLASSES, true) as $fp => $count) {
+            $counts['fp:' . $fp] = $count;
+        }
+        // every exception is CRITICAL: only an exception never seen before is news
+        $news = $this->fingerprints->record($new['safe'], $now, false);
+        $notices = array_map([Fingerprints::class, 'notice'], array_slice($news, 0, SystemLog::NOTICES));
+        if (count($news) > SystemLog::NOTICES) {
+            $notices[] = sprintf('+%d more new exceptions (see the daily summary)', count($news) - SystemLog::NOTICES);
+        }
         $total = 0;
         $partial = false;
         $byClass = [];
@@ -68,9 +87,10 @@ class Exceptions implements CheckInterface
             }
         }
         if ($total < $this->config->getInt(self::CODE, 'count', 20)) {
-            return CheckResult::ok('', $counts);
+            return new CheckResult(CheckResult::OK, '', $counts, $notices);
         }
-        return CheckResult::fail(sprintf('%s%s exceptions in %s (%s)', $partial ? 'at least ' : '',
-            Format::number($total), Format::duration($window), Format::top($byClass)), $counts);
+        return new CheckResult(CheckResult::FAIL, sprintf('%s%s exceptions in %s (%s)', $partial ? 'at least ' : '',
+            Format::number($total), Format::duration($window), Format::top($byClass)), $counts, $notices,
+            'Exception spike');
     }
 }

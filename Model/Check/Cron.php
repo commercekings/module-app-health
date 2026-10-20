@@ -45,6 +45,11 @@ class Cron implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.');
+    }
+
     public function getLabel(): string
     {
         return 'Cron';
@@ -73,8 +78,10 @@ class Cron implements CheckInterface
         }
         $fail = [];
         $warn = [];
+        $stuck = false;
         foreach ($this->runningSince($jobs, $now - $runningMinutes * 60, $now) as $job => $startedAt) {
             $fail[] = sprintf('%s running for %s', $job, Format::duration($now - $startedAt));
+            $stuck = true;
         }
         $others = array_values(array_diff($jobs, [self::OWN_JOB]));
         $window = ($staleMinutes + 60) * 60;
@@ -82,7 +89,8 @@ class Cron implements CheckInterface
         if ($lastActivity === null) {
             $fail[] = sprintf('no job has run for over %s', Format::duration($window));
         } elseif ($lastActivity < $now - $staleMinutes * 60) {
-            $fail[] = 'no job has run since ' . Format::at($lastActivity);
+            $fail[] = sprintf('no job has run since %s (%s)', Format::at($lastActivity),
+                Format::duration($now - $lastActivity));
         }
         if ($errors !== []) {
             $warn[] = sprintf('%d new cron %s (%s)', array_sum($errors), array_sum($errors) === 1 ? 'error' : 'errors',
@@ -93,8 +101,8 @@ class Cron implements CheckInterface
         }
         $detail = implode('; ', array_merge($fail, $warn));
         return match (true) {
-            $fail !== [] => CheckResult::fail($detail, $counts),
-            $warn !== [] => CheckResult::warn($detail, $counts),
+            $fail !== [] => CheckResult::fail($detail, $counts, $stuck ? 'Cron job stuck' : 'Cron stopped'),
+            $warn !== [] => CheckResult::warn($detail, $counts, $errors !== [] ? 'Cron job errors' : 'Cron was down'),
             default => CheckResult::ok('', $counts),
         };
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Test\Unit\Model;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Heartbeat;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Runner;
@@ -94,7 +95,18 @@ class RunnerTest extends TestCase
         $this->assertSame([0], $this->run5()['queued'], 'recovered');
     }
 
-    public function testAWebsiteCheckAlertsItsWebsite(): void
+    public function testANoticeAloneIsNewsOnceAndKeptForTheConsumer(): void
+    {
+        $this->results['caches'] = new CheckResult('ok', '', [], ['NEW ERROR main: x x1 #12345678']);
+        $this->assertSame([0], $this->run5()['queued']);
+        $row = $this->store->row(AlertPlan::NOTICES . '0');
+        $this->assertSame([[1, $this->clock->now - 300, 'caches', 'NEW ERROR main: x x1 #12345678']], $row['items']);
+        $this->results['caches'] = CheckResult::ok();
+        $this->store->seed([AlertPlan::NOTICED . '0' => ['caches' => 1]]); // the consumer told it
+        $this->assertSame([], $this->run5()['queued']);
+    }
+
+        public function testAWebsiteCheckAlertsItsWebsite(): void
     {
         $this->websites = [1, 2];
         $this->results['email_disabled'] = [1 => CheckResult::ok(), 2 => CheckResult::fail('emails are disabled')];

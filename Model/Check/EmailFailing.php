@@ -38,6 +38,11 @@ class EmailFailing implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('The mail server or the email provider\'s settings; the class in var/log/exception.log.');
+    }
+
     public function getLabel(): string
     {
         return 'Sending';
@@ -55,7 +60,8 @@ class EmailFailing implements CheckInterface
             $parts[] = sprintf('%d notifications failing (%s)', array_sum($failing), Format::top($failing));
         }
         $counts = ['mail errors' => $mail];
-        return $parts === [] ? CheckResult::ok('', $counts) : CheckResult::fail(implode('; ', $parts), $counts);
+        return $parts === [] ? CheckResult::ok('', $counts)
+            : CheckResult::fail(implode('; ', $parts), $counts, 'Mail sending failing');
     }
 
     /** @return array<string, int> by notification type, other modules' only */

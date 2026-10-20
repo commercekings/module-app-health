@@ -37,6 +37,11 @@ trait Pool
                     return $this->label;
                 }
 
+                public function getHint(): string
+                {
+                    return 'Look at ' . $this->label . '.';
+                }
+
                 public function run(): CheckResult
                 {
                     return $this->test->answer($this->code);
@@ -57,6 +62,11 @@ trait Pool
                 public function getLabel(): string
                 {
                     return $this->label;
+                }
+
+                public function getHint(): string
+                {
+                    return 'Look at ' . $this->label . '.';
                 }
 
                 public function runForWebsites(array $websiteIds): array

@@ -33,6 +33,11 @@ class Caches implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('System > Cache Management: enable the cache types, or refresh the invalidated ones.');
+    }
+
     public function getLabel(): string
     {
         return 'Caches';
@@ -65,8 +70,8 @@ class Caches implements CheckInterface
             $parts[] = Format::list(array_keys($old)) . ' invalidated for ' . Format::duration($now - min($old));
         }
         return match (true) {
-            $disabled !== [] => CheckResult::fail(implode('; ', $parts)),
-            $old !== [] => CheckResult::warn(implode('; ', $parts)),
+            $disabled !== [] => CheckResult::fail(implode('; ', $parts), [], 'Cache disabled'),
+            $old !== [] => CheckResult::warn(implode('; ', $parts), [], 'Cache invalidated'),
             default => CheckResult::ok(),
         };
     }

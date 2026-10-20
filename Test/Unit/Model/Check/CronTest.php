@@ -63,7 +63,8 @@ class CronTest extends TestCase
     {
         $result = $this->check([], [], gmdate('Y-m-d H:i:s', self::NOW - 12 * 60), self::NOW - 300);
         $this->assertSame(CheckResult::FAIL, $result->status);
-        $this->assertSame('no job has run since {t:' . (self::NOW - 12 * 60) . '}', $result->detail,
+        $this->assertSame('Cron stopped', $result->title);
+        $this->assertSame('no job has run since {t:' . (self::NOW - 12 * 60) . '} (12 min)', $result->detail,
             'the last job\'s time, shown in each recipient\'s time zone');
         $none = $this->check([], [], null, self::NOW - 300);
         $this->assertSame('no job has run for over 65 min', $none->detail);

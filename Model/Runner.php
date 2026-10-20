@@ -17,8 +17,9 @@ use Psr\Log\LoggerInterface;
  * warning ("could not run") and only its exception class is logged.
  *
  * The results go to the "checks" row by scope and code (with the time since the status last changed and the run
- * time), their worst status and counts to the hour's tally. Then each scope with news (AlertPlan) gets one queued
- * alert - the shop-wide checks' to the default scope's recipient, a website's own to the website's - and a complete
+ * time), their worst status and counts to the hour's tally, their notices to "notices:<scope>". Then each scope with
+ * news (AlertPlan: a change, or a notice not told yet) gets one queued alert - the shop-wide checks' to the default
+ * scope's recipient, a website's own to the website's - and a complete
  * run pings the heartbeat. Nothing runs while alerts are off everywhere and no heartbeat is set.
  */
 class Runner
@@ -61,6 +62,7 @@ class Runner
         $hour = 'tally:' . gmdate('YmdH', $now);
         $tally = $this->state->get($hour) ?? [];
         $checks = [];
+        $notices = [];
         $websiteIds = array_values(array_filter(array_keys($targets)));
         foreach ($this->pool->getAll() as $code => $check) {
             $perWebsite = !$check instanceof CheckInterface;
@@ -98,7 +100,11 @@ class Runner
                 $last = $previous[$scope][$code] ?? null;
                 $unchanged = $last !== null && ($last['status'] ?? null) === $result->status;
                 $checks[$scope][$code] = ['status' => $result->status, 'detail' => $result->detail,
+                    'title' => $result->title, 'gauges' => $result->gauges,
                     'since' => $unchanged ? (int)$last['since'] : $now, 'checked_at' => $now, 'ms' => $ms];
+                if ($result->notices !== []) {
+                    $notices[$scope][$code] = $result->notices;
+                }
                 $tally[$scope][$code] = [
                     'w' => max((int)($tally[$scope][$code]['w'] ?? 0), CheckResult::rank($result->status)),
                     'c' => $this->add((array)($tally[$scope][$code]['c'] ?? []), $result->counts),
@@ -112,6 +118,10 @@ class Runner
         }
         $this->state->set('checks', $checks);
         $this->state->set($hour, $tally);
+        foreach ($notices as $scope => $byCode) {
+            $this->state->set(AlertPlan::NOTICES . $scope,
+                AlertPlan::addNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [], $byCode, $now));
+        }
         $this->state->commit();
         if ((int)gmdate('i', $now) < 5) {
             $this->store->deleteOldTallies($now); // once an hour
@@ -134,7 +144,9 @@ class Runner
         $repeat = $this->config->getRepeatHours() * 3600;
         foreach (array_keys($targets) as $scope) {
             $alerted = $this->state->get('alerted:' . $scope) ?? [];
-            if (AlertPlan::changes($checks[$scope] ?? [], $alerted, $now, $repeat) === []) {
+            $pending = AlertPlan::pendingNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [],
+                $this->state->get(AlertPlan::NOTICED . $scope) ?? []);
+            if (AlertPlan::changes($checks[$scope] ?? [], $alerted, $now, $repeat) === [] && $pending === []) {
                 continue;
             }
             try {

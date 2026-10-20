@@ -3,6 +3,15 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Test\Unit\Stub;
 
+use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Log\FileLogSource;
+use CommerceKings\AppHealth\Model\Log\LogReader;
+use CommerceKings\AppHealth\Model\Log\LogSourcePool;
+use CommerceKings\AppHealth\Model\Log\MonologLineParser;
+use CommerceKings\AppHealth\Model\Log\Normalizer;
+use CommerceKings\AppHealth\Model\RunState;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Filesystem;
 use Magento\Framework\Filesystem\Directory\Read;
 use Magento\Framework\Filesystem\Driver\File;
@@ -13,20 +22,44 @@ use Magento\Framework\Filesystem\File\ReadFactory;
 trait LogDir
 {
     private string $logDir = '';
+    private Filesystem $filesystem;
 
     private function logFilesystem(): Filesystem
     {
+        if ($this->logDir !== '') {
+            return $this->filesystem;
+        }
         $this->logDir = sys_get_temp_dir() . '/ck-app-health-' . bin2hex(random_bytes(4));
         mkdir($this->logDir);
         $filesystem = $this->createStub(Filesystem::class);
         $filesystem->method('getDirectoryRead')
             ->willReturn(new Read(new ReadFactory(new DriverPool()), new File(), $this->logDir));
-        return $filesystem;
+        return $this->filesystem = $filesystem;
     }
 
-    private function appendLog(string $text): void
+    private function appendLog(string $text, string $file = 'exception.log'): void
     {
-        file_put_contents($this->logDir . '/exception.log', $text, FILE_APPEND);
+        file_put_contents($this->logDir . '/' . $file, $text, FILE_APPEND);
+    }
+
+    /**
+     * The reader over a temporary var/log: system.log for "system_log", exception.log for "exceptions", Magento's root
+     * at /var/www/html; $extra sources are added to the pool (a third party's).
+     */
+    private function logReader(RunState $state, Config $config, array $extra = []): LogReader
+    {
+        $filesystem = $this->logFilesystem();
+        $scopeConfig = $this->createStub(ScopeConfigInterface::class);
+        $monolog = new MonologLineParser();
+        $pool = new LogSourcePool($config, $filesystem, $scopeConfig, $monolog, array_merge([
+            ['source' => new FileLogSource($filesystem, $scopeConfig, 'system', 'system.log'), 'parser' => $monolog,
+                'check' => 'system_log'],
+            ['source' => new FileLogSource($filesystem, $scopeConfig, 'exception', 'exception.log'),
+                'parser' => $monolog, 'check' => 'exceptions'],
+        ], $extra));
+        $directoryList = $this->createStub(DirectoryList::class);
+        $directoryList->method('getRoot')->willReturn('/var/www/html');
+        return new LogReader($pool, new Normalizer(), $state, $config, $directoryList);
     }
 
     private function removeLogDir(): void
@@ -49,5 +82,17 @@ trait LogDir
                 . '(code: 0): ' . $message . ' at /var/www/html/z.php:5)' . "\n";
         }
         return $line . '"} []' . "\n";
+    }
+
+    /** A system.log line; $context is appended as Monolog's JSON context. */
+    private static function line(
+        string $level,
+        string $message,
+        string $context = '[]',
+        string $channel = 'main'
+    ): string
+    {
+        return '[2026-10-20T08:01:02.123456+00:00] ' . $channel . '.' . $level . ': ' . $message . ' ' . $context
+            . ' []' . "\n";
     }
 }

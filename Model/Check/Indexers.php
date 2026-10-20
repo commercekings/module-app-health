@@ -32,6 +32,11 @@ class Indexers implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('bin/magento indexer:status; is the indexer cron (indexer_reindex_all_invalid) running?');
+    }
+
     public function getLabel(): string
     {
         return 'Indexers';
@@ -64,7 +69,8 @@ class Indexers implements CheckInterface
         }
         sort($problems);
         $more = count($problems) - 3;
+        $invalid = array_filter($rows, fn ($row) => $row['status'] === 'invalid');
         return CheckResult::fail(implode(', ', array_slice($problems, 0, 3))
-            . ($more > 0 ? ', +' . $more . ' more' : ''));
+            . ($more > 0 ? ', +' . $more . ' more' : ''), [], $invalid !== [] ? 'Indexer invalid' : 'Indexer stuck');
     }
 }

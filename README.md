@@ -6,8 +6,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 
 **Hear about a broken cron, a stuck indexer or emails that don't go out before your customers do.**
 
-- **Eight checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, exception spikes, queue
-  backlogs, and sales emails that don't go out.
+- **Ten checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
+  `exception.log` (new errors, with where they happened), queue backlogs, and sales emails that don't go out.
 - **Only news.** A message when something breaks and one when it is back ("recovered"); a check still failing is
   repeated every 6 hours, never every 5 minutes.
 - **The right channel.** Checks for the whole shop go to one channel; each website's own (its email settings, its
@@ -15,7 +15,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 - **A daily summary.** Cron runs and errors, exceptions by class, and what had problems – at the time you choose.
 - **Light.** Admin, cron and Notification's queue only – nothing on the storefront or in checkout. Indexed, bounded
   queries; only the new bytes of the exception log; a 5-second budget per run.
-- **Private.** Only check names, counts and class names are sent – never a log line, an address or customer data.
+- **Private.** Log errors are sent as a safe label (the exception class, or the message's first words with every
+  variable part as `***`), file:line and a fingerprint – never the line itself. Optionally the message, masked.
 - **When the server itself is down.** An optional heartbeat lets an outside service alert you when the pings stop.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
@@ -29,7 +30,8 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | Indexers | an indexer invalid or stuck working for over 60 min | all websites |
 | Caches | a cache type disabled; invalidated for over 60 min (warning) | all websites |
 | Maintenance mode | on for over 15 min | all websites |
-| Exceptions | 20 or more new `exception.log` entries in 15 min, with the top 3 exception classes | all websites |
+| system.log | an error never seen before (NEW, with its file:line); a CRITICAL entry (again after 6 h); 20 or more errors in 5 min | all websites |
+| exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | all websites |
 | Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | all websites |
 | Sending | a mail transport error in `exception.log`; 3 or more CommerceKings notifications failing | all websites |
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
@@ -38,18 +40,41 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
 
+One message per problem; its first line is what a phone notification shows:
+
 ```
-App health - Moj Planer (all websites)
-FAIL Cron: no job has run since 14:05
-RECOVERED Indexers
-OK Caches, Maintenance mode, Exceptions and Sending
+🔴 *Cron stopped – Main Website Store (all websites)*
+No job has run since 10:39 (65 min).
+Check: Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.
 ```
 
 ```
-Daily summary - Moj Planer - 20 Oct
-Cron: 1,437 runs, 2 errors (sitemap_generate x2)
-Exceptions: 14 exceptions (Magento\Framework\Exception\NoSuchEntityException x9, ...)
-OK all day: Indexers, Caches, Maintenance mode, Sending, Email sending and Sales emails
+✅ *Recovered: Cron – Main Website Store (all websites)*
+OK again since 11:52.
+```
+
+```
+🔴 *New errors: system.log – Main Website Store (all websites)*
+NEW ERROR main: Unable to send the order *** x3 at app/code/Vendor/Mail/Model/Sender.php:84 #a1b2c3d4
+Check: var/log/system.log: look for the fingerprint's error around that time.
+```
+
+```
+*Daily summary – Main Website Store – 20 Oct*
+
+*Problems (1)*
+🔴 Cron: no job has run since 10:39 (65 min)
+
+*Logs (24 h)*
+system.log: 0 critical, 14 errors, 52 warnings
+Top errors: PaymentException ×9 (new), NoSuchEntityException ×5
+exception.log: 14
+
+*Email*
+Sales emails unsent: 0 · Mail errors: 0
+
+*OK all day*
+Indexers · Caches · Maintenance · Queue · Sending · Email sending
 ```
 
 ## Installation
@@ -68,7 +93,8 @@ when `cron_consumers_runner` is on), or a Slack outage delays the alerts instead
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Add the masked log message (No); Heartbeat URL (empty); *Send test alert* |
+| System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
 Enabled, Channel, Recipient and the summary are per website: in the **default scope** they are the shop-wide checks'
@@ -86,10 +112,25 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
 
 ## Extending
 
-A check of your own: implement `Api\CheckInterface` (shop-wide) or `Api\WebsiteCheckInterface` (per website) and add
-it to `Model\CheckPool`'s "checks" in your `di.xml`. Return an `Api\Data\CheckResult` – ok, warn or fail with a short
-detail of names and numbers, and optional counts for the daily summary. Its switch is
-`commercekings_app_health/<code>/enabled` (on when not set). Details: [how it works](docs/how-it-works.md).
+- **A check:** implement `Api\CheckInterface` (shop-wide) or `Api\WebsiteCheckInterface` (per website) and add it to
+  `Model\CheckPool`'s "checks" in your `di.xml`. Return an `Api\Data\CheckResult` – ok, warn or fail, a title, a
+  short detail of names and numbers, optional counts, gauges and notices – and give it a `getHint()`. Its switch is
+  `commercekings_app_health/<code>/enabled` (on when not set).
+- **A log source:** implement `Api\LogSourceInterface` (new data since a cursor) and `Api\LogParserInterface` (data to
+  `Api\Data\LogEntry`), and add both to `Model\Log\LogSourcePool`'s "sources" for the `system_log` or `exceptions`
+  check. App health makes every entry safe itself – fingerprint, label, masking, file:line – whoever parsed it.
+
+Details and examples: [how it works](docs/how-it-works.md).
+
+## What is masked
+
+- **Always:** a log line never leaves the server. Alerts carry the safe label, file:line (relative to the Magento root)
+  and an 8-character fingerprint. The label is the exception class, else the message's first 8 words with URLs,
+  emails, quoted values, hex strings, numbers and paths after their first segment as `***` – and any capitalized
+  word after the first (often a name).
+- **With *Add the masked log message*:** the message's first 160 characters too, with emails, phone numbers, numbers of
+  4 digits or more, tokens, URLs and quoted values as `***`. **Not masked there:** names and other free text (e.g.
+  "Customer jane doe not found"). Leave it off if your logs may contain them.
 
 ## Limitations
 

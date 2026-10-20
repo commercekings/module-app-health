@@ -8,8 +8,15 @@ namespace CommerceKings\AppHealth\Api\Data;
  * counts of what happened since the check's last run, added up for the daily summary.
  *
  * Counts: "runs" => 12 is printed as "12 runs"; "errors:sitemap_generate" => 2 breaks "errors" down by a name
- * ("2 errors (sitemap_generate x2)"). Names are codes or class names only. The detail is one line of at most
- * DETAIL_LENGTH characters, and anything that looks like an email address is replaced.
+ * ("2 errors (sitemap_generate x2)"); "fp:<fingerprint>" counts a log error for the summary's top errors. Names are
+ * codes or class names only. The detail is one line of at most DETAIL_LENGTH characters, and anything that looks like
+ * an email address is replaced.
+ *
+ * The title says what is wrong in a few words ("Cron stopped"), the first line of an alert; without one the alert
+ * says "<label> failing". Gauges are numbers as they are now (e.g. unsent emails), shown in the daily summary.
+ *
+ * Notices are one-off news (e.g. "NEW ERROR ..."), told once with the next alert - not a status, so no "recovered"
+ * follows. Each is one line of at most NOTICE_LENGTH characters, cleaned like the detail.
  *
  * @api
  */
@@ -20,6 +27,7 @@ class CheckResult
     public const FAIL = 'fail';
 
     public const DETAIL_LENGTH = 200;
+    public const NOTICE_LENGTH = 400;
 
     /** A count's total ("errors") and optional item ("sitemap_generate", a class name, a queue name). */
     public const COUNT_KEY = '/^[a-z][a-z ]{0,31}(:[A-Za-z0-9_.\\\\-]{1,120})?$/D';
@@ -29,25 +37,42 @@ class CheckResult
     /** @var array<string, int> */
     public readonly array $counts;
 
+    /** @var string[] */
+    public readonly array $notices;
+
+    public readonly string $title;
+
+    /** @var array<string, int> */
+    public readonly array $gauges;
+
     /**
      * @param array<string, int> $counts
+     * @param string[] $notices
+     * @param array<string, int> $gauges
      * @throws \InvalidArgumentException for an unknown status, a count key that is not a name or a negative count
      */
     public function __construct(
         public readonly string $status,
         string $detail = '',
-        array $counts = []
+        array $counts = [],
+        array $notices = [],
+        string $title = '',
+        array $gauges = []
     ) {
         if (!in_array($status, [self::OK, self::WARN, self::FAIL], true)) {
             throw new \InvalidArgumentException(sprintf('Unknown check status "%s".', $status));
         }
-        foreach ($counts as $key => $count) {
+        foreach ($gauges + $counts as $key => $count) {
             if (!is_string($key) || !preg_match(self::COUNT_KEY, $key) || !is_int($count) || $count < 0) {
                 throw new \InvalidArgumentException('Check counts are names with whole numbers of at least 0.');
             }
         }
-        $this->detail = self::clean($detail);
+        $this->detail = self::clean($detail, self::DETAIL_LENGTH);
         $this->counts = $counts;
+        $this->notices = array_values(array_filter(array_map(fn ($notice) => self::clean((string)$notice,
+            self::NOTICE_LENGTH), $notices), fn ($notice) => $notice !== ''));
+        $this->title = self::clean($title, 60);
+        $this->gauges = $gauges;
     }
 
     /** @param array<string, int> $counts */
@@ -57,15 +82,15 @@ class CheckResult
     }
 
     /** @param array<string, int> $counts */
-    public static function warn(string $detail, array $counts = []): self
+    public static function warn(string $detail, array $counts = [], string $title = ''): self
     {
-        return new self(self::WARN, $detail, $counts);
+        return new self(self::WARN, $detail, $counts, [], $title);
     }
 
     /** @param array<string, int> $counts */
-    public static function fail(string $detail, array $counts = []): self
+    public static function fail(string $detail, array $counts = [], string $title = ''): self
     {
-        return new self(self::FAIL, $detail, $counts);
+        return new self(self::FAIL, $detail, $counts, [], $title);
     }
 
     /** 0 for ok, 1 for warn, 2 for fail: the worse of two statuses is the higher. */
@@ -83,12 +108,11 @@ class CheckResult
         return [self::OK, self::WARN, self::FAIL][max(0, min(2, $rank))];
     }
 
-    /** One line, no email addresses, at most DETAIL_LENGTH characters. */
-    private static function clean(string $detail): string
+    /** One line, no email addresses, at most $length characters. */
+    private static function clean(string $text, int $length): string
     {
-        $detail = trim((string)preg_replace('/\s+/u', ' ', $detail));
-        $detail = (string)preg_replace('/[^\s@]+@[^\s@]+/u', '[address]', $detail);
-        return mb_strlen($detail) > self::DETAIL_LENGTH
-            ? mb_substr($detail, 0, self::DETAIL_LENGTH - 1) . '…' : $detail;
+        $text = trim((string)preg_replace('/\s+/u', ' ', $text));
+        $text = (string)preg_replace('/[^\s@]+@[^\s@]+/u', '[address]', $text);
+        return mb_strlen($text) > $length ? mb_substr($text, 0, $length - 1) . '…' : $text;
     }
 }

@@ -9,6 +9,7 @@
                 <summary_time>08,00,00</summary_time>
                 <repeat_hours>6</repeat_hours>
                 <heartbeat_url backend_model="Magento\Config\Model\Config\Backend\Encrypted"/>
+                <include_log_message>0</include_log_message>
             </general>
             <cron>
                 <enabled>1</enabled>
@@ -35,7 +36,16 @@
                 <count>20</count>
                 <window_minutes>15</window_minutes>
                 <max_read_kb>1024</max_read_kb>
+                <file>exception.log</file>
             </exceptions>
+            <system_log>
+                <enabled>1</enabled>
+                <error_count>20</error_count>
+                <window_minutes>5</window_minutes>
+                <max_read_kb>1024</max_read_kb>
+                <file>system.log</file>
+                <extra_files/>
+            </system_log>
             <!-- off by default: a broker connection on every run -->
             <queues>
                 <enabled>0</enabled>

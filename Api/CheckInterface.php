@@ -22,6 +22,9 @@ interface CheckInterface
     /** Unique, [a-z0-9_], at most 32 characters, e.g. "cron". */
     public function getCode(): string;
 
+    /** One short, translated line telling the team where to look, e.g. "Is the cron container running?" */
+    public function getHint(): string;
+
     /** Shown in the messages, e.g. "Cron". */
     public function getLabel(): string;
 

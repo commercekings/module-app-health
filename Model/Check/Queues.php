@@ -46,9 +46,15 @@ class Queues implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('Are the consumers running (cron_consumers_runner or supervisor)?'
+            . ' bin/magento queue:consumers:list');
+    }
+
     public function getLabel(): string
     {
-        return 'Queues';
+        return 'Queue';
     }
 
     public function run(): CheckResult
@@ -84,8 +90,8 @@ class Queues implements CheckInterface
         $detail = implode('; ', array_slice($parts, 0, 3))
             . (count($parts) > 3 ? '; +' . (count($parts) - 3) . ' more' : '');
         return match (true) {
-            $full !== [] => CheckResult::fail($detail),
-            $rising !== [] => CheckResult::warn($detail),
+            $full !== [] => CheckResult::fail($detail, [], 'Queue backlog'),
+            $rising !== [] => CheckResult::warn($detail, [], 'Queue growing'),
             default => CheckResult::ok(),
         };
     }

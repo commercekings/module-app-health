@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model;
 
+use CommerceKings\AppHealth\Model\Log\FileLogSource;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
 
@@ -65,6 +66,22 @@ class Config
     {
         $url = trim((string)$this->scopeConfig->getValue(self::GENERAL . 'heartbeat_url'));
         return preg_match('#^https?://[^\s/]+#i', $url) ? $url : '';
+    }
+
+    /** Alerts about log errors add their message, masked (opt-in). */
+    public function isLogMessageIncluded(): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::GENERAL . 'include_log_message');
+    }
+
+    /** @return string[] the extra var/log files the system log check reads (valid names only, at most 5) */
+    public function getExtraLogFiles(): array
+    {
+        $names = preg_split('/[\s,]+/', (string)$this->scopeConfig->getValue(self::SECTION . '/system_log/extra_files'),
+            -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $valid = array_filter($names, fn ($name) => preg_match(FileLogSource::NAME, $name)
+            && !in_array($name, ['system.log', 'exception.log'], true));
+        return array_slice(array_values(array_unique($valid)), 0, 5);
     }
 
     /** A check without a setting (e.g. another module's) is on. */

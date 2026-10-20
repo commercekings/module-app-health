@@ -76,8 +76,9 @@ class TeamMessage
     /**
      * @param \Closure(Target, array<string, mixed>): ?array{0: string, 1: \Closure(): void} $compose the text and what
      *     to record once it is out, or null when there is nothing to send (anymore)
+     * @return bool whether it was sent (or may have been: MessageSentException)
      */
-    public function deliver(string $type, string $reference, \Closure $compose): void
+    public function deliver(string $type, string $reference, \Closure $compose): bool
     {
         $websiteId = ctype_digit($reference) ? (int)$reference : 0;
         $row = $this->deliveryState->load($type, $websiteId);
@@ -86,7 +87,7 @@ class TeamMessage
         $composed = $target !== null ? $compose($target, $row) : null;
         if ($composed === null) {
             $this->release($type, $websiteId, $queuedAt);
-            return;
+            return false;
         }
         [$text, $sent] = $composed;
         $db = $this->resource->getConnection();
@@ -97,7 +98,7 @@ class TeamMessage
             $key + ['delivery_version = ?' => $version - 1,
                 'queued_at <=> ?' => $queuedAt ?? new Expression('NULL')]);
         if (!$claimed) {
-            return;
+            return false;
         }
         $mine = $key + ['delivery_version = ?' => $version];
         try {
@@ -110,7 +111,7 @@ class TeamMessage
                 $type, $websiteId, get_class($e->getPrevious() ?? $e)));
             $sent();
             $this->markSent($mine);
-            return;
+            return true;
         } catch (TemporaryFailureException $e) {
             $wait = min(self::TEMPORARY_MAX_SECONDS, max(self::TEMPORARY_MIN_SECONDS,
                 $e->getRetryAfter() ?? self::RETRY_MINUTES[0] * 60));
@@ -118,7 +119,7 @@ class TeamMessage
                 'skip_until' => new Expression('NOW() + INTERVAL ' . $wait . ' SECOND')], $mine);
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d not sent for now, next try in'
                 . ' %d seconds', $type, $websiteId, $wait));
-            return;
+            return false;
         } catch (\Throwable $e) {
             $failed = (int)$row['failed_sends'] + 1;
             $wait = self::RETRY_MINUTES[min($failed, count(self::RETRY_MINUTES)) - 1];
@@ -128,7 +129,7 @@ class TeamMessage
                 // not an address the channel takes: a setting to fix, not a reason for the consumer to reject
                 $this->logger->error(sprintf('CommerceKings_AppHealth: %s for scope %d not sent: the recipient is'
                     . ' not valid for the "%s" channel (App health > Recipient)', $type, $websiteId, $target->channel));
-                return;
+                return false;
             }
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d failed (%d in a row, %s),'
                 . ' next try in %d minutes', $type, $websiteId, $failed, get_class($e), $wait));
@@ -138,10 +139,11 @@ class TeamMessage
             $db->update($this->deliveryState->getTableName(), ['queued_at' => null], $mine);
             $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d not sent (%s)', $type, $websiteId,
                 $status));
-            return;
+            return false;
         }
         $sent();
         $this->markSent($mine);
+        return true;
     }
 
     /** @param array<int|string, mixed> $mine */

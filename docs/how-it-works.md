@@ -60,6 +60,7 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `indexers` | `indexer_state` | one row per indexer |
 | `caches` | cache type states (env.php) and the invalidated list (one cache read) | – |
 | `maintenance` | `var/.maintenance.flag` | a file check |
+| `system_log` | new bytes of `var/log/system.log` (and the extra files, and other modules' sources) | *Read at most* (1 MB) per source; only WARNING and above are parsed |
 | `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); a larger backlog is skipped, the count marked "at least"; rotation starts the new file from its beginning |
 | `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | the `(status, updated_at)` index, at most twice the limit; no message is read or consumed |
 | `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
@@ -67,6 +68,67 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `sales_emails` | orders, invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |
 
 Times are UTC, like Magento's database session; the summary time is in the website's time zone.
+
+## Logs
+
+The `system_log` and `exceptions` checks read their log sources through `Model\Log\LogReader`: each source of the
+check (`Model\Log\LogSourcePool`) is read once per run from its stored cursor (`cursor:log:<code>`), at most the check's
+*Read at most* (1 MB), parsed by the source's parser, and every entry passed through `Model\Log\Normalizer`, which
+alone decides what leaves the server: level, channel, exception class names (checked), where it happened (relative
+to the Magento root, plus the line), a fingerprint and a safe label – and, opt-in, the masked message.
+
+- **Fingerprint:** a hash of the channel, the level group (warning, error, critical), the exception class and the
+  normalized message (URLs, emails, quoted values, hex, numbers and paths after their first segment as placeholders),
+  so the same error with other values is one fingerprint.
+- **NEW:** `Model\Log\Fingerprints` keeps the errors seen (ERROR and above) in the `fingerprints` row, at most 500, the
+  least recently seen dropped first. An error never seen before is a notice ("NEW ERROR ..."); for `system_log` a
+  CRITICAL one is told again after the repeat interval.
+- **Notices** are one-off news: kept in `notices:<scope>` (30, for 24 hours) and told once (`noticed:<scope>`), in one
+  message per check – no "recovered" follows.
+
+### Adding a log source
+
+A module's own log (a file, a service, a stream) feeds a check with one class pair and one di.xml item:
+
+```php
+class ErpFeedSource implements \CommerceKings\AppHealth\Api\LogSourceInterface
+{
+    public function getCode(): string { return 'erp_feed'; }
+
+    /** $cursor is what the last read returned ([] the first time: start at the end) */
+    public function read(array $cursor, int $maxBytes): \CommerceKings\AppHealth\Api\Data\LogChunk
+    {
+        // new data since $cursor, at most $maxBytes, and the cursor to continue from
+    }
+}
+
+class ErpFeedParser implements \CommerceKings\AppHealth\Api\LogParserInterface
+{
+    public function parse(string $data): array
+    {
+        // one \CommerceKings\AppHealth\Api\Data\LogEntry per entry at WARNING or above:
+        // level, channel, message, exception classes, file, line, time
+    }
+}
+```
+
+```xml
+<type name="CommerceKings\AppHealth\Model\Log\LogSourcePool">
+    <arguments>
+        <argument name="sources" xsi:type="array">
+            <item name="erp_feed" xsi:type="array">
+                <item name="source" xsi:type="object">Vendor\Erp\Model\ErpFeedSource</item>
+                <item name="parser" xsi:type="object">Vendor\Erp\Model\ErpFeedParser</item>
+                <item name="check" xsi:type="string">system_log</item>
+            </item>
+        </argument>
+    </arguments>
+</type>
+```
+
+A file in Magento's own format needs no code: a `Model\Log\FileLogSource` virtual type with its `code` and `file`
+and `Model\Log\MonologLineParser` – or just the admin's *Extra log files*. The parser hands over what it read; the
+Normalizer masks it, so a third-party parser can't send a line as it is.
 
 ## Privacy
 
@@ -84,7 +146,9 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 |---|---|
 | `checks` | the last result per scope and check: status, detail, since, checked_at, ms |
 | `alerted:<scope>` | what that team was last told per check: status and time |
-| `cursor:<name>` | what a check remembers: cron's last run, the exception log offset and inode, first-seen times, samples |
+| `cursor:<name>` | what a check remembers: cron's last run, first-seen times, samples; `cursor:log:<source>` a log source's cursor |
+| `fingerprints` | the log errors seen: label, level, channel, where, first and last seen, count, last told (at most 500) |
+| `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW errors) waiting for the next alert, and the last told per check |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
 To start over (e.g. in a test), truncate the table and delete the delivery state rows of the types `app_health_alert`

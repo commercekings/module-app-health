@@ -23,8 +23,8 @@ class ExceptionLogTest extends TestCase
     {
         $this->store = new MemoryStore();
         $this->state = new RunState($this->store);
-        $this->log = new ExceptionLog($this->logFilesystem(), $this->state,
-            $this->config(['exceptions/max_read_kb' => '1']));
+        $this->log = new ExceptionLog($this->logReader($this->state,
+            $this->config(['exceptions/max_read_kb' => '1'])));
     }
 
     protected function tearDown(): void
@@ -51,6 +51,7 @@ class ExceptionLogTest extends TestCase
             . self::entry('Magento\\Framework\\Exception\\LocalizedException', 'mail',
                 'Magento\\Framework\\Exception\\MailException'));
         $entries = $this->read();
+        unset($entries['safe']);
         $this->assertSame(['entries' => 4, 'classes' => ['Magento\\Framework\\Exception\\LocalizedException' => 3,
             'other' => 1], 'mail' => 1, 'partial' => false], $entries);
         $this->assertSame(0, $this->read()['entries'], 'nothing new');
@@ -87,7 +88,7 @@ class ExceptionLogTest extends TestCase
         $this->assertGreaterThan(0, $entries['entries']);
         $this->assertLessThan(20, $entries['entries']);
         $this->assertSame(filesize($this->logDir . '/exception.log'),
-            $this->store->row('cursor:exception_log')['offset'], 'the rest is skipped: the next run starts at the end');
+            $this->store->row('cursor:log:exception')['offset'], 'the rest is skipped: the next run starts at the end');
         $this->assertSame(0, $this->read()['entries']);
     }
 

@@ -61,4 +61,9 @@ class CheckPool
     {
         return isset($this->checks[$code]) ? $this->checks[$code]->getLabel() : $code;
     }
+
+    public function getHint(string $code): string
+    {
+        return isset($this->checks[$code]) ? $this->checks[$code]->getHint() : '';
+    }
 }

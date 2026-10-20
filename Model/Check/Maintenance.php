@@ -29,9 +29,14 @@ class Maintenance implements CheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.');
+    }
+
     public function getLabel(): string
     {
-        return 'Maintenance mode';
+        return 'Maintenance';
     }
 
     public function run(): CheckResult
@@ -46,7 +51,7 @@ class Maintenance implements CheckInterface
         $since = (int)($this->state->get('cursor:' . self::CODE)['since'] ?? 0) ?: $now;
         $this->state->set('cursor:' . self::CODE, ['since' => $since]);
         return $since <= $now - $this->config->getInt(self::CODE, 'minutes', 15) * 60
-            ? CheckResult::fail('on for ' . Format::duration($now - $since))
+            ? CheckResult::fail('on for ' . Format::duration($now - $since), [], 'Maintenance mode left on')
             : CheckResult::ok();
     }
 }

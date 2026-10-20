@@ -39,6 +39,11 @@ class SalesEmails implements WebsiteCheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('Is the sales email cron running (async sending), and does the mail server accept mail?');
+    }
+
     public function getLabel(): string
     {
         return 'Sales emails';
@@ -62,9 +67,11 @@ class SalesEmails implements WebsiteCheckInterface
         $results = [];
         foreach ($unsent as $websiteId => $counts) {
             $total = array_sum($counts);
-            $results[$websiteId] = $total < $threshold ? CheckResult::ok()
-                : CheckResult::fail(sprintf('%d sales emails not sent after %s (%s)', $total,
-                    Format::duration($minutes * 60), Format::top($counts)));
+            $results[$websiteId] = $total < $threshold
+                ? new CheckResult(CheckResult::OK, '', [], [], '', ['unsent' => $total])
+                : new CheckResult(CheckResult::FAIL, sprintf('%d sales emails not sent after %s (%s)', $total,
+                    Format::duration($minutes * 60), Format::top($counts)), [], [], 'Sales emails not sent',
+                    ['unsent' => $total]);
         }
         return $results;
     }

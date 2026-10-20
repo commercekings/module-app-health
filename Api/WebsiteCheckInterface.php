@@ -17,6 +17,9 @@ interface WebsiteCheckInterface
     /** Unique among all checks, [a-z0-9_], at most 32 characters, e.g. "email_disabled". */
     public function getCode(): string;
 
+    /** One short, translated line telling the team where to look, e.g. "Is the cron container running?" */
+    public function getHint(): string;
+
     /** Shown in the messages, e.g. "Email sending". */
     public function getLabel(): string;
 

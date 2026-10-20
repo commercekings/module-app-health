@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Notification;
 
 use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Model\SummarySchedule;
@@ -46,9 +47,10 @@ class Summary implements NotificationTypeInterface
                     $tallies[] = array_replace(...array_map(fn ($scope) => (array)($tally[$scope] ?? []), $scopes));
                 }
             }
-            $all = $this->store->load(['checks'])['checks'] ?? [];
-            $checks = array_replace(...array_map(fn ($scope) => (array)($all[$scope] ?? []), $scopes));
-            return [$this->messages->summary($target, $checks, $tallies, $now), fn () => null];
+            $rows = $this->store->load(['checks', Fingerprints::KEY]);
+            $checks = array_replace(...array_map(fn ($scope) => (array)($rows['checks'][$scope] ?? []), $scopes));
+            return [$this->messages->summary($target, $checks, $tallies, $now, $rows[Fingerprints::KEY] ?? []),
+                fn () => null];
         });
     }
 }

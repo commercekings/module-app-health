@@ -29,6 +29,12 @@ class EmailDisabled implements WebsiteCheckInterface
         return self::CODE;
     }
 
+    public function getHint(): string
+    {
+        return (string)__('Stores > Configuration > Advanced > System > Mail Sending Settings >'
+            . ' Disable Email Communications.');
+    }
+
     public function getLabel(): string
     {
         return 'Email sending';
@@ -51,7 +57,8 @@ class EmailDisabled implements WebsiteCheckInterface
         foreach ($websiteIds as $websiteId) {
             $results[$websiteId] = $off[$websiteId] === 0 ? CheckResult::ok()
                 : CheckResult::fail(sprintf('emails are disabled in %d of %d store views (Stores > Configuration >'
-                    . ' Advanced > System > Mail Sending Settings)', $off[$websiteId], $views[$websiteId]));
+                    . ' Advanced > System > Mail Sending Settings)', $off[$websiteId], $views[$websiteId]), [],
+                    'Emails disabled');
         }
         return $results;
     }
