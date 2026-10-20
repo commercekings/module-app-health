@@ -272,25 +272,38 @@ class RunnerTest extends TestCase
 
     public function testTheFirstRunStoresTheDomainWhenNoneIs(): void
     {
-        $accepted = 0;
-        $domain = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
-        $domain->method('matches')->willReturn(true);
-        $domain->method('stored')->willReturnCallback(function () use (&$accepted) {
-            return $accepted > 0 ? 'shop.example.com' : '';
-        });
-        $domain->method('accept')->willReturnCallback(function () use (&$accepted) {
-            $accepted++;
-        });
+        $domain = new class extends \CommerceKings\AppHealth\Model\SiteDomain {
+            public int $accepted = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function stored(): string
+            {
+                return $this->accepted > 0 ? 'shop.example.com' : '';
+            }
+
+            public function matches(): bool
+            {
+                return true;
+            }
+
+            public function accept(): void
+            {
+                $this->accepted++;
+            }
+        };
         $this->siteDomain = $domain;
         $this->settings = ['general/enabled' => '1'];
         $this->run5();
         $this->run5();
-        $this->assertSame(1, $accepted, 'switched on in env.php or config.php, never saved in the admin: stored'
-            . ' by the first run, so a copy made later is told apart');
+        $this->assertSame(1, $domain->accepted, 'switched on in env.php or config.php, never saved in the admin:'
+            . ' stored by the first run, so a copy made later is told apart');
         $this->settings = ['general/enabled' => '0'];
-        $accepted = 0;
+        $domain->accepted = 0;
         $this->run5();
-        $this->assertSame(0, $accepted, 'not while App health is off');
+        $this->assertSame(0, $domain->accepted, 'not while App health is off');
     }
 
     public function testTheTimeSinceTheStatusChangedIsKept(): void
