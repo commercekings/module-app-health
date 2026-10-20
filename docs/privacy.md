@@ -49,5 +49,8 @@ Always masked, in the label and the message, as `***`:
   key word before it, or SQL. The latest per error is kept in the module's state (at most 500 errors).
 - **The label:** at most 3 words, with URLs, emails, quoted values, hex strings, numbers and paths after their first
   segment – and any capitalized word after the first (often a name) – as `***`. The daily summary shows labels only.
+  The first word is kept as written (it is usually what failed: "Unable", "Payment"), so a log line that starts with a
+  name ("Jane Doe could not pay") shows that first name ("Jane ***"); log such text with the name later in the line,
+  or not at all.
 - **Off** (*Add the masked log message* = No, the default): labels only, everywhere; a cron job's error text is not read
   either.
