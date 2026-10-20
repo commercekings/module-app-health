@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model;
 
+use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\Log\FileLogSource;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
@@ -82,10 +83,11 @@ class Config
         return $value === null || $value === '' || (bool)(int)$value;
     }
 
-    /** Minutes between two hourly statuses: 60 by default, at least 15. */
+    /** Minutes between two hourly statuses: 60 by default, 15 to 180 (the errors it lists are kept 3 hours). */
     public function getHourlyStatusMinutes(): int
     {
-        return max(15, (int)($this->scopeConfig->getValue(self::GENERAL . 'hourly_status_minutes') ?: 60));
+        return min(Fingerprints::RECENT_ERRORS_HOURS * 60,
+            max(15, (int)($this->scopeConfig->getValue(self::GENERAL . 'hourly_status_minutes') ?: 60)));
     }
 
     public function getHeartbeatUrl(): string

@@ -40,6 +40,8 @@ class RunnerTest extends TestCase
     private ?string $statusSentAt = 'recent';
     /** @var string[] */
     private array $statusQueued = [];
+    /** @var int[] the scopes whose status row was read */
+    private array $statusLoaded = [];
     /** @var array<string, mixed> */
     private array $settings = [];
 
@@ -59,8 +61,7 @@ class RunnerTest extends TestCase
         $teamMessage = $this->createStub(TeamMessage::class);
         $teamMessage->method('queue')->willReturnCallback(function ($type, $scope, $condition = '') {
             if ($type === 'app_health_status') {
-                $this->assertSame(0, $scope);
-                $this->statusQueued[] = $condition;
+                $this->statusQueued[] = $scope . ' ' . $condition;
                 return true;
             }
             $this->assertSame('app_health_alert', $type);
@@ -84,7 +85,8 @@ class RunnerTest extends TestCase
         }
         $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
         $deliveryState->method('load')->willReturnCallback(function ($type, $id) {
-            $this->assertSame(['app_health_status', 0], [$type, $id]);
+            $this->assertSame('app_health_status', $type);
+            $this->statusLoaded[] = $id;
             return $this->statusSentAt === null ? null : ['sent_at' => $this->statusSentAt === 'recent'
                 ? gmdate('Y-m-d H:i:s', $this->clock->now - 600) : $this->statusSentAt];
         });
@@ -233,34 +235,52 @@ class RunnerTest extends TestCase
         $this->assertSame(2, $this->pings);
     }
 
-    public function testTheHourlyStatusIsQueuedOncePerInterval(): void
+    public function testTheHourlyStatusIsQueuedOnEveryRunWhileDue(): void
     {
+        $this->statusSentAt = null;
         $this->run5();
-        $this->assertSame(['(sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)'], $this->statusQueued);
-        for ($i = 0; $i < 11; $i++) {
-            $this->run5();
-        }
-        $this->assertCount(1, $this->statusQueued, 'the runs of the next 55 minutes: not even tried');
         $this->run5();
-        $this->assertCount(2, $this->statusQueued, 'an hour later');
+        $this->assertSame(['0 (sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)',
+            '0 (sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)'], $this->statusQueued,
+            'not sent yet: every run (queue() itself skips one already queued or waiting for a retry)');
+        $this->statusSentAt = 'recent';
+        $this->run5();
+        $this->assertCount(2, $this->statusQueued, 'sent 10 minutes ago: not due, only the row read');
+        $this->statusSentAt = gmdate('Y-m-d H:i:s', $this->clock->now - 59 * 60);
+        $this->run5();
+        $this->assertCount(3, $this->statusQueued, 'due again');
         $this->settings = ['general/hourly_status' => '0'];
-        $this->clock->now += 3600;
+        $this->statusLoaded = [];
         $this->run5();
-        $this->assertCount(2, $this->statusQueued, 'off');
+        $this->assertSame([3, []], [count($this->statusQueued), $this->statusLoaded], 'off: not even read');
     }
 
-    public function testTheHeartbeatOnlyWhileTheHourlyStatusGoesOut(): void
+    public function testWithoutShopWideAlertsTheStatusGoesToTheFirstWebsite(): void
+    {
+        $this->shopWide = false;
+        $this->websites = [2, 3];
+        $this->statusSentAt = null;
+        $this->run5();
+        $this->assertSame(['2 (sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)'], $this->statusQueued);
+        $this->assertSame([2], $this->statusLoaded);
+    }
+
+    public function testTheHeartbeatStopsOnlyWhenTheStatusIsLateBeyondTheGrace(): void
     {
         $this->heartbeat = true;
         $this->assertSame('pinged', $this->run5()['heartbeat'], 'the last status 10 min ago');
-        $this->statusSentAt = gmdate('Y-m-d H:i:s', $this->clock->now - 71 * 60);
+        $this->statusSentAt = gmdate('Y-m-d H:i:s', $this->clock->now - 61 * 60);
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'due now: queued, within the grace');
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'a retry 5 min later: still within it');
+        $this->statusSentAt = 'recent'; // the retry went out
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'a transient failure costs no pings');
+        $this->statusSentAt = gmdate('Y-m-d H:i:s', $this->clock->now - 61 * 60);
+        $this->run5();
+        $this->run5();
         $this->assertSame('held: no hourly status went out recently', $this->run5()['heartbeat'],
-            '60 minutes and 10 of grace passed: the sending path is broken');
-        $this->statusSentAt = null;
-        $this->assertSame('held: no hourly status went out recently', $this->run5()['heartbeat'], 'never sent');
+            'due for 10 minutes and still not out: the sending path is broken');
         $this->settings = ['general/hourly_status' => '0'];
         $this->assertSame('pinged', $this->run5()['heartbeat'], 'without the hourly status: every finished run');
-        $this->assertSame(2, $this->pings);
     }
 
     public function testNoHeartbeatWhenAnAlertCannotBeQueued(): void

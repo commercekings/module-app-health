@@ -14,8 +14,8 @@ use CommerceKings\Notification\Api\NotificationTypeInterface;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
- * Notification type "app_health_status", reference 0: the hourly status, to the default scope's recipient, through the
- * same queue, consumer and channel as the alerts - so a status that stops coming means the sending path is broken
+ * Notification type "app_health_status", reference = the scope it goes to: 0, the default scope's recipient (or,
+ * with shop-wide alerts off, the first website's with alerts on) - the checks of all websites - through the same queue, consumer and channel as the alerts - so a status that stops coming means the sending path is broken
  * (the heartbeat stops too: Runner pings only while the last status went out). A line for the checks ("All checks
  * OK" or the problems), one for the warnings (not sent at once), then the log errors since the last status (ERROR
  * entries: they don't alert one by one).
@@ -38,7 +38,7 @@ class Status implements NotificationTypeInterface
 
     public function process(string $reference): void
     {
-        $this->teamMessage->deliver(self::CODE, '0', function (Target $target, array $row): ?array {
+        $this->teamMessage->deliver(self::CODE, $reference, function (Target $target, array $row): ?array {
             if (!$this->config->isHourlyStatusEnabled()) {
                 return null;
             }

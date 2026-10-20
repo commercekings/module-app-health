@@ -89,6 +89,26 @@ class StatusTest extends TestCase
         $this->assertStringContainsString('New errors this hour: 42', $this->sent[0]);
     }
 
+    public function testSentToTheScopeItWasQueuedFor(): void
+    {
+        $teamMessage = $this->createStub(TeamMessage::class);
+        $teamMessage->method('deliver')->willReturnCallback(function ($type, $reference) {
+            $this->sent[] = $reference;
+            return true;
+        });
+        $pool = $this->pool([]);
+        (new Status($teamMessage, new MemoryStore(), new Messages($pool, new Clock(self::NOW)), $pool, $this->config(),
+            new Clock(self::NOW)))->process('2');
+        $this->assertSame(['2'], $this->sent, 'shop-wide alerts off: the first website\'s recipient');
+    }
+
+    public function testTheIntervalIsFifteenMinutesToThreeHours(): void
+    {
+        $this->assertSame([60, 15, 180, 90], array_map(fn ($minutes) => $this->config($minutes === null ? []
+            : ['general/hourly_status_minutes' => $minutes])->getHourlyStatusMinutes(), [null, '5', '600', '90']),
+            'at most 3 hours: what errors:recent keeps');
+    }
+
     public function testNothingWhenItIsOff(): void
     {
         $this->send(new MemoryStore(), null, ['general/hourly_status' => '0']);
