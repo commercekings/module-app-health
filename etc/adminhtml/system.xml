@@ -65,7 +65,7 @@
                 </field>
                 <field id="recover_runs" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Resolved after (OK runs in a row)</label>
-                    <comment>Window checks (logs, queues, sending) resolve after this many OK runs in a row. Default: 2.</comment>
+                    <comment>Window checks (system.log, exception.log, queues, mail delivery errors, server status) resolve after this many OK runs in a row. Default: 2.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -78,7 +78,7 @@
                 <field id="hourly_status" translate="label comment" type="select" sortOrder="63" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Hourly status</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>A status every hour through the alerts' queue: posted when something is not OK, and once a day as "All checks OK". More: README &gt; When you hear about what.</comment>
+                    <comment>A status every hour through the alerts' queue: posted when there is news (a new problem, warning or error), and once a day as "All checks OK". More: README &gt; When you hear about what.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="hourly_status_minutes" translate="label comment" type="text" sortOrder="64" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -238,7 +238,7 @@
                     <label>Rule settings</label>
                     <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\RuleSettings</frontend_model>
                     <backend_model>CommerceKings\AppHealth\Model\Config\Backend\SensitiveRules</backend_model>
-                    <comment>Turn a rule set or a rule off or on, or give it another severity: e.g. "personal" 0, or "pci/card_cvv" with warning. Codes: README.</comment>
+                    <comment>Turn a rule set or a rule off or on, or give it another severity: e.g. "personal" 0, or "pci/card_cvv" with warning. Codes: README &gt; Sensitive data in logs.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="custom_rules" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
