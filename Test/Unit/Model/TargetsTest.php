@@ -6,7 +6,6 @@ namespace CommerceKings\AppHealth\Test\Unit\Model;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Targets;
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\Stdlib\DateTime\TimezoneInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
@@ -48,7 +47,7 @@ class TargetsTest extends TestCase
         $manager->method('getDefaultStoreView')->willReturn($stores[1]);
         $timezone = $this->createStub(TimezoneInterface::class);
         $timezone->method('getConfigTimezone')->willReturn('Europe/Belgrade');
-        return new Targets($manager, new Config($scopeConfig, $this->createStub(EncryptorInterface::class)),
+        return new Targets($manager, new Config($scopeConfig),
             $scopeConfig, $timezone);
     }
 

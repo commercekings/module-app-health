@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Store\Model\ScopeInterface;
 
 /** Admin: Stores > Configuration > CommerceKings > App health. */
@@ -14,8 +13,7 @@ class Config
     private const GENERAL = self::SECTION . '/general/';
 
     public function __construct(
-        private readonly ScopeConfigInterface $scopeConfig,
-        private readonly EncryptorInterface $encryptor
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
     }
 
@@ -59,11 +57,13 @@ class Config
         return max(1, (int)$this->scopeConfig->getValue(self::GENERAL . 'repeat_hours'));
     }
 
-    /** The decrypted heartbeat URL; '' when none is set or it is not http(s). */
+    /**
+     * The heartbeat URL; '' when none is set or it is not http(s). Stored encrypted; config.xml's backend_model makes
+     * Magento decrypt it on reading.
+     */
     public function getHeartbeatUrl(): string
     {
-        $stored = (string)$this->scopeConfig->getValue(self::GENERAL . 'heartbeat_url');
-        $url = $stored === '' ? '' : trim($this->encryptor->decrypt($stored));
+        $url = trim((string)$this->scopeConfig->getValue(self::GENERAL . 'heartbeat_url'));
         return preg_match('#^https?://[^\s/]+#i', $url) ? $url : '';
     }
 

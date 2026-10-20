@@ -45,9 +45,10 @@ class HeartbeatTest extends TestCase
         return new Heartbeat($this->config(['general/heartbeat_url' => $stored]), $factory, $logger);
     }
 
-    public function testOneShortGetToTheDecryptedUrl(): void
+    public function testOneShortGetToTheUrlAsMagentoReadsIt(): void
     {
-        $heartbeat = $this->heartbeat('encrypted:https://hc-ping.com/secret-uuid');
+        // stored encrypted; config.xml's backend_model makes ScopeConfig return it decrypted - never decrypt it twice
+        $heartbeat = $this->heartbeat('https://hc-ping.com/secret-uuid');
         $this->assertTrue($heartbeat->isConfigured());
         $this->assertTrue($heartbeat->ping());
         $this->assertSame('https://hc-ping.com/secret-uuid', $this->got);
@@ -57,8 +58,8 @@ class HeartbeatTest extends TestCase
 
     public function testFailuresAreOnlyLoggedWithoutTheUrl(): void
     {
-        $this->assertFalse($this->heartbeat('encrypted:https://hc-ping.com/secret-uuid', 503)->ping());
-        $this->assertFalse($this->heartbeat('encrypted:https://hc-ping.com/secret-uuid',
+        $this->assertFalse($this->heartbeat('https://hc-ping.com/secret-uuid', 503)->ping());
+        $this->assertFalse($this->heartbeat('https://hc-ping.com/secret-uuid',
             new \RuntimeException('Could not resolve hc-ping.com/secret-uuid'))->ping());
         $this->assertSame(['CommerceKings_AppHealth: heartbeat answered HTTP 503',
             'CommerceKings_AppHealth: heartbeat not sent (RuntimeException)'], $this->logs);
@@ -67,8 +68,8 @@ class HeartbeatTest extends TestCase
     public function testNoUrlOrNotHttpIsOff(): void
     {
         $this->assertFalse($this->heartbeat('')->isConfigured());
-        $this->assertFalse($this->heartbeat('encrypted:file:///etc/passwd')->isConfigured());
-        $this->assertFalse($this->heartbeat('encrypted:ftp://example.com')->ping());
+        $this->assertFalse($this->heartbeat('file:///etc/passwd')->isConfigured());
+        $this->assertFalse($this->heartbeat('ftp://example.com')->ping());
         $this->assertNull($this->got);
     }
 }

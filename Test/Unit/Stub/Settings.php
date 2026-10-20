@@ -5,7 +5,6 @@ namespace CommerceKings\AppHealth\Test\Unit\Stub;
 
 use CommerceKings\AppHealth\Model\Config;
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Framework\Encryption\EncryptorInterface;
 
 /** The module's Config over settings by path (config.xml's defaults unless the test sets one). */
 trait Settings
@@ -21,8 +20,6 @@ trait Settings
         $scopeConfig->method('isSetFlag')->willReturnCallback(
             fn ($path) => !empty($values[substr((string)$path, strlen(Config::SECTION) + 1)])
         );
-        $encryptor = $this->createStub(EncryptorInterface::class);
-        $encryptor->method('decrypt')->willReturnCallback(fn ($value) => str_replace('encrypted:', '', (string)$value));
-        return new Config($scopeConfig, $encryptor);
+        return new Config($scopeConfig);
     }
 }
