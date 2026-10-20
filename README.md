@@ -137,6 +137,11 @@ Examples of every message, and why each check fails: [Messages](docs/messages.md
   by its consumer, and the admin says so; after a real move, *Use <domain>* makes the new domain the shop's. To keep a
   staging site off for good, lock it there: `bin/magento config:set commercekings_app_health/general/enabled 0
   --lock-env` (written to its `app/etc/env.php`, so a fresh copy of the production database can't switch it on).
+  Switched on without the admin (`bin/magento config:set`, `env.php` or `config.php`), App health's first run stores
+  the domain instead. With `app:config:dump` or a `config.php` you deploy, include
+  `commercekings_app_health/general/domain` (production's), or let the first run store it: a staging copy with that
+  `config.php` is then still told apart. A copy switched on for the first time on staging stores staging's domain and
+  is not silent – there, the lock above is the way.
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
   or cron is down, no check runs. Create a heartbeat check in an uptime service (e.g. Healthchecks.io, Better Stack or
   UptimeRobot) expecting a ping every 5 minutes, connect that service's **Slack integration**, and paste its URL into
