@@ -181,8 +181,9 @@ class Queues implements CheckInterface
         }
         $parts = [];
         foreach (array_keys($names) as $id) {
-            $parts[] = $db->select()->from($status, ['queue_id'])->where('queue_id = ?', (int)$id)
-                ->where('status IN (?)', self::WAITING)->limit($cap);
+            // a derived table each: a LIMIT inside a UNION needs it
+            $parts[] = $db->select()->from(['p' => $db->select()->from($status, ['queue_id'])
+                ->where('queue_id = ?', (int)$id)->where('status IN (?)', self::WAITING)->limit($cap)], ['queue_id']);
         }
         $counts = $db->fetchPairs($db->select()
             ->from(['w' => $db->select()->union($parts, \Magento\Framework\DB\Select::SQL_UNION_ALL)],

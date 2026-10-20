@@ -324,7 +324,8 @@ Always masked, in the label and the message, as `***`:
 
 ## Tested (as of 0.1.0)
 
-- **Automated tests:** 137 unit tests (on every push), PHPStan level 5 and the Magento2 coding standard.
+- **Automated tests:** 193 unit tests (on every push); integration tests that run the generated SQL on MySQL/MariaDB
+  (`Test/Integration`, on copies of the tables); PHPStan level 5 and the Magento2 coding standard.
 - **End to end on Magento 2.4.9:** cron, indexers, caches, maintenance, email, exceptions, queues and sales emails
   triggered for real against a simulated Slack API – one alert, then one "recovered", the daily summary, the test
   button, the heartbeat, Slack's error modes, no private data in any message – and live to a real Slack channel.

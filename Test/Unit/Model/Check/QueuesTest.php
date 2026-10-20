@@ -98,6 +98,9 @@ class QueuesTest extends TestCase
         $result = $this->check(['big' => 200, 'commercekings.notification.send' => 150]);
         $this->assertSame('big: over 200 messages; commercekings.notification.send: 150 messages', $result->detail);
         $this->assertCount(2, array_filter($this->calls, fn ($call) => $call[0] === 'limit'), 'one cap per queue');
+        $this->assertCount(2, array_filter($this->calls, fn ($call) => $call[0] === 'from' && is_array($call[1])
+            && array_keys($call[1]) === ['p']), 'each capped part a derived table: "SELECT … LIMIT n UNION ALL …" is'
+            . ' not SQL');
         $this->assertContains('queue_id = ?', array_map(fn ($c) => $c[1] ?? null, array_filter($this->calls,
             fn ($c) => $c[0] === 'where')));
     }
