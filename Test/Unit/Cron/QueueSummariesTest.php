@@ -11,6 +11,7 @@ use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\Db;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
+use CommerceKings\Notification\Api\DeliveryStateInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -20,6 +21,9 @@ class QueueSummariesTest extends TestCase
     use Settings;
 
     private const NOW = 1792483200; // 08:00 UTC
+
+    /** @var array<int, array<string, mixed>> delivery state by website */
+    private array $rows = [];
 
     public function testEachWebsitePastItsSummaryTimeIsQueuedUnlessSentSince(): void
     {
@@ -33,9 +37,17 @@ class QueueSummariesTest extends TestCase
             $queued[] = [$type, $websiteId, $condition];
             return true;
         });
-        $this->assertSame([1], (new QueueSummaries($targets, $config, new SummarySchedule($config), $teamMessage,
-            $this->resource($this->db()), new Clock(self::NOW), $this->createStub(LoggerInterface::class)))->execute(),
-            'in Los Angeles it is 01:00: yesterday 07:30 was over 12 h ago');
+        $state = $this->createStub(DeliveryStateInterface::class);
+        $state->method('load')->willReturnCallback(fn ($type, $id) => $this->rows[$id] ?? null);
+        $cron = new QueueSummaries($targets, $config, new SummarySchedule($config), $teamMessage,
+            $this->resource($this->db()), new Clock(self::NOW), $this->createStub(LoggerInterface::class), $state);
+        $this->assertSame([1], $cron->execute(), 'in Los Angeles it is 01:00: yesterday 07:30 was over 12 h ago');
         $this->assertSame([['app_health_summary', 1, "(sent_at IS NULL OR sent_at < '2026-10-20 07:30:00')"]], $queued);
+        $queued = [];
+        $this->rows[1] = ['queued_at' => null, 'sent_at' => '2026-10-20 07:31:00'];
+        $this->assertSame([], $cron->execute(), 'sent since 07:30: one read, nothing queued');
+        $this->rows[1] = ['queued_at' => '2026-10-20 07:59:00', 'sent_at' => null];
+        $this->assertSame([], $cron->execute(), 'on its way');
+        $this->assertSame([], $queued);
     }
 }

@@ -8,13 +8,15 @@ use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\SummarySchedule;
 use CommerceKings\AppHealth\Model\Targets;
+use CommerceKings\Notification\Api\DeliveryStateInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 use Psr\Log\LoggerInterface;
 
 /**
  * Cron "commercekings_app_health_summary", every 15 minutes: queues each website's daily summary once its summary
- * time has passed, unless it was sent since (the condition is repeated in the queue mark's statement).
+ * time has passed, unless it was sent since (the condition is repeated in the queue mark's statement). Outside the
+ * summary's window no query at all; inside it, one read per website once the summary is out.
  */
 class QueueSummaries
 {
@@ -25,7 +27,8 @@ class QueueSummaries
         private readonly TeamMessage $teamMessage,
         private readonly ResourceConnection $resource,
         private readonly DateTime $dateTime,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly DeliveryStateInterface $deliveryState
     ) {
     }
 
@@ -40,6 +43,12 @@ class QueueSummaries
             }
             $slot = $this->schedule->latestSlot($target, $now);
             if (!$this->schedule->isDue($slot, null, $now)) {
+                continue;
+            }
+            // one read while the day's summary is out (or on its way): nothing more to do
+            $row = $this->deliveryState->load(Summary::CODE, $websiteId);
+            if ($row !== null && ($row['queued_at'] !== null
+                || !$this->schedule->isDue($slot, $row['sent_at'] ?? null, $now))) {
                 continue;
             }
             $notSince = $this->resource->getConnection()->quoteInto('(sent_at IS NULL OR sent_at < ?)',
