@@ -87,11 +87,13 @@ class Exceptions implements CheckInterface
                 $byClass[$class] = ($byClass[$class] ?? 0) + (int)$count;
             }
         }
+        $gauges = $new['skipped'] > 0 ? ['skipped kb' => intdiv($new['skipped'], 1024)] : [];
         if ($total < $this->config->getInt(self::CODE, 'count', 20)) {
-            return new CheckResult(CheckResult::OK, '', $counts, $notices);
+            return new CheckResult(CheckResult::OK, '', $counts, $notices, '', $gauges);
         }
-        return new CheckResult(CheckResult::FAIL, sprintf('%s%s exceptions in %s (%s)', $partial ? 'at least ' : '',
-            Format::number($total), Format::duration($window), Format::top($byClass)), $counts, $notices,
-            'Exception spike');
+        return new CheckResult(CheckResult::FAIL, sprintf('%s%s exceptions in %s (%s)%s', $partial ? 'at least ' : '',
+            Format::number($total), Format::duration($window), Format::top($byClass), $new['skipped'] > 0
+                ? '; ' . Format::bytes($new['skipped']) . ' of the log not read' : ''), $counts, $notices,
+            'Exception spike', $gauges);
     }
 }

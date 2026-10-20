@@ -53,7 +53,7 @@ class ExceptionLogTest extends TestCase
         $entries = $this->read();
         unset($entries['safe']);
         $this->assertSame(['entries' => 4, 'classes' => ['Magento\\Framework\\Exception\\LocalizedException' => 3,
-            'other' => 1], 'mail' => 1, 'partial' => false], $entries);
+            'other' => 1], 'mail' => 1, 'partial' => false, 'skipped' => 0], $entries);
         $this->assertSame(0, $this->read()['entries'], 'nothing new');
     }
 
@@ -79,12 +79,28 @@ class ExceptionLogTest extends TestCase
         $this->assertSame(['C\\Three' => 1], $this->read()['classes']);
     }
 
-    public function testABacklogOverTheCapIsSkippedAndMarkedPartial(): void
+    public function testTheScanStopsAtItsTimeBudgetAndIsMarkedPartial(): void
+    {
+        $log = new ExceptionLog($this->logReader($this->state, $this->config(['exceptions/max_read_kb' => '64']), [],
+            0.0));
+        $this->state->begin();
+        $log->newEntries();
+        $this->state->commit();
+        $this->appendLog(str_repeat(self::entry('A\\One', 'x'), 5));
+        $this->state->begin();
+        $entries = $log->newEntries();
+        $this->state->commit();
+        $this->assertSame([0, true], [$entries['entries'], $entries['partial']], 'no time left: nothing scanned');
+    }
+
+    public function testABacklogOverTheCapReadsTheNewestAndReportsWhatWasSkipped(): void
     {
         $this->read();
-        $this->appendLog(str_repeat(self::entry('A\\One', 'x'), 20)); // ~5 KB, the cap is 1 KB
+        $this->appendLog(str_repeat(self::entry('A\\One', 'x'), 20) . self::entry('Z\\Latest', 'y')); // ~5 KB, cap 1 KB
         $entries = $this->read();
         $this->assertTrue($entries['partial']);
+        $this->assertArrayHasKey('Z\\Latest', $entries['classes'], 'the newest bytes, not the oldest');
+        $this->assertGreaterThan(3000, $entries['skipped'], 'the bytes not read');
         $this->assertGreaterThan(0, $entries['entries']);
         $this->assertLessThan(20, $entries['entries']);
         $this->assertSame(filesize($this->logDir . '/exception.log'),

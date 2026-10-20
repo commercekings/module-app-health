@@ -61,7 +61,7 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `caches` | cache type states (env.php) and the invalidated list (one cache read) | – |
 | `maintenance` | `var/.maintenance.flag` | a file check |
 | `system_log` | new bytes of `var/log/system.log` (and the extra files, and other modules' sources) | *Read at most* (1 MB) per source; only WARNING and above are parsed |
-| `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); a larger backlog is skipped, the count marked "at least"; rotation starts the new file from its beginning |
+| `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); of a larger backlog the newest 1 MB (from its first whole line), the count marked "at least" and the size not read in the detail; rotation starts the new file from its beginning |
 | `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other); no message is read or consumed |
 | `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
 | `email_disabled` | `system/smtp/disable` per store view | configuration only |
@@ -140,7 +140,11 @@ Normalizer masks it, so a third-party parser can't send a line as it is.
   *Rule settings* and *Custom rules*. A rule is a PCRE pattern, or a validator's pattern (`type="validator"`),
   optionally confirmed by a validator (`Model\Sensitive\ValidatorPool`, `Api\SensitiveDataValidatorInterface`), with a
   severity and a minimum per entry ("5 or more emails"). Each pattern must pass `Model\Sensitive\RegexGuard`; the
-  detector runs them under a backtracking limit and skips a rule that hits it.
+  detector runs them under a backtracking limit; a rule that hits it finds nothing in that entry and is logged as a
+  warning by its key. A custom rule is also benchmarked when it is saved: on `RegexGuard::sample()` (about 80 KB of
+  real-looking log text) it must stay within the limit and 10 ms.
+- **Time budget:** a check's log reading and scanning stop after `LogReader::BUDGET_SECONDS` (1 s); the rest of what
+  was read is not scanned, and the counts are marked "at least".
 - **Out:** only "<set>/<rule>" and the number of matches. The `sensitive_data` check keeps findings per rule and
   fingerprint (the `sensitive` row, at most 200) and makes each a notice once, and again after the repeat interval
   while it goes on, under the title "Security: sensitive data in logs".

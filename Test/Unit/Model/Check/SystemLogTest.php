@@ -49,6 +49,20 @@ class SystemLogTest extends TestCase
         return $result;
     }
 
+    public function testABacklogOverTheCapCountsTheNewestAndSaysHowMuchWasNotRead(): void
+    {
+        $config = $this->config(['system_log/error_count' => '3', 'system_log/window_minutes' => '5',
+            'system_log/max_read_kb' => '1']);
+        $this->check = new SystemLog($this->logReader($this->state, $config), new Fingerprints($this->state, $config),
+            $config, $this->state, $this->clock);
+        $this->run5();
+        $result = $this->run5(str_repeat(self::line('ERROR', 'Unable to send order 5'), 40)); // ~5 KB
+        $this->assertSame(CheckResult::FAIL, $result->status);
+        $this->assertMatchesRegularExpression('/^at least \d+ errors in 5 min \(Unable to send x\d+\); \d KB of the'
+            . ' log not read$/', $result->detail);
+        $this->assertGreaterThan(0, $result->gauges['skipped kb']);
+    }
+
     public function testLevelsNewErrorsOnceAndASpike(): void
     {
         $this->run5(self::line('ERROR', 'before the first run'));

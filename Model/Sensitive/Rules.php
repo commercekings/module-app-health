@@ -72,7 +72,7 @@ class Rules
                 }
                 $pattern = ($rule['type'] ?? 'regex') === 'validator' && $validator !== null
                     ? $validator->getPattern() : (string)($rule['pattern'] ?? '');
-                if ($this->guard->check($pattern) !== '') {
+                if ($this->guard->check($pattern, false) !== '') { // the benchmark ran when it was saved
                     continue;
                 }
                 $rules[] = ['key' => $setCode . '/' . $code, 'set' => (string)$setCode,

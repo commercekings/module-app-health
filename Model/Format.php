@@ -26,6 +26,16 @@ class Format
         return '{t:' . $time . '}';
     }
 
+    /** "512 bytes", "3 KB", "2.5 MB" */
+    public static function bytes(int $bytes): string
+    {
+        return match (true) {
+            $bytes < 1024 => $bytes . ' bytes',
+            $bytes < 1048576 => intdiv($bytes, 1024) . ' KB',
+            default => rtrim(rtrim(number_format($bytes / 1048576, 1), '0'), '.') . ' MB',
+        };
+    }
+
     public static function number(int $number): string
     {
         return number_format($number);

@@ -11,9 +11,9 @@ use Magento\Framework\Filesystem;
 
 /**
  * A file in var/log, named by $file or by the setting at $fileConfigPath (a plain name like "system.log", checked:
- * no path, no debug.log). Only the bytes after the cursor's offset, at most $maxBytes - a larger backlog is skipped
- * (partial). A smaller file or another inode (rotation) starts from its beginning; the first read only takes the
- * offset; a half-written last line waits for the next read.
+ * no path, no debug.log). Only the bytes after the cursor's offset, at most $maxBytes - of a larger backlog the newest
+ * $maxBytes, from the first whole line (partial, with the bytes skipped). A smaller file or another inode (rotation)
+ * starts from its beginning; the first read only takes the offset; a half-written last line waits for the next read.
  */
 class FileLogSource implements LogSourceInterface
 {
@@ -61,20 +61,25 @@ class FileLogSource implements LogSourceInterface
         if ($size === $offset) {
             return new LogChunk('', ['offset' => $offset, 'inode' => $inode]);
         }
-        $length = min($size - $offset, max(1, $maxBytes));
+        $partial = $size - $offset > max(1, $maxBytes);
+        $start = $partial ? $size - max(1, $maxBytes) : $offset; // a backlog: its newest bytes
         $handle = $dir->openFile($file);
         try {
-            $handle->seek($offset);
-            $data = (string)$handle->read($length);
+            $handle->seek($start);
+            $data = (string)$handle->read($size - $start);
         } finally {
             $handle->close();
         }
-        $partial = $size - $offset > $length;
-        if (!$partial) {
-            $end = strrpos($data, "\n");
-            $data = $end === false ? '' : substr($data, 0, $end + 1);
+        $from = $start; // where $data starts in the file
+        if ($partial) {
+            $first = strpos($data, "\n"); // the line cut by the start
+            $cut = $first === false ? strlen($data) : $first + 1;
+            $data = substr($data, $cut);
+            $from += $cut;
         }
-        return new LogChunk($data, ['offset' => $partial ? $size : $offset + strlen($data), 'inode' => $inode],
-            $partial);
+        $end = strrpos($data, "\n"); // a half-written last line waits for the next read
+        $data = $end === false ? '' : substr($data, 0, $end + 1);
+        $next = $partial && $data === '' ? $size : $from + strlen($data);
+        return new LogChunk($data, ['offset' => $next, 'inode' => $inode], $partial, $from - $offset);
     }
 }

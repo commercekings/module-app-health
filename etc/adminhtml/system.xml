@@ -153,7 +153,7 @@
                 </field>
                 <field id="max_read_kb" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Read at most (KB per run and file)</label>
-                    <comment>A larger backlog is skipped and counted as "at least". Default: 1024.</comment>
+                    <comment>Of a larger backlog the newest part is read, counted as "at least", and the size not read is reported. Default: 1024.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -215,7 +215,7 @@
                 </field>
                 <field id="max_read_kb" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Read at most (KB per run)</label>
-                    <comment>A larger backlog is skipped and counted as "at least". Default: 1024.</comment>
+                    <comment>Of a larger backlog the newest part is read, counted as "at least", and the size not read is reported. Default: 1024.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

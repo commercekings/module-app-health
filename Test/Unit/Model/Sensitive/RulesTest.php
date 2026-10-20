@@ -120,6 +120,14 @@ class RulesTest extends TestCase
         $this->assertStringContainsString('delimiters', $guard->check('secret'));
         $this->assertStringContainsString('nested quantifier', $guard->check('/(\w+\s?)*$/'));
         $this->assertStringContainsString('characters', $guard->check('/' . str_repeat('a', 400) . '/'));
+        $this->assertStringContainsString('realistic log sample', $guard->check('/(?:\w|\d)*x/'),
+            'no nested quantifier, fine on long runs of one character, but not on a mixed log');
+        $this->assertSame('', $guard->check('/(?:\w|\d)*x/', false), 'the cheap check (every run) skips the sample');
+        $this->assertStringContainsString('too slow', (new RegexGuard(0.0))->check('/\bsecret\b/'),
+            'slower than the time limit on the sample');
+        foreach ($this->detector()->rules() as $key => $rule) {
+            $this->assertSame('', $guard->check($rule['pattern']), 'shipped rule ' . $key . ' passes');
+        }
     }
 
     public function testTheAdminCannotSaveAnUnsafeRule(): void

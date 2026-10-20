@@ -50,7 +50,7 @@ trait LogDir
      * The reader over a temporary var/log: system.log for "system_log", exception.log for "exceptions", Magento's root
      * at /var/www/html; $extra sources are added to the pool (a third party's).
      */
-    private function logReader(RunState $state, Config $config, array $extra = []): LogReader
+    private function logReader(RunState $state, Config $config, array $extra = [], float $budget = 1.0): LogReader
     {
         $filesystem = $this->logFilesystem();
         $scopeConfig = $this->createStub(ScopeConfigInterface::class);
@@ -63,8 +63,10 @@ trait LogDir
         ], $extra));
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getRoot')->willReturn('/var/www/html');
-        return new LogReader($pool, new Normalizer($this->detector()), $state, $config, $directoryList,
-            $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock());
+        $detector = $this->detector();
+        return new LogReader($pool, new Normalizer($detector), $state, $config, $directoryList,
+            $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock(), $detector,
+            $this->createStub(\Psr\Log\LoggerInterface::class), $budget);
     }
 
     private function removeLogDir(): void

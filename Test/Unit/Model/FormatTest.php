@@ -8,6 +8,12 @@ use PHPUnit\Framework\TestCase;
 
 class FormatTest extends TestCase
 {
+    public function testBytes(): void
+    {
+        $this->assertSame(['512 bytes', '3 KB', '2.5 MB'], [Format::bytes(512), Format::bytes(3 * 1024 + 10),
+            Format::bytes((int)(2.5 * 1048576))]);
+    }
+
     public function testDurations(): void
     {
         $this->assertSame(['1 min', '12 min', '119 min', '2 h', '47 h', '2 days'],

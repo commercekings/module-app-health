@@ -55,6 +55,25 @@ class DetectorTest extends TestCase
         }
     }
 
+    public function testARuleHittingTheBacktrackingLimitIsFlaggedNotSilentlySkipped(): void
+    {
+        $detector = $this->detector([], [['code' => 'slow', 'category' => 'internal', 'pattern' => '/(?:\w|\d)*x/']]);
+        $detector->detect(substr(\CommerceKings\AppHealth\Model\Sensitive\RegexGuard::sample(), -3000));
+        $this->assertSame(['internal/slow' => 1], $detector->takeSlowRules());
+        $this->assertSame([], $detector->takeSlowRules(), 'taken once');
+    }
+
+    public function testADeadlineStopsTheScan(): void
+    {
+        $detector = $this->detector();
+        $detector->until(microtime(true) - 1);
+        $this->assertSame([], $detector->detect('card 4111 1111 1111 1111'));
+        $this->assertTrue($detector->wasCut());
+        $detector->until(null);
+        $this->assertNotSame([], $detector->detect('card 4111 1111 1111 1111'));
+        $this->assertFalse($detector->wasCut());
+    }
+
     public function testALongEntryIsScannedFastAndCapped(): void
     {
         $text = str_repeat('Lorem ipsum dolor sit amet 12345 ', 2000) . ' 4111 1111 1111 1111';

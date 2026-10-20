@@ -103,11 +103,14 @@ class SystemLog implements CheckInterface
                 $top[$label] = ($top[$label] ?? 0) + (int)$count;
             }
         }
+        $gauges = $read['skipped'] > 0 ? ['skipped kb' => intdiv($read['skipped'], 1024)] : [];
         if ($total < $this->config->getInt(self::CODE, 'error_count', 20)) {
-            return new CheckResult(CheckResult::OK, '', $counts, $notices);
+            return new CheckResult(CheckResult::OK, '', $counts, $notices, '', $gauges);
         }
-        return new CheckResult(CheckResult::FAIL, sprintf('%s%s errors in %s (%s)', $partial ? 'at least ' : '',
-            Format::number($total), Format::duration($window), Format::top($top)), $counts, $notices, 'Error spike');
+        return new CheckResult(CheckResult::FAIL, sprintf('%s%s errors in %s (%s)%s', $partial ? 'at least ' : '',
+            Format::number($total), Format::duration($window), Format::top($top), $read['skipped'] > 0
+                ? '; ' . Format::bytes($read['skipped']) . ' of the log not read' : ''), $counts, $notices,
+            'Error spike', $gauges);
     }
 
     /**

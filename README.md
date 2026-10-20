@@ -228,7 +228,7 @@ Country-specific ID formats and other rules can come as rule-set modules.
 
 Add, change or turn off rules from a module (one XML file, no PHP), add a validator, or set them in the admin
 (*Rule settings*, *Custom rules* – a custom rule is checked on save: it compiles, at most 300 characters, no nested
-quantifiers, fast on long lines): see [Extending](#extending).
+quantifiers, fast on long lines and on a realistic 80 KB log sample): see [Extending](#extending).
 
 ## What is masked
 
