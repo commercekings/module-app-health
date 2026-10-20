@@ -123,7 +123,8 @@ class Runner
                     'title' => $result->title, 'gauges' => $result->gauges,
                     'causes' => array_map(fn ($cause) => $cause->toArray(), $result->causes),
                     'since' => $unchanged ? (int)$last['since'] : $now,
-                    'runs' => $unchanged ? (int)($last['runs'] ?? 1) + 1 : 1, 'checked_at' => $now, 'ms' => $ms];
+                    'runs' => $unchanged ? (int)($last['runs'] ?? 1) + 1 : 1, 'checked_at' => $now, 'ms' => $ms]
+                    + ($result->idle ? ['idle' => true] : []);
                 if ($result->notices !== []) {
                     $notices[$scope][$code] = $result->notices;
                 }

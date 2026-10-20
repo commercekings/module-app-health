@@ -81,7 +81,7 @@ class ExternalTest extends TestCase
 
     public function testSilentUntilAServerReports(): void
     {
-        $this->assertEquals(CheckResult::ok(), $this->check());
+        $this->assertEquals(CheckResult::idle('not set up (no status file from a server yet)'), $this->check());
         $this->assertFileExists($this->var . '/app-health/status.json.dist', 'the folder and the format are there');
         $this->assertSame([], $this->store->rows, 'nothing stored');
     }
@@ -94,6 +94,7 @@ class ExternalTest extends TestCase
         $this->assertSame('host-1 · Backup: 97.5 %', $result->title);
         $this->assertSame(['backup'], self::codes($result));
         $this->assertSame('host-1 · Backup: 97.5 % (details)', $result->causes[0]->detail);
+        $this->assertSame('Look at the server named above.', $result->causes[0]->hint, 'a line: its own hint');
         $this->assertSame('host-1 · Backup: 97.5 %', $result->detail, 'what the hourly status shows: the line');
 
         $this->report('host-2', ['disk' => 'fail', 'php' => 'fail']);
@@ -134,6 +135,8 @@ class ExternalTest extends TestCase
         $this->assertSame(['external_stale'], self::codes($result), 'its old lines are not news');
         $this->assertSame('No status from host-1 since {t:' . ($this->clock->now - 15 * 60) . '}',
             $result->causes[0]->detail);
+        $this->assertStringStartsWith('Is the status script still scheduled', $result->causes[0]->hint,
+            'no status at all: the script\'s hint, not the line\'s');
     }
 
     public function testAStatusFileThatIsGoneIsAProblemForADay(): void
@@ -147,7 +150,8 @@ class ExternalTest extends TestCase
         $this->clock->now += External::FORGET_SECONDS - 60;
         $this->assertSame(CheckResult::FAIL, $this->check()->status);
         $this->clock->now += 60;
-        $this->assertEquals(CheckResult::ok(), $this->check(), 'forgotten');
+        $this->assertEquals(CheckResult::idle('not set up (no status file from a server yet)'), $this->check(),
+            'forgotten');
         $this->assertSame([], $this->store->row('external'));
     }
 
@@ -168,7 +172,8 @@ class ExternalTest extends TestCase
         $this->write('status-host-3.json', '{"report": {"version": 1, "source": "host-1", "generated_at": "'
             . gmdate('Y-m-d\TH:i:s\Z', $this->clock->now) . '", "checks": []}}');
         $this->write('status-host-4.json', 'not json');
-        $this->assertSame(['status-host-1.json: report has an unknown key (the 2.)', 'status-host-2.json: larger than 32 KB',
+        $this->assertSame(['status-host-1.json: report has an unknown key (the 2.)',
+            'status-host-2.json: larger than 32 KB',
             'status-host-3.json: its source is not the one in the file name', 'status-host-4.json: not JSON'],
             array_map(fn ($cause) => preg_replace('/;.*$/', '', $cause->detail),
                 array_slice($this->check()->causes, 1)));
@@ -222,9 +227,8 @@ class ExternalTest extends TestCase
         $this->assertSame([], $this->check()->notices, 'the alert tells it');
         $this->clock->now += 60;
         $this->report('host-1', ['disk' => 'fail', 'php' => 'fail']);
-        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)', 'Check: Look at the server named above. No status at all:'
-            . ' is the status script still scheduled on the server (cron or systemd timer), and can it write'
-            . ' var/app-health?'], $this->check()->notices);
+        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)', 'Check: Look at the server named above.'],
+            $this->check()->notices, 'a failing line: its own hint, not the no-status one');
         $this->assertSame([], $this->check()->notices, 'once');
     }
 }

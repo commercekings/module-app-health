@@ -78,7 +78,8 @@ class SensitiveData implements CheckInterface
             $seen = $known[$key] ?? null;
             $tell = $seen === null || (int)($seen['told'] ?? 0) <= $now - $repeat;
             $known[$key] = ['first' => (int)($seen['first'] ?? $now), 'last' => $finding['last'],
-                'count' => (int)($seen['count'] ?? 0) + $finding['count'], 'told' => $tell ? $now : (int)$seen['told']];
+                'count' => (int)($seen['count'] ?? 0) + $finding['count'], 'told' => $tell ? $now : (int)$seen['told'],
+                'source' => $finding['source']];
             $counts['found'] += $finding['count'];
             $item = 'found:' . str_replace('/', '.', $finding['rule']);
             $counts[$item] = ($counts[$item] ?? 0) + $finding['count'];

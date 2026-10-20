@@ -57,7 +57,7 @@
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="recover_runs" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
-                    <label>Recovered after (OK runs in a row)</label>
+                    <label>Resolved after (OK runs in a row)</label>
                     <comment>Window checks (logs, queues, sending) resolve after this many OK runs in a row. Default: 2.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
@@ -97,7 +97,7 @@
                 </field>
             </group>
             <group id="cron" translate="label comment" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Cron (all websites)</label>
+                <label>Cron</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>No job has run, a job runs too long, or jobs end with an error.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -124,7 +124,7 @@
                 </field>
             </group>
             <group id="indexers" translate="label comment" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Indexers (all websites)</label>
+                <label>Indexers</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>An indexer invalid, or stuck working.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -139,7 +139,7 @@
                 </field>
             </group>
             <group id="caches" translate="label comment" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Caches (all websites)</label>
+                <label>Caches</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>A cache type disabled (at once), or invalidated and not refreshed.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -154,7 +154,7 @@
                 </field>
             </group>
             <group id="maintenance" translate="label comment" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Maintenance mode (all websites)</label>
+                <label>Maintenance mode</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Maintenance mode left on.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -169,7 +169,7 @@
                 </field>
             </group>
             <group id="system_log" translate="label comment" sortOrder="55" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>System log (all websites)</label>
+                <label>System log</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>New errors in var/log/system.log (and extra files): critical ones at once, errors in the hourly status, spikes. More: README &gt; What is checked.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -208,7 +208,7 @@
                 </field>
             </group>
             <group id="sensitive_data" translate="label comment" sortOrder="58" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Sensitive data in logs (all websites)</label>
+                <label>Sensitive data in logs</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Card numbers, secrets and personal data written into logs: a security alert at once, to the global channel only, never the value. More: README &gt; Sensitive data in logs.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -231,7 +231,7 @@
                 </field>
             </group>
             <group id="exceptions" translate="label comment" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Exceptions (all websites)</label>
+                <label>Exceptions</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>New entries in var/log/exception.log: a new exception at once, and spikes with the top classes.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -264,7 +264,7 @@
                 </field>
             </group>
             <group id="queues" translate="label comment" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Queues (all websites)</label>
+                <label>Queues</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker every run.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -285,7 +285,7 @@
                 </field>
             </group>
             <group id="email_failing" translate="label comment" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Sending (all websites)</label>
+                <label>Sending</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Mail transport errors in the logs, and failing CommerceKings notifications.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -306,18 +306,18 @@
                 </field>
             </group>
             <group id="email_disabled" translate="label comment" sortOrder="90" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Email sending (per website)</label>
+                <label>Email sending</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Disable Email Communications set to Yes for a website's store views. To the website's channel (else the global one).</comment>
+                <comment>Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
             </group>
             <group id="sales_emails" translate="label comment" sortOrder="100" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Sales emails (per website)</label>
+                <label>Sales emails</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). To the website's channel (else the global one).</comment>
+                <comment>Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). Reported per website; see Website channels.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -336,7 +336,7 @@
                 </field>
             </group>
             <group id="external" translate="label comment" sortOrder="110" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Server status (all websites)</label>
+                <label>Server status</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>What your servers report (containers, disk, services, ...): failing lines, and servers that stop reporting. More: README &gt; System status from your server.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">

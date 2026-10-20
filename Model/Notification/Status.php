@@ -69,10 +69,14 @@ class Status implements NotificationTypeInterface
             $rows = $this->store->load(['checks', Fingerprints::KEY, Fingerprints::ERRORS_KEY, self::POSTED_KEY]);
             $problems = [];
             $warnings = [];
+            $idle = [];
             foreach ((array)($rows['checks'] ?? []) as $checks) {
                 foreach ((array)$checks as $code => $check) {
                     $status = $check['status'] ?? CheckResult::OK;
-                    if ($status === CheckResult::FAIL) {
+                    if (!empty($check['idle'])) {
+                        $idle[(string)$code] ??= [$this->pool->getLabel((string)$code),
+                            (string)($check['detail'] ?? '')];
+                    } elseif ($status === CheckResult::FAIL) {
                         $problems[(string)$code] = $this->pool->getLabel((string)$code);
                     } elseif ($status === CheckResult::WARN) {
                         $warnings[(string)$code] ??= [$this->pool->getLabel((string)$code),
@@ -104,7 +108,7 @@ class Status implements NotificationTypeInterface
                 isset($mine['at']) ? (int)$mine['at'] : null, isset($mine['ok_at']) ? (int)$mine['ok_at'] : null);
             $post = $this->policy->shouldPost($report);
             $text = $this->messages->status($target, array_values($problems), array_values($warnings), $errorCount,
-                $errors, count($byFingerprint) - count($errors));
+                $errors, count($byFingerprint) - count($errors), array_values($idle));
             return [$text, function () use ($post, $report, $posted, $mine, $now, $target): void {
                 if ($post) {
                     $posted[$target->websiteId] = ['at' => $now] + ($report->isAllOk() ? ['ok_at' => $now] : $mine);

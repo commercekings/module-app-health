@@ -25,7 +25,8 @@ class MessagesTest extends TestCase
     protected function setUp(): void
     {
         $this->messages = new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
-            'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending'],
+            'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending',
+            'external' => 'Server status'],
             ['email_disabled' => 'Email sending', 'sales_emails' => 'Sales emails']), new Clock(self::NOW));
     }
 
@@ -209,6 +210,32 @@ class MessagesTest extends TestCase
             . "• Email sending (US Store): emails are disabled in 1 of 2 store views\n\n"
             . "*Email*\n• EU Store: 2 order emails not sent, oldest 09:12",
             $this->messages->summary($this->target(), $checks, [], self::NOW));
+    }
+
+    public function testTheDaysSecurityFindingsRightAfterNeedsAttention(): void
+    {
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n*Needs attention*\n• Cron: stopped\n\n"
+            . "*Security*\n• PCI: payment card number in system.log (1×, 09:44)\n\n*All OK*\n• Indexers",
+            $this->messages->summary($this->target(), ['cron' => ['status' => 'fail', 'detail' => 'stopped'],
+                'indexers' => ['status' => 'ok']], [], self::NOW, [],
+                ['PCI: payment card number in system.log (1×, {t:' . (self::NOW - 960) . '})']));
+    }
+
+    public function testAServersNewProblemIsAProblemNotAnError(): void
+    {
+        $this->assertStringStartsWith('*New problem in Server status · Main Website Store*',
+            $this->messages->notices($this->target(), 'external', ['Also failing: host-1 · Disk: 95 %']));
+    }
+
+    public function testAnIdleCheckIsNotOkAllDayAndTheStatusSaysWhy(): void
+    {
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n*All OK*\n• Indexers",
+            $this->messages->summary($this->target(), ['indexers' => ['status' => 'ok'],
+                'external' => ['status' => 'ok', 'idle' => true,
+                    'detail' => 'not set up (no status file from a server yet)']], [], self::NOW));
+        $this->assertSame("*Hourly status · Main Website Store*\n\nAll checks OK\n"
+            . 'Server status: not set up (no status file from a server yet)', $this->messages->status($this->target(),
+                [], [], 0, [], 0, [['Server status', 'not set up (no status file from a server yet)']]));
     }
 
     public function testTestMessagesSayWhatTheChannelGets(): void

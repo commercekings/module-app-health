@@ -27,6 +27,8 @@ class Messages
     private const LOGS = ['system_log', 'exceptions'];
     /** A check's notices with a title of their own (the high alert for sensitive data in logs). */
     private const NOTICE_TITLES = ['sensitive_data' => 'Security: sensitive data in logs'];
+    /** What a check's notices are, in "New <noun> in <label>" (else "error"): a server's line is a problem. */
+    private const NOTICE_NOUNS = ['external' => 'problem'];
     /** Notices shown per message (folded ones can add up), then "…and N more". */
     private const NOTICES = 10;
     /** Causes shown per alert. */
@@ -104,8 +106,9 @@ class Messages
                 $facts[] = '…and ' . $extra . ' more (see the daily summary)';
             }
         }
+        $noun = self::NOTICE_NOUNS[$code] ?? 'error';
         $title = self::NOTICE_TITLES[$code]
-            ?? 'New ' . ($errors > 1 ? 'errors' : 'error') . ' in ' . $this->pool->getLabel($code);
+            ?? 'New ' . $noun . ($errors > 1 ? 's' : '') . ' in ' . $this->pool->getLabel($code);
         $several = array_filter($facts, fn (string $fact) => str_contains($fact, "\n")) !== [];
         return $this->block('*' . $title . ' · ' . $this->where($target) . '*',
             $facts !== [] ? [implode($several ? "\n\n" : "\n", $facts)] : [],
@@ -118,14 +121,19 @@ class Messages
      * @param array<string, array<mixed>> $checks the shop-wide checks and the website's own (the "checks" row)
      * @param array<int|string, array<mixed>> $tallies the day's hours: code => ['w' => worst rank, 'c' => counts]
      * @param array<string, array<mixed>> $fingerprints the "fingerprints" row
+     * @param string[] $security the day's sensitive-data findings, one line each (the global summary)
      */
-    public function summary(Target $target, array $checks, array $tallies, int $now, array $fingerprints = []): string
+    public function summary(Target $target, array $checks, array $tallies, int $now, array $fingerprints = [],
+        array $security = []): string
     {
         [$worst, $counts] = $this->sum($tallies);
         $problems = [];
         $hadProblems = [];
         $okAllDay = [];
         foreach ($checks as $code => $check) {
+            if (!empty($check['idle'])) {
+                continue; // nothing to check yet (e.g. no server has reported): not "OK all day"
+            }
             $label = $this->label((string)$code);
             $status = (string)($check['status'] ?? CheckResult::OK);
             if ($status !== CheckResult::OK) {
@@ -141,6 +149,7 @@ class Messages
         }
         $sections = [
             $this->section('*Needs attention*', array_merge($problems, $hadProblems)),
+            $this->section('*Security*', array_map(fn (string $line) => $this->times($target, $line), $security)),
             $this->section('*Errors, last 24 h*', $this->logs($target, $counts, $fingerprints, $now)),
             $this->section('*Email*', $this->email($target, $checks, $counts)),
             $this->section('*All OK*', $okAllDay !== [] ? [implode(', ', $okAllDay)] : []),
@@ -156,15 +165,19 @@ class Messages
      * @param string[] $problems the labels of the checks failing
      * @param list<array{0: string, 1: string}> $warnings the label and detail of the checks warning
      * @param list<array{0: string, 1: int, 2: bool}> $errors label, count, first seen since the last status
+     * @param list<array{0: string, 1: string}> $idle the label and detail of the checks with nothing to check yet
      */
     public function status(Target $target, array $problems, array $warnings, int $errorCount, array $errors,
-        int $moreErrors): string
+        int $moreErrors, array $idle = []): string
     {
         $text = '*Hourly status · ' . $this->where($target) . "*\n\n" . match (true) {
             $problems !== [] => Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems),
             $warnings !== [] => 'No problems',
             default => 'All checks OK',
         };
+        foreach ($idle as [$label, $detail]) {
+            $text .= "\n" . $label . ': ' . CheckResult::clean($detail, 80); // "Server status: not set up (...)"
+        }
         if ($warnings !== []) {
             $text .= "\nWarnings: " . implode(', ', array_map(function (array $warning) use ($target): string {
                 $detail = CheckResult::clean($this->times($target, $warning[1]), 60);

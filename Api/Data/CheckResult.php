@@ -20,6 +20,9 @@ namespace CommerceKings\AppHealth\Api\Data;
  * Notices are one-off news (e.g. "NEW ERROR ..."), told once with the next alert - not a status, so no "recovered"
  * follows. Each is one line of at most NOTICE_LENGTH characters, cleaned like the detail.
  *
+ * Idle (idle()): OK, but with nothing to check yet (e.g. no server has reported) - left out of "All OK" and the
+ * summary's lists; the hourly status shows its detail instead ("Server status: not set up ...").
+ *
  * @api
  */
 class CheckResult
@@ -55,6 +58,7 @@ class CheckResult
      * @param string[] $notices each of one or more lines
      * @param array<string, int> $gauges
      * @param Cause[] $causes
+     * @param bool $idle OK with nothing to check yet (see idle())
      * @throws \InvalidArgumentException for an unknown status, a count key that is not a name or a negative count
      */
     public function __construct(
@@ -64,7 +68,8 @@ class CheckResult
         array $notices = [],
         string $title = '',
         array $gauges = [],
-        array $causes = []
+        array $causes = [],
+        public readonly bool $idle = false
     ) {
         if (!in_array($status, [self::OK, self::WARN, self::FAIL], true)) {
             throw new \InvalidArgumentException(sprintf('Unknown check status "%s".', $status));
@@ -92,7 +97,13 @@ class CheckResult
     public function withCauses(array $causes): self
     {
         return new self($this->status, $this->detail, $this->counts, $this->notices, $this->title, $this->gauges,
-            $causes);
+            $causes, $this->idle);
+    }
+
+    /** OK with nothing to check yet: $detail says why, e.g. "not set up (no status file from a server yet)". */
+    public static function idle(string $detail): self
+    {
+        return new self(self::OK, $detail, [], [], '', [], [], true);
     }
 
     /**
@@ -112,10 +123,12 @@ class CheckResult
             $causes[0] = new Cause($first->code, $first->detail, $hint);
         }
         $notices = $this->notices;
-        if ($notices !== [] && array_filter($notices, fn (string $notice) => str_starts_with($notice, 'Check: ')) === []) {
+        if ($notices !== []
+            && array_filter($notices, fn (string $notice) => str_starts_with($notice, 'Check: ')) === []) {
             $notices[] = 'Check: ' . $hint;
         }
-        return new self($this->status, $this->detail, $this->counts, $notices, $this->title, $this->gauges, $causes);
+        return new self($this->status, $this->detail, $this->counts, $notices, $this->title, $this->gauges, $causes,
+            $this->idle);
     }
 
     /** @param array<string, int> $counts */

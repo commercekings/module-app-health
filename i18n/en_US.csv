@@ -31,7 +31,7 @@ Alerts,Alerts
 "Are the consumers running (cron_consumers_runner or supervisor)? bin/magento queue:consumers:list","Are the consumers running (cron_consumers_runner or supervisor)? bin/magento queue:consumers:list"
 "Asynchronous sending is on: is the sales_send_order_emails cron running? Then the mail server (see Sending).","Asynchronous sending is on: is the sales_send_order_emails cron running? Then the mail server (see Sending)."
 "At least (per entry)","At least (per entry)"
-"Caches (all websites)","Caches (all websites)"
+Caches,Caches
 "Card numbers, secrets and personal data written into logs: a security alert at once, to the global channel only, never the value. More: README > Sensitive data in logs.","Card numbers, secrets and personal data written into logs: a security alert at once, to the global channel only, never the value. More: README > Sensitive data in logs."
 Channel,Channel
 "Channel (e.g. slack)","Channel (e.g. slack)"
@@ -39,7 +39,7 @@ Channel,Channel
 "Checks Magento every 5 minutes and tells you on a change: a problem, then ""Resolved"". An hourly status proves that alerts can go out.","Checks Magento every 5 minutes and tells you on a change: a problem, then ""Resolved"". An hourly status proves that alerts can go out."
 Code,Code
 "CommerceKings App health","CommerceKings App health"
-"Cron (all websites)","Cron (all websites)"
+Cron,Cron
 "Cron reindexes: see the Cron check, and that the index cron group runs.","Cron reindexes: see the Cron check, and that the index cron group runs."
 "Cron runs too rarely or a run takes too long: schedule cron every minute and check how long bin/magento cron:run takes.","Cron runs too rarely or a run takes too long: schedule cron every minute and check how long bin/magento cron:run takes."
 "Cron starts the consumers: see the Cron check.","Cron starts the consumers: see the Cron check."
@@ -55,12 +55,12 @@ Code,Code
 "Default: 60.","Default: 60."
 "Default: 60; 15 to 180.","Default: 60; 15 to 180."
 "Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.","Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable."
-"Disable Email Communications set to Yes for a website's store views. To the website's channel (else the global one).","Disable Email Communications set to Yes for a website's store views. To the website's channel (else the global one)."
+"Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.","Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels."
 "ERROR and above. Default: 20.","ERROR and above. Default: 20."
-"Email sending (per website)","Email sending (per website)"
+"Email sending","Email sending"
 Enabled,Enabled
 "Enter one log file only (e.g. system.log); more files go in *Extra log files*.","Enter one log file only (e.g. system.log); more files go in *Extra log files*."
-"Exceptions (all websites)","Exceptions (all websites)"
+Exceptions,Exceptions
 "Extra log files","Extra log files"
 "Failed in the last hour, e.g. cart reminders. Default: 3.","Failed in the last hour, e.g. cart reminders. Default: 3."
 "Fix the cause of the job's error (in cron_schedule.messages and var/log), or disable the job.","Fix the cause of the job's error (in cron_schedule.messages and var/log), or disable the job."
@@ -70,17 +70,18 @@ Enabled,Enabled
 "Hourly status every (minutes)","Hourly status every (minutes)"
 "If the deployment is done: bin/magento maintenance:disable. If it stopped halfway, finish it first.","If the deployment is done: bin/magento maintenance:disable. If it stopped halfway, finish it first."
 "In the default store's time zone; a website channel's summary in the website's.","In the default store's time zone; a website channel's summary in the website's."
-"Indexers (all websites)","Indexers (all websites)"
+Indexers,Indexers
 "Invalidated for over (minutes)","Invalidated for over (minutes)"
 "Is the consumer process running and finishing? bin/magento queue:consumers:start <name> by hand shows its errors.","Is the consumer process running and finishing? bin/magento queue:consumers:start <name> by hand shows its errors."
 "Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.","Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors."
 "Is the sales email cron running (async sending), and does the mail server accept mail?","Is the sales email cron running (async sending), and does the mail server accept mail?"
+"Is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?","Is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?"
 Label,Label
 "Log file","Log file"
-"Look at the server named above. No status at all: is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?","Look at the server named above. No status at all: is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?"
+"Look at the server named above.","Look at the server named above."
 "Mail counts as working again after (minutes)","Mail counts as working again after (minutes)"
 "Mail transport errors in the logs, and failing CommerceKings notifications.","Mail transport errors in the logs, and failing CommerceKings notifications."
-"Maintenance mode (all websites)","Maintenance mode (all websites)"
+"Maintenance mode","Maintenance mode"
 "Maintenance mode left on.","Maintenance mode left on."
 "Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker every run.","Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker every run."
 "More var/log files in the same format, one per line (e.g. payment.log), at most 5; never debug.log.","More var/log files in the same format, one per line (e.g. payment.log), at most 5; never debug.log."
@@ -101,25 +102,25 @@ Label,Label
 "One global summary, and one per website channel with that website's own items.","One global summary, and one per website channel with that website's own items."
 "Or growing for (minutes)","Or growing for (minutes)"
 "Pattern (e.g. /secret_[0-9]{8}/)","Pattern (e.g. /secret_[0-9]{8}/)"
-"Queues (all websites)","Queues (all websites)"
+Queues,Queues
 "Read at most (KB per run and file)","Read at most (KB per run and file)"
 "Read at most (KB per run)","Read at most (KB per run)"
 Recipient,Recipient
-"Recovered after (OK runs in a row)","Recovered after (OK runs in a row)"
 "Refresh it: System > Cache Management, or bin/magento cache:clean %1.","Refresh it: System > Cache Management, or bin/magento cache:clean %1."
 "Regex rules of your own, in a shipped rule set or a new one; checked on save. More: README > Sensitive data in logs.","Regex rules of your own, in a shipped rule set or a new one; checked on save. More: README > Sensitive data in logs."
 "Repeat a failing check after (hours)","Repeat a failing check after (hours)"
+"Resolved after (OK runs in a row)","Resolved after (OK runs in a row)"
 "Rule set","Rule set"
 "Rule set or rule","Rule set or rule"
 "Rule settings","Rule settings"
 "Run the consumers under supervisor (bin/magento queue:consumers:start <name>), or turn cron_run on.","Run the consumers under supervisor (bin/magento queue:consumers:start <name>), or turn cron_run on."
-"Sales emails (per website)","Sales emails (per website)"
-"Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). To the website's channel (else the global one).","Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). To the website's channel (else the global one)."
+"Sales emails","Sales emails"
+"Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). Reported per website; see Website channels.","Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). Reported per website; see Website channels."
 "Send test alert","Send test alert"
-"Sending (all websites)","Sending (all websites)"
+Sending,Sending
 "Sends one message now to the saved global channel and recipient. Save first.","Sends one message now to the saved global channel and recipient. Save first."
-"Sensitive data in logs (all websites)","Sensitive data in logs (all websites)"
-"Server status (all websites)","Server status (all websites)"
+"Sensitive data in logs","Sensitive data in logs"
+"Server status","Server status"
 "Set a channel and a recipient, save the configuration, then try again.","Set a channel and a recipient, save the configuration, then try again."
 Severity,Severity
 "Severity (critical / warning)","Severity (critical / warning)"
@@ -131,7 +132,7 @@ Severity,Severity
 "Stores > Configuration > Advanced > System > Mail Sending Settings: set it to No in that scope (or remove it from env.php).","Stores > Configuration > Advanced > System > Mail Sending Settings: set it to No in that scope (or remove it from env.php)."
 "System > Cache Management: enable the cache types, or refresh the invalidated ones.","System > Cache Management: enable the cache types, or refresh the invalidated ones."
 "System > Cache Management: enable them (bin/magento cache:enable %1).","System > Cache Management: enable them (bin/magento cache:enable %1)."
-"System log (all websites)","System log (all websites)"
+"System log","System log"
 Test,Test
 "The mail server or the email provider's settings; the class in var/log/exception.log.","The mail server or the email provider's settings; the class in var/log/exception.log."
 "The pattern of rule ""%1"" is refused: %2.","The pattern of rule ""%1"" is refused: %2."

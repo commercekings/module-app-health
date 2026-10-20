@@ -9,6 +9,7 @@ use CommerceKings\AppHealth\Model\Notification\Alert;
 use CommerceKings\AppHealth\Model\Notification\Summary;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\SummarySchedule;
+use CommerceKings\AppHealth\Model\Check\SensitiveData;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
@@ -22,6 +23,7 @@ class AlertAndSummaryTest extends TestCase
 {
     use Pool;
     use Settings;
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Sensitive;
 
     private const NOW = 1792483200; // 08:00 UTC
 
@@ -135,7 +137,7 @@ class AlertAndSummaryTest extends TestCase
             2 => new Target(2, 2, 'slack', 'C2', 'US Store', 'UTC')]);
         $target = $scope === 0 ? new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC') : $targets->websites()[$scope];
         (new Summary($this->teamMessage($target, $row), $this->store, $this->messages(), $config,
-            new SummarySchedule($config), new Clock(self::NOW), $targets))->process((string)$scope);
+            new SummarySchedule($config), new Clock(self::NOW), $targets, $this->detector()))->process((string)$scope);
     }
 
     public function testTheGlobalSummaryHasTheSharedChecksAndWebsitesWithoutAChannelNamed(): void
@@ -147,6 +149,26 @@ class AlertAndSummaryTest extends TestCase
             'website 2 has a channel of its own: not here');
         $this->assertStringEndsWith("\n\n*All OK*\n• Caches, email sending (EU Store)", $this->sent[0],
             'the tally of 25 hours ago is left out');
+    }
+
+    public function testTheGlobalSummaryListsTheDaysSecurityFindings(): void
+    {
+        $this->store->seed([SensitiveData::KEY => [
+            'pci/card_number|aaaaaaaa' => ['first' => 1, 'last' => self::NOW - 900, 'count' => 9, 'told' => 1,
+                'source' => 'system.log'],
+            'pci/card_number|bbbbbbbb' => ['first' => 1, 'last' => self::NOW - 600, 'count' => 1, 'told' => 1,
+                'source' => 'payment.log'],
+            'personal/iban|cccccccc' => ['first' => 1, 'last' => self::NOW - 30 * 3600, 'count' => 1, 'told' => 1,
+                'source' => 'system.log']],
+            'tally:' . gmdate('YmdH', self::NOW - 3600) => [0 => ['cron' => ['w' => 2, 'c' => ['runs' => 10]],
+                'sensitive_data' => ['w' => 0, 'c' => ['found' => 3, 'found:pci.card_number' => 3]]],
+                2 => ['email_disabled' => ['w' => 2, 'c' => []]]]]);
+        $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
+        $this->assertStringContainsString("\n\n*Security*\n• PCI: payment card number in payment.log (3×, 07:50)\n\n",
+            $this->sent[0], 'the day\'s count, the latest time and where; the IBAN of yesterday not');
+        $this->sent = [];
+        $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00'], [], 2);
+        $this->assertStringNotContainsString('Security', $this->sent[0], 'global only');
     }
 
     public function testAWebsiteChannelsSummaryHasOnlyItsOwnChecks(): void

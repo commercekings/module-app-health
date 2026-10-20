@@ -48,8 +48,7 @@ class External implements CheckInterface
         /** What to do, for a problem without a hint of its own. */
     private function hint(): string
     {
-        return (string)__('Look at the server named above. No status at all: is the status script still scheduled'
-            . ' on the server (cron or systemd timer), and can it write var/app-health?');
+        return (string)__('Look at the server named above.');
     }
 
     public function getLabel(): string
@@ -93,8 +92,8 @@ class External implements CheckInterface
             }
         }
         if ($read['more'] > 0) {
-            $invalid['var/app-health/!'] = new Cause('external_too_many', sprintf('%d more status files left out (at most %d)',
-                $read['more'], StatusFiles::MAX_FILES));
+            $invalid['var/app-health/!'] = new Cause('external_too_many', sprintf('%d more status files left out'
+                . ' (at most %d)', $read['more'], StatusFiles::MAX_FILES));
             $refused['var/app-health/!'] = sprintf('%d status files over %d', $read['more'], StatusFiles::MAX_FILES);
         }
 
@@ -115,7 +114,9 @@ class External implements CheckInterface
             $servers++;
             if ($generatedAt <= $now - $staleAfter || !isset($present[$source])) {
                 $failing[$source . '/'] = new Cause('external_stale', 'No status from ' . $source . ' since '
-                    . Format::at($generatedAt) . (isset($present[$source]) ? '' : ' (its status file is gone)'));
+                    . Format::at($generatedAt) . (isset($present[$source]) ? '' : ' (its status file is gone)'),
+                    (string)__('Is the status script still scheduled on the server (cron or systemd timer), and can'
+                        . ' it write var/app-health?'));
                 $titles[$source . '/'] = 'No status from ' . $source;
                 continue;
             }
@@ -126,7 +127,8 @@ class External implements CheckInterface
                     continue;
                 }
                 $key = $source . '/' . $line['code'];
-                $cause = new Cause((string)$line['code'], $source . ' · ' . self::describe($line, true));
+                $cause = new Cause((string)$line['code'], $source . ' · ' . self::describe($line, true),
+                    (string)__('Look at the server named above.'));
                 $titles[$key] = $source . ' · ' . self::describe($line, false);
                 if ($status === CheckResult::FAIL) {
                     $failing[$key] = $cause;
@@ -197,8 +199,8 @@ class External implements CheckInterface
             $this->state->set(self::CURSOR, $next);
         }
         if ($status === CheckResult::OK) {
-            return $servers === 0 ? CheckResult::ok() : CheckResult::ok(sprintf('%d OK from %d %s', $ok, $servers,
-                $servers === 1 ? 'server' : 'servers'));
+            return $servers === 0 ? CheckResult::idle('not set up (no status file from a server yet)')
+                : CheckResult::ok(sprintf('%d OK from %d %s', $ok, $servers, $servers === 1 ? 'server' : 'servers'));
         }
         // the title names what the status is about: the problems when there are any, else the warnings
         $named = $status === CheckResult::FAIL ? $failing : $warning;

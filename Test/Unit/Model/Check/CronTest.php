@@ -85,15 +85,17 @@ class CronTest extends TestCase
 
     public function testCronNotStartedAtAll(): void
     {
-        $result = $this->check([], [[]], [$this->ago(12 * 60), '0', '0'], self::NOW - 300);
+        $result = $this->check([], [[]], [$this->ago(30 * 60), '0', '0'], self::NOW - 300);
         $this->assertSame([CheckResult::FAIL, 'Cron stopped'], [$result->status, $result->title]);
-        $this->assertSame('no job has run since {t:' . (self::NOW - 12 * 60) . '} (12 min)', $result->detail,
+        $this->assertSame('no job has run since {t:' . (self::NOW - 30 * 60) . '} (30 min)', $result->detail,
             'the last job\'s time, shown in each recipient\'s time zone');
         $this->assertSame(['cron_not_started'], $this->causes($result));
-        $this->assertSame('nothing has been scheduled for 10 min: cron is not started', $result->causes[0]->detail);
+        $this->assertSame('nothing scheduled or run since {t:' . (self::NOW - 30 * 60) . '} (30 min): cron is not'
+            . ' started', $result->causes[0]->detail, 'the real gap, not the 10-minute threshold');
         $this->assertStringContainsString('bin/magento cron:install', $result->causes[0]->hint);
         $none = $this->check([], [[]], [null, '0', '0'], self::NOW - 300);
         $this->assertSame('no job has run for over 65 min', $none->detail);
+        $this->assertSame('nothing scheduled or run for over 65 min: cron is not started', $none->causes[0]->detail);
     }
 
     public function testScheduledButNotStarted(): void

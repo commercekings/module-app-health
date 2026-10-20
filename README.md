@@ -198,7 +198,7 @@ delivery state rows of the types `app_health_*` in `ck_notification_delivery_sta
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Recovered after (2 OK runs in a row); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
@@ -484,8 +484,9 @@ Always masked, in the label and the message, as `***`:
   connections, not others (e.g. ActiveMQ).
 - Server status is one check for all servers: a line failing while another already fails is told once ("Also
   failing: …"); an alert names the first 4. At most 20 servers, 50 lines each; needs a script run by the server
-  (not possible on managed hosting without access to it). While no server reports, *Server status* counts as OK in
-  the daily summary.
+  (not possible on managed hosting without access to it). While no server reports, *Server status* is left out of
+  the daily summary's lists, and the hourly status says "Server status: not set up (no status file from a server
+  yet)".
 - Messages are in English.
 
 ## Tested (as of 0.1.0)

@@ -118,8 +118,11 @@ class Cron implements CheckInterface
                 : sprintf('no job has run since %s (%s)', Format::at($lastActivity),
                     Format::duration($now - $lastActivity));
             $causes[] = $this->scheduledSince($others, $now - self::NOT_STARTED_SECONDS) === 0
-                ? new Cause('cron_not_started', sprintf('nothing has been scheduled for %s: cron is not started',
-                    Format::duration(self::NOT_STARTED_SECONDS)), (string)__('Start the cron container, or install'
+                ? new Cause('cron_not_started', ($lastActivity === null
+                    ? sprintf('nothing scheduled or run for over %s', Format::duration($window))
+                    : sprintf('nothing scheduled or run since %s (%s)', Format::at($lastActivity),
+                        Format::duration($now - $lastActivity))) . ': cron is not started',
+                    (string)__('Start the cron container, or install'
                     . ' Magento\'s crontab (bin/magento cron:install).'))
                 : new Cause('cron_not_running', 'jobs are scheduled but none has started', (string)__('cron:run may'
                     . ' fail as it starts: run bin/magento cron:run by hand and read its output.'));

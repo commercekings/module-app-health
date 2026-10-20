@@ -39,6 +39,15 @@ class CheckResultTest extends TestCase
         $this->assertStringEndsWith('y…', $long);
     }
 
+    public function testIdleIsOkWithNothingToCheckAndSurvivesHintsAndCauses(): void
+    {
+        $idle = CheckResult::idle('not set up (no status file from a server yet)');
+        $this->assertSame([CheckResult::OK, true], [$idle->status, $idle->idle]);
+        $this->assertTrue($idle->withHint('Install the script.')->idle);
+        $this->assertTrue($idle->withCauses([])->idle);
+        $this->assertFalse(CheckResult::ok()->idle);
+    }
+
     public function testCountsAreNamesWithWholeNumbers(): void
     {
         $counts = ['runs' => 3, 'errors:sitemap_generate' => 1, 'exceptions:Magento\\Framework\\Exception\\X' => 2,

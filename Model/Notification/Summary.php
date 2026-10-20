@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Notification;
 
 use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Check\SensitiveData;
+use CommerceKings\AppHealth\Model\Format;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
+use CommerceKings\AppHealth\Model\Sensitive\Detector;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Model\SummarySchedule;
@@ -30,7 +33,8 @@ class Summary implements NotificationTypeInterface
         private readonly Config $config,
         private readonly SummarySchedule $schedule,
         private readonly DateTime $dateTime,
-        private readonly Targets $targets
+        private readonly Targets $targets,
+        private readonly Detector $detector
     ) {
     }
 
@@ -53,11 +57,52 @@ class Summary implements NotificationTypeInterface
                     $tallies[] = $this->named($tally, $scopes);
                 }
             }
-            $rows = $this->store->load(['checks', Fingerprints::KEY]);
+            $rows = $this->store->load(['checks', Fingerprints::KEY, SensitiveData::KEY]);
             $checks = $this->named((array)($rows['checks'] ?? []), $scopes);
-            return [$this->messages->summary($target, $checks, $tallies, $now, $rows[Fingerprints::KEY] ?? []),
+            $security = $target->isShopWide()
+                ? $this->security($tallies, (array)($rows[SensitiveData::KEY] ?? []), $now) : [];
+            return [$this->messages->summary($target, $checks, $tallies, $now, $rows[Fingerprints::KEY] ?? [],
+                $security),
                 fn () => null];
         });
+    }
+
+    /**
+     * The day's sensitive-data findings, a line per rule (the latest first): "PCI: payment card number in system.log
+     * (3×, {t:...})" - the day's count from the tallies, where and when from the "sensitive" row; never a value.
+     *
+     * @param list<array<string, mixed>> $tallies the day's hours, named
+     * @param array<string, array<mixed>> $known the "sensitive" row: "<set>/<rule>|<fingerprint>" => last, source, ...
+     * @return string[]
+     */
+    private function security(array $tallies, array $known, int $now): array
+    {
+        $counts = [];
+        foreach ($tallies as $hour) {
+            foreach ((array)($hour[SensitiveData::CODE]['c'] ?? []) as $key => $count) {
+                if (str_starts_with((string)$key, 'found:')) {
+                    $rule = str_replace('.', '/', substr((string)$key, 6));
+                    $counts[$rule] = ($counts[$rule] ?? 0) + (int)$count;
+                }
+            }
+        }
+        $rules = $this->detector->rules();
+        $latest = [];
+        foreach ($known as $key => $finding) {
+            $rule = (string)strstr((string)$key, '|', true);
+            if (($counts[$rule] ?? 0) > 0 && isset($rules[$rule]) && (int)($finding['last'] ?? 0) > $now - 86400
+                && (int)$finding['last'] > (int)($latest[$rule]['last'] ?? 0)) {
+                $latest[$rule] = $finding;
+            }
+        }
+        uasort($latest, fn ($a, $b) => (int)$b['last'] <=> (int)$a['last']);
+        $lines = [];
+        foreach ($latest as $rule => $finding) {
+            $lines[] = $rules[$rule]['setLabel'] . ': ' . $rules[$rule]['label']
+                . (!empty($finding['source']) ? ' in ' . $finding['source'] : '') . ' ('
+                . Format::number($counts[$rule]) . '×, ' . Format::at((int)$finding['last']) . ')';
+        }
+        return $lines;
     }
 
     /**
