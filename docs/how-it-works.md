@@ -7,8 +7,9 @@ Health checks and team alerts in `commercekings/module-app-health`. Start with t
 ```
  CRON (every 5 min)     Runner: the checks within a 5 s budget, the "checks" row, alerts queued on news, heartbeat
  CRON (every 15 min)    QueueSummaries: the global daily summary and each website channel's, once its time has passed
- QUEUE (Notification)   Alert, Summary: compose on fresh state, send once, record what the team was told
- ADMIN                  App health settings, "Send test alert"
+ QUEUE (Notification)   Alert, Summary, Status: compose on fresh state, send once, record what the team was told
+ ADMIN                  settings, "Send test alert", "Send status now", Shop domain and "Use <domain>", the system
+                        messages for a copy of the shop and an overdue hourly status
  SERVER (every minute)  host-status.sh (not Magento): var/app-health/status-<server>.json, read by the 5-min run
 ```
 
@@ -16,22 +17,29 @@ Nothing runs on the storefront: no plugins, observers, layout or frontend routes
 
 ## A run
 
-1. Nothing happens while alerts are off everywhere and no heartbeat is set (a few configuration reads).
-2. `Model\RunState` reads the module's state once (about 10 rows of Magento's `flag` table, one query).
+1. Nothing happens while App health is off and no heartbeat is set (a few configuration reads), or on a copy of the
+   shop (`Model\SiteDomain`: see [Copies of the shop](#copies-of-the-shop)).
+2. `Model\RunState` reads the module's state once (about a dozen rows of Magento's `flag` table, one query).
 3. The enabled checks run in `Model\CheckPool`'s order, each once, asked about all websites
    (`Api\CheckInterface::run($websiteIds)`): a check of the whole shop answers for scope 0, a check per website for
    each website (one left out counts as "could not run"). A check that would start after
-   `Runner::BUDGET_SECONDS` (5 s) is skipped and keeps its last result; one that throws becomes a warning ("could not
+   `Runner::BUDGET_SECONDS` (5 s) is skipped, keeps its last result and goes first next run (`skipped`); one that throws becomes a warning ("could not
    run") and only its exception class is logged.
 4. Each result goes to the `checks` row by scope (0 = the shared checks, else the website id) and code, with the time
    its status last changed and its run time in ms; its worst status and counts to the hour's `tally:<YmdH>` row. One
    write.
 5. For each scope (0, and every website), `Model\AlertPlan` compares the results with what that team was last told
-   (`alerted:<scope>`): a status other than the one told is news (a problem, or "recovered"), and so is a fail told
+   (`alerted:<scope>`): a status other than the one told is news (a problem, or *Resolved*), and so is a fail told
    longer ago than *Repeat a failing check after*. A check never told counts as told ok. News queues one
    `app_health_alert` for the scope.
-6. A complete run (every check ran, nothing failed to queue) pings the heartbeat URL: one GET, 2 s to connect, 5 s in
-   all, never retried; a failure is logged without the URL.
+6. A finished run pings the heartbeat URL – also a degraded one (a check threw or was skipped) – unless an alert
+   could not be queued, a message is failing to go out (`TeamMessage::isFailing()`), App health is on with no channel
+   or recipient, or the hourly status has been due for `Runner::STATUS_GRACE_MINUTES` (10) and is not out. One GET,
+   2 s to connect, 5 s in all, never retried; a failure is logged without the URL.
+
+*Send status now* (`Model\StatusNow`) runs the same checks as a snapshot (`run(snapshot: true)`): nothing is stored,
+queued or pinged; the result is posted at once to the global recipient as "Status now", at most every 30 s
+(`status_now`), never on a copy.
 
 Typical cost: two queries for the state, one to three per check that reads the database, no cache writes.
 
@@ -53,9 +61,10 @@ the scope):
   again after the wait. A recipient the channel rejects is logged as a setting to fix. A message that may have gone out
   (`MessageSentException`) is never sent again.
 
-**Pace:** a check going to FAIL is sent at once, and its "resolved" at its first OK run – for the checks that count in a
-time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing) only after *Recovered after* OK
-runs in a row (the `runs` in the checks row). A WARN is not sent at once: the hourly status and the daily summary list
+**Pace:** a check going to FAIL is sent at once, and its *Resolved* at its first OK run – for the checks that count in
+a time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing, external) only after
+*Resolved after* OK runs in a row (the `runs` in the checks row). A FAIL back within 30 minutes of its *Resolved*
+waits until then (no flapping). A WARN is not sent at once: the hourly status and the daily summary list
 it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions, sensitive data – at most
 once per *New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10
 shown). ERROR log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`,
@@ -65,8 +74,9 @@ and the hourly status lists them. WARNING entries only count, for the daily summ
 state (one query); once its interval (`Api\StatusPolicyInterface::getIntervalMinutes()`, kept within 15 to 180 minutes)
 has passed since the last delivery, every run queues it until it is delivered. Its text: "All checks OK" or the checks
 failing in every scope, the warnings, then "New errors this hour" since the last status. The consumer builds an
-`Api\Data\StatusReport` and asks the policy (`Model\Status\DefaultPolicy`: posted with problems, warnings or errors, and
-"All checks OK" once a day from the summary time): posted, or delivered quietly – claimed and recorded as sent
+`Api\Data\StatusReport` and asks the policy (`Model\Status\DefaultPolicy`: posted with news since the last posted
+status – a new problem or warning, a new error, a known one 10+ times – and "All checks OK" once a day from the summary
+time; while a message is failing to go out, always posted): posted, or delivered quietly – claimed and recorded as sent
 (`sent_at`) without calling the provider. With the hourly status on, the heartbeat is pinged unless the status has been
 due for `Runner::STATUS_GRACE_MINUTES` and is still not delivered (the `status` row keeps since when it is due). A quiet
 delivery proves the queue and its consumer, not the channel: the posted statuses and the alerts do.
@@ -75,7 +85,10 @@ delivery proves the queue and its consumer, not the channel: the posted statuses
 findings, the hourly status, the global summary – goes to the global channel and recipient; a website's own checks
 (scope = its id) to its *Website channels* row, else to the global channel (`Target::$ownChannel` false; its lines name
 the website). With *Also post shared problems to website channels*, a website with a channel of its own also gets the
-shared checks' alerts (`AlertPlan::scopeChecks()`; never `GLOBAL_ONLY`: security findings).
+shared checks' alerts (`AlertPlan::scopeChecks()`; never `GLOBAL_ONLY`: security findings). A *Website channels* row
+is checked on save: a website once, a channel and a recipient each, the recipient as the channel's normalizer takes it.
+A website's messages go from its default store view, so Slack posts them with that website's bot token: its recipient
+must be a channel in that token's workspace.
 
 The daily summary covers the last 24 hourly tallies: the global one (scope 0) the shared checks and the own checks of
 each website without a channel of its own, named ("Email communications disabled (EU Store)", the code "email_disabled@EU Store"); a
@@ -94,7 +107,7 @@ hours later, once a day.
 | `system_log` | new bytes of `var/log/system.log` (and the extra files, and other modules' sources) | *Read at most* (1 MB) per source; only WARNING and above are parsed |
 | `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); of a larger backlog the newest 1 MB (from its first whole line), the count marked "at least" and the size not read in the detail; rotation starts the new file from its beginning |
 | `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other; on MariaDB 11.8 with 200,000 completed rows each part is a range on `(status, updated_at)`, ~50 rows); no message is read or consumed |
-| `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
+| `email_failing` | mail transport classes among the new exception entries and mail errors in system.log ("Transport error while sending email", "Unable to send mail"); failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
 | `email_disabled` | `system/smtp/disable` per store view | configuration only |
 | `external` | `var/app-health/status-*.json` (written by a script on the server); creates the folder and `status.json.dist` when missing | at most 20 files of 32 KB, each validated only when its hash changed; no query |
 | `sales_emails` | orders (not cancelled or closed), invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |
@@ -117,8 +130,11 @@ message.
   the least recently seen dropped first (and remembered for a day in `fingerprints:recent`). A CRITICAL entry never
   seen before is a notice; for `system_log` a CRITICAL one is told again after the repeat interval. ERROR entries go
   to the hourly status (`errors:recent`), WARNING entries to the daily summary.
+- **The first hour** after install (`fingerprints:learning`): new CRITICAL entries are counted, not told one by one,
+  then one digest ("First hour: N errors seen for the first time: …", or "First hour over: no error seen …"); one
+  coming 10 times in the hour is told at once.
 - **Notices** are one-off news: kept in `notices:<scope>` (30, for 24 hours) and told once (`noticed:<scope>`), in one
-  message per check – no "recovered" follows.
+  message per check – no *Resolved* follows.
 
 ### Adding a log source
 
@@ -193,8 +209,9 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 ## State
 
 No table of its own: Magento's core `flag` table, rows `commercekings_app_health_<group>` with the keys as JSON
-(`flag_data`, MEDIUMTEXT). The keys are grouped into about 10 rows – `cursors` (every `cursor:*`), `told` (`alerted:*`,
-`noticed:*`), `notices`, `tallies`, `status` (`status`, `status:posted`); every other key a row of its own. A write
+(`flag_data`, MEDIUMTEXT). The keys are grouped into about a dozen rows – `cursors` (every `cursor:*`), `told`
+(`alerted:*`, `noticed:*`), `notices`, `tallies`, `status` (`status`, `status:posted`, `status_now`); every other key a
+row of its own. A write
 changes only its keys: SELECT … FOR UPDATE, then one UPDATE (an INSERT for a new row), in one transaction – the run and
 the consumer write different keys of a row without undoing each other. Keys:
 
@@ -208,10 +225,25 @@ the consumer write different keys of a row without undoing each other. Keys:
 | `errors:recent` | ERROR entries per run and error: time, fingerprint, count, new (3 hours, at most 500) – for the hourly status |
 | `status` | since when the hourly status is due and not yet delivered |
 | `status:posted` | per scope, when a status was last posted, and last posted as "All checks OK" |
+| `status_now` | when *Send status now* last posted (at most every 30 s) |
+| `skipped` | the checks the time budget left out last run: they go first next time |
+| `fingerprints:learning` | the first hour after install: until when, and the new errors counted for its digest |
 | `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
 | `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW critical errors) waiting for the next alert, and the last told per check (id and time) |
 | `external` | each server's last good status from `var/app-health/status-<source>.json` (source => generated_at, its lines – code, label, status, value, unit, masked detail, a container's metrics – the file's hash, read_at); at most 20, written only when a file changed |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
 To start over (e.g. in a test), delete the `flag` rows whose `flag_code` starts with `commercekings_app_health_` and
-the delivery state rows of the types `app_health_alert`, `app_health_summary` and `app_health_status`.
+the delivery state rows of the types `app_health_alert`, `app_health_summary`, `app_health_status` and
+`app_health_status_now`.
+
+## Copies of the shop
+
+`Model\SiteDomain` keeps the shop's domain (`commercekings_app_health/general/domain`, the default store view's secure
+base URL host): stored when App health is switched on in the admin, or – switched on without it (`bin/magento
+config:set`, `env.php` or `config.php`) – by its first run. While the current domain differs, nothing runs, no
+heartbeat is pinged, the consumer drops the queued messages, and the admin shows a system message with *Use <domain>*.
+With `app:config:dump` or a `config.php` you deploy, include production's domain (or let the first run store it): a
+staging copy with that `config.php` is still told apart. A domain pinned there can't be changed by *Use <domain>* (it
+says so). A copy switched on for the first time on staging stores staging's domain and is not silent: lock staging off
+with `bin/magento config:set commercekings_app_health/general/enabled 0 --lock-env`.

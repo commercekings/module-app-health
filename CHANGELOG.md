@@ -5,17 +5,18 @@
 First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) and
 `commercekings/module-notification ^0.1`.
 
-- **Checks:** cron, indexers, caches, maintenance mode, exception spikes (top 3 classes), queue backlogs (MySQL queue and
-  RabbitMQ, off by default), sending (mail transport errors, failing CommerceKings notifications), email sending per
-  website and unsent sales emails per website, every 5 minutes within a 5-second budget; each with its own switch and
-  thresholds.
-- **Alerts:** change-only – a problem at once, "resolved" at the first OK run (after 2 in a row for the log, queue
-  and sending checks); warnings in the hourly status and the daily summary; a failing check repeated after
-  *Repeat a failing check after* (6 hours). Shop-wide checks alert the default scope's recipient once, a website's own
+- **Checks:** Cron, Indexers, Caches, Maintenance mode, system.log, exception.log (new errors, spikes with the top 3
+  classes), Queues (MySQL queue and RabbitMQ, off by default), Mail delivery errors (mail transport errors, failing
+  CommerceKings notifications), Sensitive data in logs, Email communications disabled and Unsent sales emails (per
+  website), Server status – every 5 minutes within a 5-second budget; each with its own switch and thresholds.
+- **Alerts:** change-only – a problem at once, *Resolved* at the first OK run (after 2 in a row for system.log,
+  exception.log, Queues, Mail delivery errors and Server status); warnings in the hourly status and the daily summary; a failing check repeated after
+  *Repeat a failing check after* (6 hours). Shop-wide checks alert the global recipient once, a website's own
   checks its recipient. New critical log entries and sensitive data at once (at most one message per check every 30
   minutes), log errors in the hourly status, warnings in the daily summary.
 - **Hourly status:** the problems, warnings and the hour's log errors, through the same queue every hour – the proof
-  that alerts can go out; posted when something is not OK and once a day as "All checks OK", else delivered quietly.
+  that alerts can go out; posted when there is news (a new problem, warning or error) and once a day as "All checks
+  OK", else delivered quietly.
   When it is posted: `Api\StatusPolicyInterface` (`Model\Status\DefaultPolicy`).
 - **Server status:** a script on the server (`docs/examples/host-status.sh`, every minute by cron or a systemd timer)
   writes its containers, disk, memory, load, services, backup age and certificates to
@@ -29,7 +30,8 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
   pinned image behind HAProxy that passes only the container list and stats - not a container's environment, files or
   logs; restart counts only on a host). Docker that cannot be read, a project without containers or a listed container
   that is missing is a failure of its own, never an empty, healthy-looking report.
-- **Daily summary** per website at its time: counts of the last 24 hours, what had problems, what was ok all day.
+- **Daily summary** at its time: a global one and one per *Website channels* row (in the website's time zone) –
+  counts of the last 24 hours, what had problems, what was ok all day.
 - **Sending** through Notification's queue and consumer as service messages (no cooldown, stop list or quiet hours),
   once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; another
   Notification channel that sends text (not email or WhatsApp, which send templates) gets plain text, or its module's
@@ -37,11 +39,12 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
 - **Staging and copies stay silent:** the shop's domain is stored when App health is first switched on (or by its
   first run); a copy at another domain sends nothing and pings no heartbeat, and the admin says so, with *Use
   <domain>* after a real move.
-- **Heartbeat:** an encrypted URL pinged after every run while the hourly status goes out (not when it has been due
-  for 10 minutes and is not delivered).
+- **Heartbeat:** an encrypted URL pinged after every run, held while the hourly status has been due for 10 minutes and
+  is not out, while a message fails to go out, or while App health is on with nowhere to send.
 - **Admin:** *Stores > Configuration > CommerceKings > App health*, with *Send test alert* and *Send status now* (the
   checks run now, the result posted to the global recipient; nothing else changes).
-- **Stable extension points (`@api`):** `Api\CheckInterface` (one interface: `run($websiteIds)` returns results by
-  scope), `Api\Data\CheckResult` (hints on its causes, `withHint()` for a general one) and the pools' di.xml arguments
-  ("checks", "sources", "validators", "renderers"), where the item name is the code; `Api\Data\TeamMessageContent`
-  (what a message says, before a channel's renderer makes it text).
+- **Stable extension points (`@api`):** every interface and data class in `Api/` – among them `Api\CheckInterface`
+  (`run($websiteIds)` returns results by scope), `Api\Data\CheckResult`, `Api\StatusPolicyInterface`, the log source
+  and parser interfaces, `Api\SensitiveDataValidatorInterface` and `Api\TeamMessageRendererInterface` with
+  `Api\Data\TeamMessageContent` – and the pools' di.xml arguments ("checks", "sources", "validators", "renderers"),
+  where the item name is the code.

@@ -3,7 +3,7 @@
 # block I/O), disk, load, memory and - when set - services,
 # backup age and certificate expiry, written as {"report": {...}} to Magento's var/app-health/status-<source>.json
 # (a temporary file in the same folder, then renamed: Magento never reads half a file). Magento is not started; its
-# cron reads the file every 5 minutes. Run this every minute on the server (cron or a systemd timer, see the README).
+# cron reads the file every 5 minutes. Run this every minute on the server (cron or a systemd timer, see docs/server-status.md).
 # Only names and numbers go into the file; the script never reads or writes env files, passwords or tokens.
 #
 # Settings, in /etc/ck-host-status.env (or the file in CK_ENV_FILE), as VAR=value lines:

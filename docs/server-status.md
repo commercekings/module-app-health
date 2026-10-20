@@ -96,7 +96,14 @@ On its first run the check creates `var/app-health` (with Magento's permissions 
 there) and `status.json.dist` – the format with every field explained, to copy from. Only `status-*.json` files count;
 `.dist` and the script's temporary files never do.
 
-**The file** – the same JSON whatever writes it:
+**Limits:** *Server status* is one check for all servers: a line failing while another already fails is told once
+("Also failing: …"), and an alert names the first 4. At most 20 servers, 50 lines each. While no server reports, the
+check is left out of the daily summary's lists and the hourly status says "Server status: not set up (no status file
+from a server yet)".
+
+## The file
+
+The same JSON whatever writes it:
 
 ```json
 {"report": {"version": 1, "source": "shop-1", "generated_at": "2026-10-20T14:05:00Z", "checks": [
@@ -112,8 +119,8 @@ there) and `status.json.dist` – the format with every field explained, to copy
   at most 32 KB; no other keys.
 - **Fresh, never replayed:** `generated_at` (ISO-8601 with a time zone) at most 2 minutes ahead of Magento's clock,
   within *No status for*, and newer than the status read before – an old copy put back is refused.
-- **Masked:** details are masked like log messages (secrets after key words, names, emails, numbers, URLs); a
-  label can only be a name – the script writes names and numbers only anyway.
+- **Masked:** in details, secrets after key words, emails, URLs, quoted values, phones and long tokens are masked;
+  names and numbers stay (a status line is names and numbers, not log text). A label can only be a name.
 - **Light:** a file is read only when it changed (its hash); all servers' last statuses are one state entry.
 
 *Server status* settings: Enabled (Yes); No status for (15 minutes).

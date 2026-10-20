@@ -8,7 +8,7 @@ its messages, a log source's for its cursor, a validator's for `validator="<code
 
 | For | Use |
 |---|---|
-| A check | `Api\CheckInterface` (`getLabel()`, `run($websiteIds)`) in `Model\CheckPool` "checks": results by scope – `[CheckInterface::SHOP => $result]` for the whole shop (to the default recipient), one per website id asked about for something each website has (to its recipient) |
+| A check | `Api\CheckInterface` (`getLabel()`, `run($websiteIds)`) in `Model\CheckPool` "checks": results by scope – `[CheckInterface::SHOP => $result]` for the whole shop (to the global recipient), one per website id asked about for something each website has (to its recipient) |
 | What a check returns | `Api\Data\CheckResult` – `ok()`, `warn()` or `fail()`, a title, a one-line detail of names and numbers, counts for the daily summary, gauges, notices (one-off news) – and its causes, `Api\Data\Cause` (code, detail, hint) via `withCauses()` |
 | What to do | the hint of each `Api\Data\Cause`; `CheckResult::withHint($hint)` adds a check's one general hint where nothing says what to do (a problem without hinted causes, news without a "Check: …" line) |
 | A check's on/off switch | `commercekings_app_health/<code>/enabled` (on when not set; a field in your `system.xml` shows it) |
@@ -18,7 +18,7 @@ its messages, a log source's for its cursor, a validator's for `validator="<code
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
 | Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, *Website channels*: a Notification channel that sends plain text (`Delivery::text()`), so its provider module (Notification's `Api\ProviderInterface`) works – not email or WhatsApp, which send templates; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
 | How a channel's messages look | `Api\TeamMessageRendererInterface` (`render(Api\Data\TeamMessageContent)`: a title, a severity, `Api\Data\TeamMessageSection` items with lines, list lines and `Api\Data\TeamMessageTable` tables, hints) in `Model\Message\RendererPool` "renderers", the item name the channel code: `slack` is `Model\Message\SlackRenderer` (mrkdwn); a channel without one gets plain text (`Model\Message\PlainTextRenderer`: no markup, "- " lists, aligned tables). Renderers do not escape: the channel's provider does, before posting – a provider for `slack` other than module-notification-slack MUST escape `&` and `<` (else shop data can post `<!channel>` or a link) |
-| Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in the format above (version 1) – no PHP |
+| Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in [the status file format](server-status.md#the-file) (version 1) – no PHP |
 | When the hourly status is posted | `Api\StatusPolicyInterface` (`getIntervalMinutes($scopeId)`, kept within 15 to 180; `shouldPost(Api\Data\StatusReport)`), shipped as `Model\Status\DefaultPolicy`; replace it with a `<preference>`. The status is still delivered every interval (quietly when not posted); urgent alerts never ask the policy |
 
 A check, in your module's `etc/di.xml`:
