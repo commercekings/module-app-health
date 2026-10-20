@@ -37,7 +37,7 @@ class PrivacyTest extends TestCase
     /** Never out, in either mode. */
     private const PRIVATE = ['jane.doe@example.com', '+1 202 555 0123', '4111 1111 1111 1111', '4111', 'xoxb',
         '123456789012', 'abcdefghijklmnopqrstuvwx', 'https://shop.example.test/checkout/cart?coupon=SECRET', 'SECRET',
-        "'12 Main Street'", '"VIP-2026"', '000000123', '/var/www/html/'];
+        "'12 Main Street'", '"VIP-2026"', '000000123', '/var/www/html/', 'hunter2', 'jane doe', 'fe80::1'];
     /** Free text: out only in the label-only mode (the masked message keeps it - README). */
     private const NAMES = ['Jane', 'Doe', 'Main Street', 'SELECT * FROM customer_entity', 'Bearer'];
 
@@ -83,7 +83,8 @@ class PrivacyTest extends TestCase
             '{"email":"jane.doe@example.com","file":"/var/www/html/app/code/Vendor/Pay/Model/Gateway.php:120"}')
             . self::line('CRITICAL', 'Payment gateway down for jane.doe@example.com in'
             . ' /var/www/html/vendor/vendor/pay/src/Client.php:88', '[]', 'payment')
-            . self::line('WARNING', 'Slow response for ' . $pii), 'system.log');
+            . self::line('WARNING', 'Slow response for ' . $pii)
+            . self::line('ERROR', 'login failed: password hunter2 for customer jane doe from fe80::1'), 'system.log');
         $results = $run();
         $this->assertSame(['fail', 'fail', 'fail'], array_values(array_map(fn ($r) => $r->status, $results)));
         $target = new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC');
@@ -110,8 +111,9 @@ class PrivacyTest extends TestCase
         }
         $this->assertStringContainsString('Vendor\\\\Payment\\\\Exception\\\\CardDeclined', $everything);
         $this->assertStringContainsString('app/code/Vendor/Pay/Model/Gateway.php:120', $everything, 'where, relative');
-        $this->assertStringContainsString('Error: Customer *** could not pay', $everything, 'names masked');
-        $this->assertStringContainsString('Critical: Payment gateway down for *** in ***', $everything);
+        $this->assertStringContainsString('Error: Customer *** could (', $everything, 'names masked, 3 words');
+        $this->assertStringContainsString('Critical: Payment gateway down (', $everything);
+        $this->assertStringContainsString('Error: login failed: password (', $everything);
         $this->assertStringContainsString('1 new mail transport error', $everything);
     }
 
@@ -122,7 +124,8 @@ class PrivacyTest extends TestCase
             $this->assertStringNotContainsString($private, $everything, $private);
         }
         $this->assertStringContainsString("Where: app/code/Vendor/Pay/Model/Gateway.php:120\n"
-            . 'Message: Customer Jane Doe could not pay: Jane Doe <***>, ***', $everything,
-            'the message, masked: names remain (README)');
+            . 'Message: Customer *** could not pay: Jane Doe <***>, ***', $everything,
+            'the message, masked: a name after "customer" masked, other capitalized names remain (README)');
+        $this->assertStringContainsString('Message: login failed: password *** for customer *** from ***', $everything);
     }
 }

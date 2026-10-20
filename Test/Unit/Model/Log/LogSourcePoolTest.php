@@ -82,7 +82,7 @@ class LogSourcePoolTest extends TestCase
         $state->commit();
         $this->assertSame(1, $result->counts['errors']);
         $this->assertCount(1, $result->notices);
-        $this->assertMatchesRegularExpression('/^Error: Sync of order \*\*\* for \*\*\* failed \(\{t:\d+\}\)\n'
+        $this->assertMatchesRegularExpression('/^Error: Sync of order \(\{t:\d+\}\)\n'
             . 'Where: app\/code\/Erp\/Sync\/Model\/Push.php:31$/u', $result->notices[0]);
         $this->assertStringNotContainsString('jane', json_encode($result));
         $this->assertSame(2, $state->get('cursor:log:erp_feed')['line'], 'its cursor is kept for it');

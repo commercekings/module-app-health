@@ -18,7 +18,7 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 - **Light.** Admin, cron and Notification's queue only – nothing on the storefront or in checkout. Indexed, bounded
   queries; only the new bytes of the exception log; a 5-second budget per run.
 - **Private.** Log errors are sent as a safe label (the exception class, or the message's first words with every
-  variable part as `***`) and, in alerts, file:line – never the line itself. Optionally the message, masked.
+  variable part as `***`), in alerts with file:line and the message masked (on by default) – never the line itself.
 - **When the server itself is down.** An optional heartbeat lets an outside service alert you when the pings stop.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
@@ -232,17 +232,25 @@ quantifiers, fast on long lines): see [Extending](#extending).
 
 ## What is masked
 
-A log line never leaves the server as it is. An error is shown by file:line (relative to the Magento root), an
-8-character fingerprint and:
+A log line never leaves the server as it is. An error is shown by its label – the exception class, else
+the message's first 3 words – and, in alerts, file:line (relative to the Magento root) and the masked message. *Add
+the masked log message* is **on by default**, because a readable message is what makes an alert useful; turn it off
+when your logs may hold free text you don't want in a chat.
 
-- **The masked message (default):** its first 160 characters, one line, with **emails, phone numbers, numbers of 4
-  digits or more, tokens, URLs and quoted values** as `***` (an exception's class first). PHP's function prefixes go
-  first, and a long message keeps its trailing reason ("… (Connection refused)"). **Not masked:** names and
-  other free text, e.g. "Customer jane doe not found" or SQL. The masked message is also kept in the module's table
-  for the summary (the latest per error, at most 500 errors).
-- **The label only** (*Add the masked log message* = No): the exception class, else the message's first 8 words with
-  URLs, emails, quoted values, hex strings, numbers and paths after their first segment as `***` – and any capitalized
-  word after the first (often a name). Use it when your logs may contain names.
+Always masked, in the label and the message, as `***`:
+
+- the value after a secret's key word – **password, pass, pwd, secret, token, key, api key, pin, cvv, cvc** – whatever
+  its length ("password hunter2", "pin=12");
+- one or two words after a person's key word – **customer, name, first/last name, user, recipient, cardholder, buyer,
+  contact** ("customer jane doe could not pay");
+- **emails, phone numbers, numbers of 4 digits or more, IPv4 and IPv6 addresses, tokens, URLs and quoted values**.
+
+- **The masked message:** its first 160 characters, one line. PHP's function prefixes go first, and a long message
+  keeps its trailing reason ("… (Connection refused)"). **Not masked:** other free text, e.g. a capitalized name with no
+  key word before it, or SQL. The latest per error is kept in the module's table (at most 500 errors).
+- **The label:** at most 3 words, with URLs, emails, quoted values, hex strings, numbers and paths after their first
+  segment – and any capitalized word after the first (often a name) – as `***`. The daily summary shows labels only.
+- **Off** (*Add the masked log message* = No): labels only, everywhere; a cron job's error text is not read either.
 
 ## Limitations
 

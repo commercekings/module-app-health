@@ -250,6 +250,10 @@ class Cron implements CheckInterface
         $times = $db->fetchPairs($select);
         $failing = [];
         foreach ($times as $job => $count) {
+            if (!$this->config->isLogMessageIncluded()) {
+                $failing[(string)$job] = [(int)$count, '']; // the error text not read at all
+                continue;
+            }
             $message = (string)$db->fetchOne($db->select()->from($table, ['messages'])
                 ->where('job_code = ?', $job)
                 ->where('status = ?', 'error')

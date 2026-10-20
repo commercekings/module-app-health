@@ -9,12 +9,15 @@ use CommerceKings\AppHealth\Model\Sensitive\Detector;
 /**
  * What of a log entry may leave the server, whichever parser read it: the level and channel (checked), exception class
  * names (checked), where it happened (relative to the Magento root, else the last two path segments, plus the line),
- * a fingerprint and a safe label - and, opt-in, the message masked.
+ * a fingerprint, a safe label and - unless *Add the masked log message* is off (it is on by default) - the message
+ * masked.
  *
- * Normalizing (the fingerprint and the label): URLs, emails, quoted values, hex strings, numbers and paths after their
- * first segment become placeholders, so "Order 1234 of jane@example.com failed" and "Order 99 of joe@example.com
- * failed" are one error. The label is the exception class, else the normalized message's first LABEL_WORDS words
- * with the placeholders and any capitalized word after the first (names) as ***.
+ * First, for all of them, the value after a secret's key word ("password hunter2", "pin=12") and the name after a
+ * person's ("customer jane doe") become ***. Normalizing (the fingerprint and the label): URLs, emails, quoted
+ * values, hex strings, numbers and paths after their first segment become placeholders, so "Order 1234 of
+ * jane@example.com failed" and "Order 99 of joe@example.com failed" are one error. The label is the exception class,
+ * else the normalized message's first LABEL_WORDS words with the placeholders and any capitalized word after the
+ * first (names) as ***.
  */
 class Normalizer
 {
@@ -23,7 +26,7 @@ class Normalizer
     ) {
     }
 
-    public const LABEL_WORDS = 8;
+    public const LABEL_WORDS = 3;
     public const MESSAGE_LENGTH = 160;
     /** WARNING = 1, ERROR = 2, CRITICAL and above = 3; below WARNING 0. */
     public const RANKS = ['WARNING' => 1, 'ERROR' => 2, 'CRITICAL' => 3, 'ALERT' => 3, 'EMERGENCY' => 3];
@@ -44,6 +47,19 @@ class Normalizer
         'refused' => ['/Connection refused|Unable to connect|could not be established|Connection reset/i',
             'the mail server refused the connection'],
     ];
+    /** A secret's key words: the value after them is masked, whatever its length. */
+    private const SECRET_WORDS = 'password|passwd|passphrase|pass|pwd|secret|token|api[_-]?key|key|pin|cvv2?|cvc2?';
+    /** A person's key words: the one or two words after them are masked. */
+    private const NAME_WORDS = 'customer|name|firstname|lastname|username|user|recipient|cardholder|buyer|contact';
+    /** Words after a key word that are not a value or a name ("invalid password for", "customer id"). */
+    private const NOT_VALUES = ['a', 'already', 'an', 'and', 'are', 'at', 'be', 'been', 'by', 'can', 'cannot', 'change',
+        'changed', 'confirmation', 'could', 'data', 'did', 'does', 'email', 'empty', 'entity', 'exists', 'expired',
+        'failed', 'field', 'for', 'found', 'from', 'group', 'has', 'have', 'id', 'in', 'incorrect', 'invalid', 'is',
+        'length', 'login', 'mismatch', 'missing', 'must', 'no', 'not', 'of', 'on', 'or', 'policy', 'required', 'reset',
+        'should', 'the', 'through', 'to', 'type', 'value', 'was', 'were', 'with', 'would', 'wrong'];
+    /** IPv6: four or more groups, or "::" with a digit (not "Class::method", not a time). */
+    private const IPV6 = '/(?<![\w:])(?:(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}|(?=[0-9a-f:]*\d)(?:[0-9a-f]{1,4}:){1,6}:'
+        . '(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?)(?![\w:])/i';
     /** ... and Magento's own messages for them (system.log: the mail transport and the sales email senders). */
     private const MAIL_MESSAGE = '/Transport error while sending email|Unable to send mail|Transport error: Unable/i';
 
@@ -64,7 +80,8 @@ class Normalizer
         $level = strtoupper($entry->level);
         $channel = preg_match('/^[A-Za-z0-9_.-]{1,40}$/D', $entry->channel) ? $entry->channel : 'log';
         $classes = array_values(array_filter($entry->classes, fn ($class) => preg_match(self::CLASS_NAME, $class)));
-        $normalized = $this->normalize($entry->message);
+        $clean = $this->keyWords($entry->message);
+        $normalized = $this->normalize($clean);
         $class = $classes[0] ?? '';
         return [
             'rank' => $rank,
@@ -74,7 +91,7 @@ class Normalizer
             'location' => $this->location($entry->file, $entry->line, $root),
             'fingerprint' => substr(hash('sha256', strtolower($channel . '|' . min($rank, 3) . '|' . $class . '|'
                 . $normalized)), 0, 8),
-            'label' => $class !== '' ? $class : $this->label($normalized, $entry->message),
+            'label' => $class !== '' ? $class : $this->label($normalized, $clean),
             'message' => $withMessage ? $this->mask($entry->message) : null,
             'time' => $entry->time,
             'mail' => $mail = preg_match(self::MAIL_MESSAGE, $entry->message) === 1
@@ -108,15 +125,17 @@ class Normalizer
     }
 
     /**
-     * One line of at most MESSAGE_LENGTH characters; emails, phones, long numbers, tokens, URLs and quotes as ***.
+     * One line of at most MESSAGE_LENGTH characters; secrets after key words, names after "customer" and the like,
+     * IPv6 addresses, emails, phones, long numbers, tokens, URLs and quotes as ***.
      * PHP's function prefixes ("stream_socket_client(): ") and repeated *** go first; a longer message keeps its
      * trailing reason ("(Connection refused)") and loses its middle ("…").
      */
     public function mask(string $message): string
     {
-        $message = (string)preg_replace('/\b[a-z_]+\(\): /', '', $message);
+        $message = $this->keyWords((string)preg_replace('/\b[a-z_]+\(\): /', '', $message));
         // tokens before numbers: a token's digits masked first would leave the rest of it
         $patterns = [
+            self::IPV6,
             '/"[^"]{0,500}"|\'[^\']{0,500}\'|“[^”]{0,500}”|`[^`]{0,500}`/u',
             '#\b[a-z][a-z0-9+.-]{1,9}://[^\s"\'()]+#i',
             '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/',
@@ -132,6 +151,26 @@ class Normalizer
         }
         $tail = preg_match('/\([^()]{3,60}\)\.?$/u', $masked, $reason) ? ' ' . $reason[0] : '';
         return mb_substr($masked, 0, self::MESSAGE_LENGTH - 1 - mb_strlen($tail)) . '…' . $tail;
+    }
+
+    /**
+     * The value after a secret's key word (after ":" or "=" always; after a space unless it is a word like "for") and
+     * the one or two words after a person's key word as ***.
+     */
+    private function keyWords(string $message): string
+    {
+        $isValue = fn (string $word): bool => !in_array(strtolower(rtrim($word, '.:!?')), self::NOT_VALUES, true);
+        $message = (string)preg_replace_callback('/\b(' . self::SECRET_WORDS . ')\b(\s*[:=]\s*|\s+)'
+            . '("[^"]*"|\'[^\']*\'|[^\s,;()]+)/i', fn (array $m) => preg_match('/[:=]/', $m[2]) || $isValue($m[3])
+                ? $m[1] . $m[2] . '***' : $m[0], $message);
+        return (string)preg_replace_callback('/\b(' . self::NAME_WORDS . ')(\s*[:=]\s*|\s+)(\p{L}[\p{L}\'.-]*)'
+            . '(?:(\s+)(\p{L}[\p{L}\'.-]*))?/iu', function (array $m) use ($isValue): string {
+                if (!$isValue($m[3])) {
+                    return $m[0];
+                }
+                $second = isset($m[5]) && $m[5] !== '' && $isValue($m[5]);
+                return $m[1] . $m[2] . '***' . (!$second && isset($m[5]) ? ($m[4] ?? '') . $m[5] : '');
+            }, $message);
     }
 
     /**

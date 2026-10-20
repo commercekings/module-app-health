@@ -9,8 +9,8 @@ use CommerceKings\AppHealth\Model\RunState;
 
 /**
  * The log entries seen (WARNING and above), by fingerprint, in the "fingerprints" row: label, level, channel, where,
- * the latest masked message (when it is on), first and last seen, the count, and when it was last told. At most LIMIT,
- * the least recently seen go first. record() returns what the team should hear of this run: an error (ERROR and
+ * the latest masked message (unless it is turned off), first and last seen, the count, and when it was last told. At
+ * most LIMIT, the least recently seen go first. record() returns what the team should hear of this run: an error (ERROR and
  * above) seen for the first time ("NEW"), or - for checks that ask - a CRITICAL one not told within the repeat
  * interval.
  */

@@ -32,7 +32,7 @@ class CronTest extends TestCase
      * @param array<int, array<string, mixed>> $finished rows of job_code, status, count
      */
     private function check(array $finished, array $pairs, array $one, ?int $lastRun = null,
-        array $jobs = self::JOBS, array $failing = []): CheckResult
+        array $jobs = self::JOBS, array $failing = [], array $settings = []): CheckResult
     {
         $store = (new MemoryStore())->seed($lastRun ? ['cursor:cron' => ['last' => $lastRun, 'failing' => $failing]]
             : []);
@@ -47,7 +47,7 @@ class CronTest extends TestCase
         }
         $cronConfig->method('getJobs')->willReturn($groups);
         $db = $this->db(['fetchAll' => [$finished], 'fetchPairs' => $pairs, 'fetchOne' => $one]);
-        return (new Cron($this->resource($db), $cronConfig, $this->config(['cron/stale_minutes' => '5',
+        return (new Cron($this->resource($db), $cronConfig, $this->config($settings + ['cron/stale_minutes' => '5',
             'cron/running_minutes' => '60', 'cron/quiet_minutes' => '60']), $this->state, new Clock(self::NOW),
             $this->normalizer()))->run();
     }
@@ -121,13 +121,23 @@ class CronTest extends TestCase
         $result = $this->check([['job_code' => 'sitemap_generate', 'status' => 'error', 'count' => '2']],
             [[], ['sitemap_generate' => '4']],
             [$this->ago(30), "Could not write /var/www/html/pub/sitemap.xml for jane@example.com\n#0 trace", '0'],
-            self::NOW - 300);
+            self::NOW - 300, self::JOBS, [], ['general/include_log_message' => '1']);
         $this->assertSame([CheckResult::WARN, 'Cron job errors'], [$result->status, $result->title]);
         $this->assertSame('2 new cron errors (sitemap_generate x2)', $result->detail);
         $this->assertSame(['cron_job_failing'], $this->causes($result));
         $this->assertSame('job sitemap_generate failed 4 times in 2 h: Could not write ***.xml for ***',
             $result->causes[0]->detail);
         $this->assertSame(['runs' => 0, 'errors' => 2, 'errors:sitemap_generate' => 2], $result->counts);
+    }
+
+    public function testWithTheLogMessageOffAJobsErrorIsNotRead(): void
+    {
+        $result = $this->check([['job_code' => 'sitemap_generate', 'status' => 'error', 'count' => '2']],
+            [[], ['sitemap_generate' => '4']], [$this->ago(30), "Could not write for jane doe\n#0 trace", '0'],
+            self::NOW - 300, self::JOBS, [], ['general/include_log_message' => '0']);
+        $this->assertSame('job sitemap_generate failed 4 times in 2 h', $result->causes[0]->detail);
+        $readsMessages = fn ($call) => in_array('messages', (array)($call[2] ?? []), true);
+        $this->assertSame([], array_filter($this->calls, $readsMessages), 'cron_schedule.messages not read');
     }
 
     public function testManyMissedJobsWarn(): void

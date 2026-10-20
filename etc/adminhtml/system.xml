@@ -46,7 +46,7 @@
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Add the masked log message</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>On by default. Log errors in alerts and the summary show the message's first 160 characters, with emails, phone numbers, numbers of 4 digits or more, tokens, URLs and quoted values as ***; names and other free text are NOT masked. Off: only the label (the exception class, or the message's first words with every variable part and name-like word as ***).</comment>
+                    <comment>On by default. Log errors in alerts show the message's first 160 characters, with secrets after key words (password, token, pin, ...), names after "customer" and the like, emails, phone numbers, numbers of 4 digits or more, IP addresses, tokens, URLs and quoted values as ***; other free text (a capitalized name, SQL) is NOT masked. Off: only the label everywhere (the exception class, or the message's first 3 words with every variable part and name-like word as ***), and cron job errors are not read.</comment>
                 </field>
                 <field id="heartbeat_url" translate="label comment" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Heartbeat URL</label>

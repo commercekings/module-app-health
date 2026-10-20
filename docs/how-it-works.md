@@ -75,7 +75,7 @@ The `system_log` and `exceptions` checks read their log sources through `Model\L
 check (`Model\Log\LogSourcePool`) is read once per run from its stored cursor (`cursor:log:<code>`), at most the check's
 *Read at most* (1 MB), parsed by the source's parser, and every entry passed through `Model\Log\Normalizer`, which
 alone decides what leaves the server: level, channel, exception class names (checked), where it happened (relative
-to the Magento root, plus the line), a fingerprint and a safe label – and, opt-in, the masked message.
+to the Magento root, plus the line), a fingerprint and a safe label – and the masked message (on by default, *Add the masked log message*).
 
 - **Fingerprint:** a hash of the channel, the level group (warning, error, critical), the exception class and the
   normalized message (URLs, emails, quoted values, hex, numbers and paths after their first segment as placeholders),

@@ -40,13 +40,14 @@ class NormalizerTest extends TestCase
     {
         $this->assertSame('Magento\\Framework\\Exception\\LocalizedException',
             $this->safe('x', ['Magento\\Framework\\Exception\\LocalizedException'])['label']);
-        $this->assertSame('Order *** of *** failed at ***',
+        $this->assertSame('Order *** of',
             $this->safe('Order 1234 of jane@example.com failed at https://a.test')['label']);
-        $this->assertSame('Customer *** not found for id ***',
+        $this->assertSame('Customer *** not',
             $this->safe('Customer Jane Doe not found for id 77')['label'], 'name-like words after the first');
-        $this->assertSame('Could not save the cart *** because x',
-            $this->safe('Could not save the cart 5 because x y z')['label'],
-            'at most 8 words');
+        $this->assertSame('Could not save', $this->safe('Could not save the cart 5 because x y z')['label'],
+            'at most 3 words');
+        $this->assertSame('customer *** could', $this->safe('customer jane doe could not pay')['label'],
+            'a lowercase name after "customer"');
         $this->assertSame(['plain words', []], [$this->safe('plain words', ['evil class!'])['label'],
             $this->safe('plain words', ['evil class!'])['classes']], 'not a class name: not used');
     }
@@ -69,6 +70,38 @@ class NormalizerTest extends TestCase
         $this->assertSame(Normalizer::MESSAGE_LENGTH, mb_strlen($this->normalizer->mask(str_repeat('word ', 100))));
         $this->assertNull($this->safe('m')['message'], 'only when asked');
         $this->assertSame('m', $this->safe('m', [], null, null, 'ERROR', true)['message']);
+    }
+
+    /** @return array<string, array{0: string, 1: string}> */
+    public static function secretsAndNames(): array
+    {
+        return [
+            'a short password after a space' => ['login failed: password hunter2 for admin',
+                'login failed: password *** for admin'],
+            'after =' => ['pwd=ab1 pass=x', 'pwd=*** pass=***'],
+            'after :' => ['secret: s3 token:abc key = "k"', 'secret: *** token:*** key = ***'],
+            'a pin and a cvv' => ['pin 1234 cvv 987 cvc: 12', 'pin *** cvv *** cvc: ***'],
+            'not a value' => ['Invalid password for customer id 7', 'Invalid password for customer id 7'],
+            'a lowercase name' => ['customer jane doe could not pay', 'customer *** could not pay'],
+            'one word, and name:' => ['name: jane failed for customer bob', 'name: *** failed for customer ***'],
+            'IPv6' => ['from 2001:db8:85a3::8a2e:370:7334 and fe80::1 at 10:39:00', 'from *** and *** at 10:39:00'],
+            'IPv6 in full' => ['peer 2001:0db8:0000:0000:0000:ff00:0042:8329 down', 'peer *** down'],
+            'not IPv6' => ['Cache::clean and Bad::run failed', 'Cache::clean and Bad::run failed'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('secretsAndNames')]
+    public function testSecretsAfterKeyWordsNamesAndIpv6AreMasked(string $message, string $masked): void
+    {
+        $this->assertSame($masked, $this->normalizer->mask($message));
+    }
+
+    public function testTheSameErrorForAnotherCustomerIsOneFingerprint(): void
+    {
+        $this->assertSame($this->safe('customer jane doe could not pay')['fingerprint'],
+            $this->safe('customer bob could not pay')['fingerprint']);
+        $this->assertSame($this->safe('login failed: password hunter2')['fingerprint'],
+            $this->safe('login failed: password x')['fingerprint']);
     }
 
     public function testBelowWarningOrAnUnknownLevelIsLeftOut(): void
@@ -142,7 +175,7 @@ class NormalizerTest extends TestCase
 
     public function testALowercaseFirstWordWithAShortNumberStays(): void
     {
-        $this->assertSame('e2e probe: payment sync failed', $this->safe('e2e probe: payment sync failed')['label']);
+        $this->assertSame('e2e probe: payment', $this->safe('e2e probe: payment sync failed')['label']);
         $this->assertSame('*** probe', $this->safe('1234 probe')['label'], 'a number is not a name');
     }
 }

@@ -58,13 +58,13 @@ class SystemLogTest extends TestCase
             array_intersect_key($first->counts, ['critical' => 1, 'errors' => 1, 'warnings' => 1]));
         $this->assertSame(CheckResult::OK, $first->status);
         $this->assertCount(1, $first->notices, 'one error, twice');
-        $this->assertMatchesRegularExpression('/^Error: Unable to send order \*\*\* \(2×, \{t:\d+\}\)$/u',
+        $this->assertMatchesRegularExpression('/^Error: Unable to send \(2×, \{t:\d+\}\)$/u',
             $first->notices[0]);
         $again = $this->run5(self::line('ERROR', 'Unable to send order 5'));
         $this->assertSame([], $again->notices, 'seen before');
         $this->assertSame(CheckResult::FAIL, $again->status, '3 errors within 5 minutes');
         $this->assertSame('Error spike', $again->title);
-        $this->assertMatchesRegularExpression('/^3 errors in 5 min \(Unable to send order \*\*\* x3\)$/',
+        $this->assertMatchesRegularExpression('/^3 errors in 5 min \(Unable to send x3\)$/',
             $again->detail);
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the window passed');
     }
