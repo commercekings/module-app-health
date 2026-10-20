@@ -4,11 +4,13 @@ What App health posts and why. Start with the [README](../README.md).
 
 ## How a message looks
 
-One message per problem, in plain Slack text without emoji: a bold first line that says what and where (what a phone
+Every header names the shop and its domain (without a *Store Information* name, the domain alone: *Hourly status ·
+shop.example.com*). One message per problem, in plain Slack text without emoji: a bold first line that says what and
+where (what a phone
 notification shows; *Problem*, *Warning*, *Resolved*, *New error*, *Security*), then one fact per line and what to do:
 
 ```
-*Problem: Cron stopped · Main Website Store*
+*Problem: Cron stopped · Main Website Store · shop.example.com*
 
 No job has run since 10:39 (65 min).
 
@@ -18,13 +20,13 @@ What to do: Is the cron container (or crontab) running? bin/magento cron:run by 
 A failing check told again after the repeat interval ends with "Still failing since 19 Oct 09:00.".
 
 ```
-*Resolved: Cron · Main Website Store*
+*Resolved: Cron · Main Website Store · shop.example.com*
 
-OK again since 11:52.
+Failed for 1 h; OK again since 11:52.
 ```
 
 ```
-*New error in system.log · Main Website Store*
+*New error in system.log · Main Website Store · shop.example.com*
 
 Critical: PaymentException (3×, 14:02)
 Where: app/code/Vendor/Pay/Model/Gateway.php:120
@@ -36,7 +38,7 @@ What to do: var/log/system.log: look for the error around that time, in the file
 The daily summary leaves out file paths and messages, and any section without content:
 
 ```
-*Main Website Store · daily summary · 20 Oct*
+*Main Website Store · shop.example.com · daily summary · 20 Oct*
 
 *Needs attention*
 • Cron: no job has run since 10:39 (65 min)
@@ -76,7 +78,7 @@ Each alert says why, as far as Magento's own data shows it, and what to do (`Wha
 | Server status | each line not OK: the server, what, its value and the script's detail (masked); "No status from host-1 since 14:02" |
 
 ```
-*Problem: Cron jobs stuck · Main Website Store*
+*Problem: Cron jobs stuck · Main Website Store · shop.example.com*
 
 Job indexer_reindex_all_invalid running for 3 h (since 08:12).
 12 other jobs in its group are waiting.
