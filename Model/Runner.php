@@ -245,12 +245,12 @@ class Runner
             $pending = AlertPlan::pendingNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [],
                 $this->state->get(AlertPlan::NOTICED . $scope) ?? [], $now, $this->config->getNoticeMinutes() * 60);
             $withShared = $this->config->isSharedToWebsites() && $targets[$scope]->ownChannel;
-            if (AlertPlan::changes(AlertPlan::scopeChecks($checks, $scope, $withShared), $alerted, $now, $repeat,
-                $this->config->getRecoverRuns()) === [] && $pending === []) {
-                continue;
-            }
+            // nothing to tell: queued only while its last message failed (its news gone before the retry), so the
+            // consumer finds nothing to send and forgets the failure - else it would hold the heartbeat for a day
+            $quiet = AlertPlan::changes(AlertPlan::scopeChecks($checks, $scope, $withShared), $alerted, $now,
+                $repeat, $this->config->getRecoverRuns()) === [] && $pending === [];
             try {
-                if ($this->teamMessage->queue(Alert::CODE, $scope)) {
+                if ($this->teamMessage->queue(Alert::CODE, $scope, $quiet ? 'failed_sends > 0' : '')) {
                     $report['queued'][] = $scope;
                 }
             } catch (\Throwable $e) {

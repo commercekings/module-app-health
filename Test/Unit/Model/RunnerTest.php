@@ -57,6 +57,9 @@ class RunnerTest extends TestCase
         $this->clock = new Clock();
     }
 
+    /** @var string[] scope and condition of each alert queued only on a condition */
+    private array $alertConditions = [];
+
     /** @var array<string, string> the shop-wide checks, in the pool's order */
     private array $shopWideChecks = ['cron' => 'Cron', 'caches' => 'Caches'];
 
@@ -77,6 +80,10 @@ class RunnerTest extends TestCase
             $this->assertSame('app_health_alert', $type);
             if ($this->queueThrows) {
                 throw new \RuntimeException('queue down');
+            }
+            if ($condition !== '') {
+                $this->alertConditions[] = $scope . ' ' . $condition;
+                return false; // the stub's rows have no failures
             }
             $this->queued[] = $scope;
             return true;
@@ -524,6 +531,17 @@ class RunnerTest extends TestCase
         $this->run5();
         $this->assertSame([], $this->store->row('status') ?? [], 'switched on again later: not "overdue" from'
             . ' before (no false hold or admin notice)');
+    }
+
+    public function testAScopeWithNothingToTellIsQueuedOnlyWhileItsLastMessageFailed(): void
+    {
+        $this->run5();
+        $this->alertConditions = [];
+        $this->run5();
+        $this->assertSame([], $this->queued, 'nothing to tell');
+        $this->assertSame(['0 failed_sends > 0', '1 failed_sends > 0'], $this->alertConditions,
+            'each scope: a failed message whose news went away (fixed before the retry): queued, so the consumer'
+            . ' finds nothing to send and forgets the failure - the heartbeat is not held for a day');
     }
 
     public function testNothingRunsWhileAlertsAreOffAndNoHeartbeatIsSet(): void
