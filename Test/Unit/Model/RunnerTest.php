@@ -142,6 +142,28 @@ class RunnerTest extends TestCase
         $this->assertSame(['w' => 1, 'c' => ['runs' => 9, 'errors:x' => 1]], $tally[0]['cron']);
     }
 
+    public function testAcrossTheHourAProblemIsAlertedAndAFailIsNotRepeated(): void
+    {
+        $this->clock->now = 1792504799; // 13:59:59 UTC
+        $this->assertSame([], $this->runner()->run()['queued'], 'all ok before the hour');
+        $this->clock->now += 2; // 14:00:01: the hour's first run, which also cleans up the old tallies
+        $this->results['cron'] = CheckResult::fail('no job has run since 13:30');
+        $this->assertSame([0], $this->runner()->run()['queued'], 'a new problem right after the hour');
+        $this->assertNotNull($this->store->row('tally:2026102013'), 'the last hour\'s tally kept');
+        $this->assertSame(2, $this->store->row('tally:2026102014')[0]['cron']['w']);
+
+        $this->clock->now = 1792508399; // 14:59:59
+        $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => 1792504801]]]);
+        $this->results['caches'] = CheckResult::fail('config disabled');
+        $this->assertSame([0], $this->runner()->run()['queued'], 'another problem before the next hour');
+        $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => 1792504801],
+            'caches' => ['status' => 'fail', 'at' => 1792508399]]]);
+        $this->clock->now += 2; // 15:00:01
+        $this->assertSame([], $this->runner()->run()['queued'], 'both told: nothing new after the hour');
+        $this->results['cron'] = CheckResult::ok();
+        $this->assertSame([0], $this->runner()->run()['queued'], 'a recovery after the hour');
+    }
+
     public function testOneLoadAndOneWritePerRun(): void
     {
         $this->clock->now += 600; // not the hour's first run (no cleanup)
