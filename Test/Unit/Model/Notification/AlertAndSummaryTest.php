@@ -151,6 +151,20 @@ class AlertAndSummaryTest extends TestCase
             'the tally of 25 hours ago is left out');
     }
 
+    public function testTheGlobalSummaryShowsTheServersContainers(): void
+    {
+        $this->store->seed(['external' => ['host-1' => ['generated_at' => self::NOW - 60, 'checks' => [
+            ['code' => 'container_php', 'label' => 'Container php', 'status' => 'ok',
+                'metrics' => ['cpu_percent' => 2.5, 'mem_used_bytes' => 1073741824, 'mem_limit_bytes' => 2147483648,
+                    'restarts' => 1]]]]]]);
+        $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
+        $this->assertStringContainsString("\n\n*Containers · host-1*\n```\nNAME   CPU      MEM  MEM%  RESTARTS\n"
+            . "php   2.5%  1G / 2G   50%         1\n```\n\n*All OK*", $this->sent[0], 'before what was OK all day');
+        $this->sent = [];
+        $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00'], [], 2);
+        $this->assertStringNotContainsString('Containers', $this->sent[0] ?? '', 'not in a website channel\'s');
+    }
+
     public function testTheGlobalSummaryListsTheDaysSecurityFindings(): void
     {
         $this->store->seed([SensitiveData::KEY => [

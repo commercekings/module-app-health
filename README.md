@@ -243,73 +243,55 @@ run. No token, port, URL or Magento command: nothing is exposed and Magento is n
 | A file breaks a rule (below) | a warning naming the file and the rule, never its content; the last good status still counts |
 | The whole server is down | nothing can run on it – the heartbeat and an outside uptime check tell you (see *Before going live*) |
 
-**Set up** (as root on the server). Root only collects the readings (Docker needs it); the file is written as the
-owner of `var/app-health` – the web server's user, by its numeric id, also under Docker's user namespaces. That folder
-is the web user's to write, so root never works in it: a temporary file there could be swapped for a link to any file
-on the server, and root would write through it. The script refuses when the folder (or `var/`, before the folder exists) is owned by root.
+**Set up** – one of three, with ready files in [docs/examples](docs/examples):
 
-1. Copy [docs/examples/host-status.sh](docs/examples/host-status.sh) to `/usr/local/bin/host-status.sh` (mode 0755);
-   it needs `bash`, `jq`, `setpriv` (util-linux) and – for containers – `docker`.
-2. Put its settings in `/etc/ck-host-status.env` (mode 0600): `CK_STATUS_DIR` (Magento's `var/app-health`, as this
-   server sees it), and as needed the server's name, the containers that must run, disks, a backup marker file,
+| Setup | Runs | Docker access | Files |
+|---|---|---|---|
+| A server you run (VM, bare metal, Docker host) | on the host, every minute (systemd timer or cron) | the host's own Docker CLI, as root | [systemd/](docs/examples/systemd) – service, timer, env example |
+| A Docker Compose stack | a sidecar container next to Magento's | through a socket proxy (read-only API) | [docker-compose/](docs/examples/docker-compose) |
+| Warden (development) | a sidecar in the project's `.warden/warden-env.yml`, opt-in profile `host-status` | through a socket proxy | [warden/](docs/examples/warden) |
+
+On a host, root only collects the readings (Docker needs it); the file is written as the owner of `var/app-health` –
+the web server's user, by its numeric id, also under Docker's user namespaces. That folder is the web user's to write,
+so root never works in it: a temporary file there could be swapped for a link to any file on the server, and root
+would write through it. The script refuses when the folder (or `var/`, before the folder exists) is owned by root. A
+sidecar runs as the web server's user from the start.
+
+**Why a proxy in a container:** Docker's socket – even mounted `:ro` – is the whole Docker API, so whoever holds it can
+start a privileged container: root on the host. The examples give the sidecar `tecnativa/docker-socket-proxy`
+instead: `GET` on `/containers` only (state, health, restarts, stats; plus `/_ping` and `/version` for the Docker CLI),
+`POST` off – nothing can be created, started, stopped or exec'd – on an internal network that nothing else reaches.
+
+1. Copy [docs/examples/host-status.sh](docs/examples/host-status.sh) (mode 0755); on a host it needs `bash`, `jq`,
+   `setpriv` (util-linux) and `docker`; the sidecars install theirs.
+2. Its settings – `/etc/ck-host-status.env` (mode 0600) on a host, `environment:` in a sidecar: `CK_STATUS_DIR`
+   (Magento's `var/app-health`, as the script sees it), and as needed the server's name, the containers
+   (`CK_CONTAINERS`, or every container of a Compose project: `CK_COMPOSE_PROJECT`), disks, a backup marker file,
    the host names whose certificates to watch – the script's header lists them.
 3. Try it: `host-status.sh --dry-run` prints the report; `host-status.sh` writes the file.
-4. Schedule it – cron (`flock`: a slow run is never doubled):
-
-   ```
-   # /etc/cron.d/ck-host-status
-   * * * * * root flock -n /run/ck-host-status.lock /usr/local/bin/host-status.sh
-   ```
-
-   or a systemd timer (a oneshot service never overlaps itself; its output goes to the journal,
-   `journalctl -u ck-host-status`):
-
-   ```ini
-   # /etc/systemd/system/ck-host-status.service
-   [Unit]
-   Description=Server status for Magento App health
-   [Service]
-   Type=oneshot
-   ExecStart=/usr/local/bin/host-status.sh
-
-   # /etc/systemd/system/ck-host-status.timer
-   [Unit]
-   Description=Server status every minute
-   [Timer]
-   OnCalendar=*-*-* *:*:00
-   [Install]
-   WantedBy=timers.target
-   ```
-
-   then `systemctl daemon-reload && systemctl enable --now ck-host-status.timer`.
+4. Schedule it – on a host the [timer](docs/examples/systemd) (a run is never started twice; its output in
+   `journalctl -u ck-host-status`), or cron with `flock`:
+   `* * * * * root flock -n /run/ck-host-status.lock /usr/local/bin/host-status.sh`; a sidecar loops by itself.
 
 | Hosting | `CK_STATUS_DIR` and permissions |
 |---|---|
-| Docker Compose (e.g. m2_infra), Warden | the host folder mounted as Magento's `var/`, e.g. `<APP_PATH>/shared/var/app-health` – the script runs on the host, not in a container (read-only containers are fine: the shared `var/` is writable). The file is written as the folder's owner (the PHP user, also under Docker's user namespaces) and readable for all |
+| Docker Compose (e.g. m2_infra), Warden | on the host: the folder mounted as Magento's `var/`, e.g. `<APP_PATH>/shared/var/app-health` (read-only containers are fine: the shared `var/` is writable); in a sidecar: that folder or volume mounted at `/status` |
 | A server or VM without Docker | `<Magento root>/var/app-health`; set `CK_CONTAINERS=` (empty) and list the services instead (`CK_SERVICES="nginx php8.3-fpm mariadb"`) |
 | Several nodes | each node runs the script with its own `CK_SOURCE` into the `var/` that Magento's cron reads (a shared `var/`); one file per node, at most 20 |
 | Managed hosting without access to the server | not possible – the checks inside Magento and the heartbeat still work |
 
-**No access to the host's cron** (a development box, or Docker only): run the script in a small container next to
-Magento's, every minute, writing to `var/app-health` alone. It then reports the Docker host's disk, memory and load,
-not the containers – set `CK_CONTAINERS=` (empty). Mounting Docker's socket for the container lines is not
-read-only even with `:ro` (it is the whole Docker API, root on the host), so it is left out; on a real server the
-host cron above is preferred. A Compose service, e.g. in Warden's `.warden/warden-env.yml`:
+**Containers.** Each container is a line of its own with its measurements: down, restarting or unhealthy fails (a
+*Problem* at once, *Resolved* when it is back); memory over 85 % of its limit (`CK_CONTAINER_MEM_WARN`) or CPU over 90 %
+(`CK_CONTAINER_CPU_WARN`, one core = 100 %) warns (hourly status and summary). *Send status now* and the daily summary
+show them as a table per server, at most 20 rows:
 
-```yaml
-  host-status:
-    image: alpine:3.20
-    profiles: [host-status]   # not started with the rest: `up -d host-status`, stopped with `rm -sf host-status`
-    restart: unless-stopped
-    environment: {CK_SOURCE: dev-box, CK_STATUS_DIR: /status, CK_CONTAINERS: "", CK_DISKS: /}
-    volumes:
-      - {type: volume, source: appdata, target: /status, volume: {subpath: var/app-health}}
-      - ./host-status.sh:/usr/local/bin/host-status.sh:ro
-    entrypoint: ["/bin/sh", "-c", "apk add --no-cache -q bash jq coreutils su-exec && exec su-exec 1000:1000 bash -c 'while :; do bash /usr/local/bin/host-status.sh; sleep 60; done'"]
 ```
-
-`1000:1000` is the web server's user in Magento's PHP container (`id` in it tells); `appdata` the volume holding
-Magento's root (Warden's name).
+*Containers · shop-1*
+NAME          CPU         MEM  MEM%  RESTARTS
+php          12.3%  512M / 2G   25%         0
+mariadb       4.1%  2.8G / 4G   70%         0
+opensearch    1.8%  1.1G / 2G   55%         2
+```
 
 On its first run the check creates `var/app-health` (with Magento's permissions for `var/`, so the script can write
 there) and `status.json.dist` – the format with every field explained, to copy from. Only `status-*.json` files count;
@@ -325,11 +307,14 @@ there) and `status.json.dist` – the format with every field explained, to copy
 
 - **Rules:** named `status-<source>.json` with the same `source` (1–40 of `A-Z a-z 0-9 . _ -`); `version` 1; at
   most 50 checks; `code` 1–40 of `a-z 0-9 _`, each once; `label` up to 60 characters, `detail` up to 160, `unit` up
-  to 10; `status` `ok`, `warn` or `fail`; `value` a number or null; at most 32 KB; no other keys.
+  to 10; `status` `ok`, `warn` or `fail`; `value` a number or null; `label` a name (letters, digits, spaces and
+  `. _ / : ( ) % # + -`); optional `metrics` – `cpu_percent` (up to 100000), `mem_used_bytes`, `mem_limit_bytes`,
+  `net_rx_bytes`, `net_tx_bytes`, `blk_read_bytes`, `blk_write_bytes` (whole bytes) and `restarts`, nothing else;
+  at most 32 KB; no other keys.
 - **Fresh, never replayed:** `generated_at` (ISO-8601 with a time zone) at most 2 minutes ahead of Magento's clock,
   within *No status for*, and newer than the status read before – an old copy put back is refused.
-- **Masked:** labels and details are masked like log messages (secrets after key words, names, emails, numbers,
-  URLs) – the script writes names and numbers only anyway.
+- **Masked:** details are masked like log messages (secrets after key words, names, emails, numbers, URLs); a
+  label can only be a name – the script writes names and numbers only anyway.
 - **Light:** a file is read only when it changed (its hash); all servers' last statuses are one state entry.
 
 *Server status* settings: Enabled (Yes); No status for (15 minutes).

@@ -84,11 +84,11 @@ class StatusNowTest extends TestCase
             return $this->answer;
         });
         $config = $this->config();
-        $status = new Status($this->createStub(TeamMessage::class), $this->store,
-            new Messages($pool, new Clock(self::NOW)), $pool, $config, new Clock(self::NOW),
-            new DefaultPolicy($config));
+        $messages = new Messages($pool, new Clock(self::NOW));
+        $status = new Status($this->createStub(TeamMessage::class), $this->store, $messages, $pool, $config,
+            new Clock(self::NOW), new DefaultPolicy($config));
         return new StatusNow($targets, $runner, $state, $status, $config, $deliveryState, $sender,
-            new Clock(self::NOW));
+            new Clock(self::NOW), $messages);
     }
 
     public function testTheChecksAsTheyAreNowArePostedToTheGlobalRecipient(): void
@@ -111,6 +111,17 @@ class StatusNowTest extends TestCase
         $this->assertStringContainsString("New errors this hour: 3\n• Unable to send order (3×)", $text,
             'the errors since the last hourly status, as it would say them');
         $this->assertSame($rows, $this->store->rows, 'nothing written');
+    }
+
+    public function testTheServersContainersComeAsATable(): void
+    {
+        $this->store->seed(['external' => ['host-1' => ['source' => 'host-1', 'generated_at' => self::NOW - 60,
+            'checks' => [['code' => 'container_php', 'label' => 'Container php', 'status' => 'ok',
+                'metrics' => ['cpu_percent' => 12.34, 'mem_used_bytes' => 536870912, 'mem_limit_bytes' => 2147483648,
+                    'restarts' => 0]]]]]]);
+        $this->statusNow()->send();
+        $this->assertStringEndsWith("*Containers · host-1*\n```\nNAME    CPU        MEM  MEM%  RESTARTS\n"
+            . "php   12.3%  512M / 2G   25%         0\n```", ($this->sent[0]->content)()->text);
     }
 
     public function testAnIncompleteSnapshotSaysWhat(): void

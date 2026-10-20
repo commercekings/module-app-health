@@ -10,7 +10,9 @@ use CommerceKings\AppHealth\Model\Log\Normalizer;
  * The rules a server's status file keeps (var/app-health/status-<source>.json), all of them, before its lines are
  * used: {"report": {...}} and no other key, the version, the names, at most MAX_CHECKS lines, the lengths, the types,
  * the statuses, and a generated_at that is not ahead of Magento's clock (FUTURE_SKEW) nor older than the caller
- * allows. Labels and details are masked like log messages: only names and numbers are kept.
+ * allows. A label is a name (LABEL: letters, digits, spaces and . _ / : ( ) % - only; e.g. "Container php-fpm-1",
+ * "Disk /"), a detail is masked like a log message: only names and numbers are kept. A line may carry a container's
+ * measurements ("metrics", METRICS: numbers only).
  */
 class ReportValidator
 {
@@ -23,12 +25,18 @@ class ReportValidator
     public const UNIT = '/^[A-Za-z%\/.°]{0,10}$/uD';
     public const ISO_8601 = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/D';
     public const LABEL_LENGTH = 60;
+    /** A label: a name, never free text (no @, quotes or anything to mask). */
+    public const LABEL = '/^[\p{L}\p{N} ._\/:()%#+-]*$/uD';
+    /** A line's measurements: the most each may be (a container's CPU may pass 100 %: one core is 100). */
+    public const METRICS = ['cpu_percent' => 100000, 'mem_used_bytes' => 1e15, 'mem_limit_bytes' => 1e15,
+        'net_rx_bytes' => 1e15, 'net_tx_bytes' => 1e15, 'blk_read_bytes' => 1e15, 'blk_write_bytes' => 1e15,
+        'restarts' => 1e9];
     public const DETAIL_LENGTH = 160;
     private const REPORT = ['version' => 'int', 'source' => 'string', 'generated_at' => 'string', 'checks' => 'list'];
     private const CHECK = ['code' => 'string', 'label' => 'string', 'status' => 'string', 'value' => 'number',
-        'unit' => 'string', 'detail' => 'string'];
+        'unit' => 'string', 'detail' => 'string', 'metrics' => 'object'];
     private const TYPES = ['int' => 'a whole number', 'string' => 'text', 'number' => 'a number or null',
-        'list' => 'a list'];
+        'list' => 'a list', 'object' => 'an object'];
     /** Errors named; the rest are counted. */
     private const ERRORS = 3;
 
@@ -40,7 +48,7 @@ class ReportValidator
     /**
      * @param int $oldest the oldest generated_at accepted (unix time)
      * @return array{source: string, generated_at: int, checks: list<array{code: string, label: string,
-     *     status: string, value: float|int|null, unit: string, detail: string}>}
+     *     status: string, value: float|int|null, unit: string, detail: string, metrics?: array<string, int|float>}>}
      * @throws \InvalidArgumentException naming what is wrong (never a value from the file)
      */
     public function validate(string $json, int $now, int $oldest): array
@@ -112,7 +120,7 @@ class ReportValidator
      * @param array<mixed>|null $check
      * @param string[] $errors
      * @return array{code: string, label: string, status: string, value: float|int|null, unit: string,
-     *     detail: string}|null
+     *     detail: string, metrics?: array<string, int|float>}|null
      */
     private function line(?array $check, int $i, array &$errors): ?array
     {
@@ -130,6 +138,8 @@ class ReportValidator
         }
         if (mb_strlen($label) > self::LABEL_LENGTH) {
             $errors[] = sprintf('%s.label is longer than %d characters', $where, self::LABEL_LENGTH);
+        } elseif (!preg_match(self::LABEL, $label)) {
+            $errors[] = $where . '.label may only have letters, digits, spaces and . _ / : ( ) % # + -';
         }
         if (!in_array($status, [CheckResult::OK, CheckResult::WARN, CheckResult::FAIL], true)) {
             $errors[] = $where . '.status must be ok, warn or fail';
@@ -143,13 +153,42 @@ class ReportValidator
         if (mb_strlen($detail) > self::DETAIL_LENGTH) {
             $errors[] = sprintf('%s.detail is longer than %d characters', $where, self::DETAIL_LENGTH);
         }
+        $metrics = isset($check['metrics']) ? $this->metrics($check['metrics'], $where, $errors) : null;
         if (count($errors) > $before) {
             return null;
         }
-        $label = CheckResult::clean($this->normalizer->mask($label), self::LABEL_LENGTH);
+        $label = CheckResult::clean($label, self::LABEL_LENGTH);
         return ['code' => $code, 'label' => $label !== '' ? $label : $code, 'status' => $status,
             'value' => is_int($value) || is_float($value) ? $value : null, 'unit' => $unit,
-            'detail' => CheckResult::clean($this->normalizer->mask($detail), self::DETAIL_LENGTH)];
+            'detail' => CheckResult::clean($this->normalizer->mask($detail), self::DETAIL_LENGTH)]
+            + ($metrics !== null && $metrics !== [] ? ['metrics' => $metrics] : []);
+    }
+
+    /**
+     * A line's measurements: only METRICS' keys, each a number from 0 to its most.
+     *
+     * @param array<mixed> $metrics
+     * @param string[] $errors
+     * @return array<string, int|float>
+     */
+    private function metrics(array $metrics, string $where, array &$errors): array
+    {
+        $kept = [];
+        $position = 0;
+        foreach ($metrics as $key => $value) {
+            $position++;
+            $max = self::METRICS[$key] ?? null;
+            if ($max === null) {
+                $errors[] = sprintf('%s.metrics has an unknown key (the %d.)', $where, $position);
+            } elseif (!(is_int($value) || is_float($value)) || !is_finite((float)$value) || $value < 0
+                || $value > $max || ($key !== 'cpu_percent' && !is_int($value))) {
+                $errors[] = sprintf('%s.metrics.%s must be a %s from 0 to %s', $where, $key,
+                    $key === 'cpu_percent' ? 'number' : 'whole number', $key === 'cpu_percent' ? $max : 'its most');
+            } else {
+                $kept[$key] = $value;
+            }
+        }
+        return $kept;
     }
 
     /**
@@ -176,6 +215,8 @@ class ReportValidator
                 'string' => is_string($value),
                 'number' => $value === null || is_int($value) || is_float($value),
                 'list' => is_array($value) && array_is_list($value),
+                // {} decodes to [], so an empty object is an empty array
+                'object' => is_array($value) && ($value === [] || !array_is_list($value)),
                 default => false,
             };
             if ($type === null) {

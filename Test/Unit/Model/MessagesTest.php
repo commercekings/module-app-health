@@ -259,4 +259,35 @@ class MessagesTest extends TestCase
         $this->assertStringStartsWith('*Security: sensitive data in logs · Main Website Store*',
             $texts[4]);
     }
+
+    public function testContainersAsATablePerServerCappedAndFresh(): void
+    {
+        $line = fn (string $name, array $metrics) => ['code' => 'container_' . $name, 'label' => 'Container ' . $name,
+            'status' => 'ok', 'metrics' => $metrics];
+        $servers = [
+            'web-2' => ['generated_at' => self::NOW - 60, 'checks' => [
+                $line('nginx', ['cpu_percent' => 0.5, 'mem_used_bytes' => 25165824, 'restarts' => 3]),
+                ['code' => 'disk_root', 'label' => 'Disk /', 'status' => 'ok', 'value' => 40],
+            ]],
+            'db-1' => ['generated_at' => self::NOW - 60, 'checks' => [
+                $line('mariadb', ['cpu_percent' => 105.25, 'mem_used_bytes' => 3006477107,
+                    'mem_limit_bytes' => 4294967296, 'restarts' => 0]),
+            ]],
+            'old' => ['generated_at' => self::NOW - 3600, 'checks' => [$line('php', ['cpu_percent' => 1.0])]],
+        ];
+        $this->assertSame("*Containers · db-1*\n```\n"
+            . "NAME        CPU        MEM  MEM%  RESTARTS\n"
+            . "mariadb  105.3%  2.8G / 4G   70%         0\n```\n"
+            . "*Containers · web-2*\n```\n"
+            . "NAME    CPU  MEM  MEM%  RESTARTS\n"
+            . "nginx  0.5%  24M     -         3\n```",
+            $this->messages->containers($servers, self::NOW, 900), 'by server; no limit: no %; a stale server left out');
+        $many = ['big' => ['generated_at' => self::NOW, 'checks' => array_map(fn ($i) => $line('c' . $i,
+            ['cpu_percent' => 1.0]), range(1, Messages::CONTAINERS + 4))]];
+        $text = $this->messages->containers($many, self::NOW, 900);
+        $this->assertSame(Messages::CONTAINERS, preg_match_all('/^c\d+ /m', $text), 'twenty rows');
+        $this->assertStringEndsWith("```\n…and 4 more", $text);
+        $this->assertSame('', $this->messages->containers(['x' => ['generated_at' => self::NOW, 'checks' => [
+            ['code' => 'disk_root', 'status' => 'ok']]]], self::NOW, 900), 'no measurements: no table');
+    }
 }

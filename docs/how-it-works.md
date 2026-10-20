@@ -210,7 +210,7 @@ the consumer write different keys of a row without undoing each other. Keys:
 | `status:posted` | per scope, when a status was last posted, and last posted as "All checks OK" |
 | `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
 | `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW critical errors) waiting for the next alert, and the last told per check (id and time) |
-| `external` | each server's last good status from `var/app-health/status-<source>.json` (source => generated_at, its lines – code, label, status, value, unit, masked detail – the file's hash, read_at); at most 20, written only when a file changed |
+| `external` | each server's last good status from `var/app-health/status-<source>.json` (source => generated_at, its lines – code, label, status, value, unit, masked detail, a container's metrics – the file's hash, read_at); at most 20, written only when a file changed |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
 To start over (e.g. in a test), delete the `flag` rows whose `flag_code` starts with `commercekings_app_health_` and

@@ -1,0 +1,11 @@
+# App health's server status on a server you run: /etc/systemd/system/ck-host-status.service
+# Root collects (Docker CLI, no proxy: the host's own Docker), the file is written as var/app-health's owner.
+[Unit]
+Description=Server status for Magento App health
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/host-status.sh
+# settings: /etc/ck-host-status.env (mode 0600, CK_ lines only), see the script's header
+Nice=10

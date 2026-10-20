@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Notification;
 
 use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Check\External;
 use CommerceKings\AppHealth\Model\Check\SensitiveData;
 use CommerceKings\AppHealth\Model\Format;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
@@ -57,12 +58,15 @@ class Summary implements NotificationTypeInterface
                     $tallies[] = $this->named($tally, $scopes);
                 }
             }
-            $rows = $this->store->load(['checks', Fingerprints::KEY, SensitiveData::KEY]);
+            $rows = $this->store->load(['checks', Fingerprints::KEY, SensitiveData::KEY, External::ROW]);
             $checks = $this->named((array)($rows['checks'] ?? []), $scopes);
             $security = $target->isShopWide()
                 ? $this->security($tallies, (array)($rows[SensitiveData::KEY] ?? []), $now) : [];
+            // the servers' containers: shared, so in the global summary
+            $containers = $target->isShopWide() ? $this->messages->containers((array)($rows[External::ROW] ?? []),
+                $now, $this->config->getInt(External::CODE, 'stale_minutes', 15) * 60) : '';
             return [$this->messages->summary($target, $checks, $tallies, $now, $rows[Fingerprints::KEY] ?? [],
-                $security),
+                $security, $containers),
                 fn () => null];
         });
     }

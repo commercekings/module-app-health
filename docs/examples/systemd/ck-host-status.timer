@@ -1,0 +1,12 @@
+# /etc/systemd/system/ck-host-status.timer - every minute; a run still going is not started twice (oneshot)
+#   systemctl daemon-reload && systemctl enable --now ck-host-status.timer
+#   journalctl -u ck-host-status   (what it said)
+[Unit]
+Description=Server status every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

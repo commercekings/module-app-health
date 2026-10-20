@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The server's status for App health's "external" check: containers, disk, load, memory and - when set - services,
+# The server's status for App health's "external" check: containers (state, health, restarts, CPU, memory, network and
+# block I/O), disk, load, memory and - when set - services,
 # backup age and certificate expiry, written as {"report": {...}} to Magento's var/app-health/status-<source>.json
 # (a temporary file in the same folder, then renamed: Magento never reads half a file). Magento is not started; its
 # cron reads the file every 5 minutes. Run this every minute on the server (cron or a systemd timer, see the README).
@@ -10,7 +11,10 @@
 #                    /opt/magento/shared/var/app-health (Docker: the host folder mounted as var/)
 #   CK_SOURCE        this server's name in the alerts (default: the host name), [A-Za-z0-9._-], at most 40
 #   CK_CONTAINERS    containers that must be running, empty for none (default: mariadb php cron rabbitmq opensearch cache session
-#                    varnish nginx)
+#                    varnish nginx); or CK_COMPOSE_PROJECT: every container of that Compose project (its label)
+#   CK_CONTAINER_MEM_WARN / CK_CONTAINER_CPU_WARN  a container's memory % of its limit / CPU % (one core = 100) above
+#                    which it warns (default: 85 / 90); down, restarting or unhealthy fails
+#   DOCKER_HOST      (the environment) another Docker endpoint, e.g. tcp://docker-socket-proxy:2375 in a container
 #   CK_DISKS         mount points (default: /); CK_DISK_WARN / CK_DISK_FAIL percent used (default: 80 / 90)
 #   CK_MEM_WARN / CK_MEM_FAIL  percent of memory available below which it warns / fails (default: 10 / 5)
 #   CK_LOAD_WARN / CK_LOAD_FAIL  1-minute load per CPU (default: 2 / 4)
@@ -48,16 +52,25 @@ if (( ! dry_run )) && [[ -z "${CK_STATUS_DIR:-}" ]]; then
 fi
 
 checks='[]'
-# add CODE LABEL STATUS VALUE UNIT DETAIL (VALUE may be "" for none)
+# add CODE LABEL STATUS VALUE UNIT DETAIL [METRICS] (VALUE may be "" for none; METRICS a JSON object of numbers)
 add() {
     # $a_* names: "label" is a jq keyword (jq 1.5+ can't take $label)
     checks=$(jq -c --arg a_code "$1" --arg a_label "$2" --arg a_status "$3" --arg a_value "$4" --arg a_unit "$5" \
-        --arg a_detail "$6" '. + [{code: $a_code, label: $a_label, status: $a_status,
-            value: (if $a_value == "" then null else ($a_value | tonumber) end), unit: $a_unit, detail: $a_detail}]' \
+        --arg a_detail "$6" --argjson a_metrics "${7:-null}" '. + [{code: $a_code, label: $a_label, status: $a_status,
+            value: (if $a_value == "" then null else ($a_value | tonumber) end), unit: $a_unit, detail: $a_detail}
+            + (if $a_metrics == null or $a_metrics == {} then {} else {metrics: $a_metrics} end)]' \
         <<< "$checks")
 }
-# code: lower case letters, digits and "_", at most 40
-code() { tr 'A-Z' 'a-z' <<< "$1" | tr -c 'a-z0-9_\n' '_' | cut -c1-40; }
+# code: PREFIX and a name as lower case letters, digits and "_", at most 40 in all; a longer one keeps its start and
+# gets a short hash of the whole, so two long names stay two codes
+code() {
+    local full
+    full="$2$(tr 'A-Z' 'a-z' <<< "$1" | tr -c 'a-z0-9_\n' '_')"
+    if (( ${#full} > 40 )); then
+        full="${full:0:33}_$(printf '%s' "$full" | sha1sum | cut -c1-6)"
+    fi
+    printf '%s\n' "$full"
+}
 # status of VALUE against WARN and FAIL limits; "up" = higher is worse, "down" = lower is worse
 level() {
     awk -v v="$1" -v w="$2" -v f="$3" -v d="$4" 'BEGIN {
@@ -66,22 +79,58 @@ level() {
         print s }'
 }
 
-# containers: running, restarts, health
-for name in ${CK_CONTAINERS-mariadb php cron rabbitmq opensearch cache session varnish nginx}; do
+# containers: state, health and restarts (docker inspect), and while running CPU, memory, network and block I/O
+# (one docker stats for all) - through the Docker CLI, so DOCKER_HOST (e.g. a socket proxy) works too
+if [[ -n "${CK_COMPOSE_PROJECT:-}" ]]; then
+    containers=$(docker ps -a --filter "label=com.docker.compose.project=$CK_COMPOSE_PROJECT" --format '{{.Names}}' \
+        | sort)
+else
+    containers=${CK_CONTAINERS-mariadb php cron rabbitmq opensearch cache session varnish nginx}
+fi
+running=()
+for name in $containers; do
+    if docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null | grep -qx running; then
+        running+=("$name")
+    fi
+done
+stats='{}'
+if (( ${#running[@]} )); then
+    # "12.34%", "512MiB / 2GiB", "1.2kB / 3.4MB": numbers and bytes, by name
+    stats=$(docker stats --no-stream --format '{{json .}}' "${running[@]}" 2>/dev/null | jq -c -s '
+        def bytes: (capture("^(?<n>[0-9.]+)\\s*(?<u>[A-Za-z]*)$") // {n: "0", u: "B"}) as $c
+            | ($c.n | tonumber) * ({"": 1, "B": 1, "kB": 1e3, "KB": 1e3, "MB": 1e6, "GB": 1e9, "TB": 1e12,
+                "KiB": 1024, "MiB": 1048576, "GiB": 1073741824, "TiB": 1099511627776}[$c.u] // 1) | floor;
+        def pair: split(" / ") | map(bytes);
+        map({key: .Name, value: {cpu_percent: (.CPUPerc | rtrimstr("%") | tonumber? // 0),
+            mem_percent: (.MemPerc | rtrimstr("%") | tonumber? // 0),
+            mem: (.MemUsage | pair), net: (.NetIO | pair), blk: (.BlockIO | pair)}}) | from_entries' 2>/dev/null \
+        || echo '{}')
+fi
+for name in $containers; do
+    code="$(code "$name" container_)"
     if ! state=$(docker inspect --format '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null); then
-        add "container_$(code "$name")" "Container $name" fail "" "" "not found"
+        add "$code" "Container $name" fail "" "" "not found"
         continue
     fi
-    read -r running restarts health <<< "$state"
-    status=ok
-    detail="$running"
+    read -r running_state restarts health <<< "$state"
+    detail="$running_state"
     [[ "$health" != none ]] && detail="$detail, $health"
-    if [[ "$running" != running || "$health" == unhealthy ]]; then
-        status=fail
-    elif [[ "$running" == restarting || "$health" == starting ]]; then
+    metrics=$(jq -c --arg n "$name" --argjson r "$restarts" '.[$n] // {} | if . == {} then {restarts: $r} else
+        {cpu_percent: (.cpu_percent * 100 | round / 100), mem_used_bytes: .mem[0], mem_limit_bytes: .mem[1],
+            net_rx_bytes: .net[0], net_tx_bytes: .net[1], blk_read_bytes: .blk[0], blk_write_bytes: .blk[1],
+            restarts: $r} end' <<< "$stats")
+    cpu=$(jq -r '.cpu_percent // empty' <<< "$metrics")
+    mem=$(jq -r --arg n "$name" '.[$n].mem_percent // empty' <<< "$stats")
+    status=ok
+    if [[ "$running_state" != running || "$health" == unhealthy ]]; then
+        status=fail # down, restarting or unhealthy
+    elif [[ "$health" == starting ]] \
+        || [[ -n "$mem" && "$(level "$mem" "${CK_CONTAINER_MEM_WARN:-85}" 1000 up)" != ok ]] \
+        || [[ -n "$cpu" && "$(level "$cpu" "${CK_CONTAINER_CPU_WARN:-90}" 1000000 up)" != ok ]]; then
         status=warn
     fi
-    add "container_$(code "$name")" "Container $name" "$status" "$restarts" "restarts" "$detail"
+    [[ -n "$cpu" ]] && detail="$detail, CPU ${cpu}%"
+    add "$code" "Container $name" "$status" "${mem:+$(printf '%.1f' "$mem")}" "${mem:+%}" "$detail" "$metrics"
 done
 
 # disks: percent used
@@ -89,7 +138,7 @@ for mount in ${CK_DISKS:-/}; do
     used=$(df -P "$mount" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
     free=$(df -Ph "$mount" | awk 'NR == 2 { print $4 }')
     name="${mount#/}"
-    add "disk_$(code "${name:-root}")" "Disk $mount" "$(level "$used" "${CK_DISK_WARN:-80}" "${CK_DISK_FAIL:-90}" up)" \
+    add "$(code "${name:-root}" disk_)" "Disk $mount" "$(level "$used" "${CK_DISK_WARN:-80}" "${CK_DISK_FAIL:-90}" up)" \
         "$used" "%" "$free free"
 done
 
@@ -105,7 +154,7 @@ add load "Load per CPU" "$(level "$load" "${CK_LOAD_WARN:-2}" "${CK_LOAD_FAIL:-4
 # services (optional)
 for unit in ${CK_SERVICES:-}; do
     state=$(systemctl is-active "$unit" 2>/dev/null || true)
-    add "service_$(code "$unit")" "Service $unit" "$([[ "$state" == active ]] && echo ok || echo fail)" "" "" "$state"
+    add "$(code "$unit" service_)" "Service $unit" "$([[ "$state" == active ]] && echo ok || echo fail)" "" "" "$state"
 done
 
 # backup age (optional): hours since the backup last touched the file
@@ -124,11 +173,11 @@ for host in ${CK_SSL_HOSTS:-}; do
     end=$(echo | timeout 10 openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null \
         | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
     if [[ -z "$end" ]]; then
-        add "ssl_$(code "$host")" "Certificate $host" fail "" "" "could not read the certificate"
+        add "$(code "$host" ssl_)" "Certificate $host" fail "" "" "could not read the certificate"
         continue
     fi
     days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
-    add "ssl_$(code "$host")" "Certificate $host" \
+    add "$(code "$host" ssl_)" "Certificate $host" \
         "$(level "$days" "${CK_SSL_WARN_DAYS:-14}" "${CK_SSL_FAIL_DAYS:-7}" down)" "$days" "days" "until it expires"
 done
 

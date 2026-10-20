@@ -1,0 +1,49 @@
+# App health's server status for a Docker Compose stack: use it next to your stack's own file,
+#   docker compose -f docker-compose.yml -f docker-compose.host-status.yml --profile host-status up -d
+# (stop: docker compose ... rm -sf host-status docker-socket-proxy). Set the three values marked "yours".
+#
+# Why the proxy: Docker's socket - even mounted :ro - is the whole Docker API, so a container holding it can start a
+# privileged container, i.e. it is root on the host. The proxy (HAProxy) hands the script only what it needs: GET on
+# /containers, plus /_ping and /version for the Docker CLI; POST is off, and it sits on an internal network of its own.
+# On a server you run yourself, the host timer (../systemd/) needs no proxy at all and is the better choice.
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    profiles: [host-status]
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      EVENTS: 0
+      PING: 1
+      VERSION: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [host-status]
+
+  host-status:
+    image: alpine:3.20
+    profiles: [host-status]
+    restart: unless-stopped
+    depends_on: [docker-socket-proxy]
+    # starts as root to install its tools, then runs the script as CK_UID:CK_GID
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      CK_SOURCE: shop-1
+      CK_STATUS_DIR: /status
+      CK_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-shop}
+      CK_DISKS: /
+      # yours: the uid:gid PHP runs as in your Magento container (it owns var/; `id` in it tells)
+      CK_UID: "1000"
+      CK_GID: "1000"
+    volumes:
+      # yours: the host folder or volume that is Magento's var/ (here a bind mount of it)
+      - ./var/app-health:/status
+      # yours: where you keep the script
+      - ./host-status.sh:/usr/local/bin/host-status.sh:ro
+    networks: [default, host-status]
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache -q bash jq coreutils docker-cli su-exec && exec su-exec \"$$CK_UID:$$CK_GID\" bash -c 'while :; do bash /usr/local/bin/host-status.sh || echo host-status failed >&2; sleep 60; done'"]
+
+networks:
+  host-status:
+    internal: true

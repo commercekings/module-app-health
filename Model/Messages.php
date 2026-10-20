@@ -31,6 +31,10 @@ class Messages
     private const NOTICE_NOUNS = ['external' => 'problem'];
     /** Notices shown per message (folded ones can add up), then "…and N more". */
     private const NOTICES = 10;
+    /** Container rows in a status or summary, all servers together. */
+    public const CONTAINERS = 20;
+    /** A container's name in a table is cut to this. */
+    private const NAME_WIDTH = 28;
     /** Causes shown per alert. */
     private const CAUSES = 4;
     /** The summary's log errors per level, the latest first. */
@@ -116,15 +120,17 @@ class Messages
     }
 
     /**
-     * Needs attention (not ok now, then had problems today), the day's log errors, email, then what was ok all day.
+     * Needs attention (not ok now, then had problems today), the day's log errors, email, the servers' containers, then
+     * what was ok all day.
      *
      * @param array<string, array<mixed>> $checks the shop-wide checks and the website's own (the "checks" row)
      * @param array<int|string, array<mixed>> $tallies the day's hours: code => ['w' => worst rank, 'c' => counts]
      * @param array<string, array<mixed>> $fingerprints the "fingerprints" row
      * @param string[] $security the day's sensitive-data findings, one line each (the global summary)
+     * @param string $containers containers() of the servers' last statuses (the global summary)
      */
     public function summary(Target $target, array $checks, array $tallies, int $now, array $fingerprints = [],
-        array $security = []): string
+        array $security = [], string $containers = ''): string
     {
         [$worst, $counts] = $this->sum($tallies);
         $problems = [];
@@ -152,6 +158,7 @@ class Messages
             $this->section('*Security*', array_map(fn (string $line) => $this->times($target, $line), $security)),
             $this->section('*Errors, last 24 h*', $this->logs($target, $counts, $fingerprints, $now)),
             $this->section('*Email*', $this->email($target, $checks, $counts)),
+            $containers,
             $this->section('*All OK*', $okAllDay !== [] ? [implode(', ', $okAllDay)] : []),
         ];
         return '*' . $this->where($target) . ' · daily summary · ' . $this->local($target, $now, 'j M') . '*'
@@ -193,6 +200,89 @@ class Messages
             $text .= $moreErrors > 0 ? "\n• …and " . $moreErrors . ' more' : '';
         }
         return $text;
+    }
+
+    /**
+     * The servers' containers as a table, one per server (a code block, so the columns line up in Slack):
+     * NAME, CPU, MEM (used / limit), MEM% and RESTARTS of each status line with measurements ("metrics"), the
+     * lines of a server without a fresh status left out. At most CONTAINERS rows in all, then "…and N more"; '' when
+     * there are none.
+     *
+     * @param array<string, array<mixed>> $servers the "external" state row: source => its last good status
+     */
+    public function containers(array $servers, int $now, int $staleAfter): string
+    {
+        $blocks = [];
+        $left = self::CONTAINERS;
+        $more = 0;
+        ksort($servers);
+        foreach ($servers as $source => $server) {
+            if ((int)($server['generated_at'] ?? 0) <= $now - $staleAfter) {
+                continue;
+            }
+            $rows = [];
+            foreach ((array)($server['checks'] ?? []) as $line) {
+                $metrics = (array)($line['metrics'] ?? []);
+                if ($metrics === []) {
+                    continue;
+                }
+                if ($left <= 0) {
+                    $more++;
+                    continue;
+                }
+                $left--;
+                $used = $metrics['mem_used_bytes'] ?? null;
+                $limit = $metrics['mem_limit_bytes'] ?? null;
+                $rows[] = [
+                    (string)preg_replace('/^Container /', '', (string)($line['label'] ?? $line['code'] ?? '')),
+                    isset($metrics['cpu_percent']) ? number_format((float)$metrics['cpu_percent'], 1) . '%' : '-',
+                    $used !== null ? self::size((int)$used) . ($limit ? ' / ' . self::size((int)$limit) : '') : '-',
+                    $used !== null && $limit ? (string)round($used * 100 / $limit) . '%' : '-',
+                    isset($metrics['restarts']) ? (string)$metrics['restarts'] : '-',
+                ];
+            }
+            if ($rows !== []) {
+                $blocks[] = '*Containers · ' . $source . "*\n```\n" . self::table(['NAME', 'CPU', 'MEM', 'MEM%',
+                    'RESTARTS'], $rows) . "\n```";
+            }
+        }
+        if ($more > 0) {
+            $blocks[] = '…and ' . $more . ' more';
+        }
+        return implode("\n", $blocks);
+    }
+
+    /**
+     * Columns padded to their widest cell: the first left, the rest right-aligned.
+     *
+     * @param string[] $header
+     * @param list<string[]> $rows
+     */
+    private static function table(array $header, array $rows): string
+    {
+        $rows = array_merge([$header], array_map(fn (array $row) => array_map(
+            fn (string $cell) => mb_substr($cell, 0, self::NAME_WIDTH), $row), $rows));
+        $widths = [];
+        foreach ($rows as $row) {
+            foreach ($row as $i => $cell) {
+                $widths[$i] = max($widths[$i] ?? 0, mb_strlen($cell));
+            }
+        }
+        return implode("\n", array_map(fn (array $row) => rtrim(implode('  ', array_map(
+            fn (string $cell, int $i) => $i === 0 ? $cell . str_repeat(' ', $widths[$i] - mb_strlen($cell))
+                : str_repeat(' ', $widths[$i] - mb_strlen($cell)) . $cell, $row, array_keys($row)))), $rows));
+    }
+
+    /** "512M", "1.5G", "980K", "12B": short, for a table. */
+    private static function size(int $bytes): string
+    {
+        foreach (['T' => 1 << 40, 'G' => 1 << 30, 'M' => 1 << 20, 'K' => 1 << 10] as $unit => $size) {
+            if ($bytes >= $size) {
+                $value = $bytes / $size;
+                return ($value < 10 ? rtrim(rtrim(number_format($value, 1), '0'), '.') : (string)round($value)) . $unit;
+            }
+        }
+        return $bytes . 'B';
     }
 
     public function test(Target $target): string

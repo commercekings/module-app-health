@@ -98,14 +98,52 @@ class ReportValidatorTest extends TestCase
             'with an offset, as old as allowed');
     }
 
-    public function testLabelsAndDetailsAreMaskedLikeLogMessages(): void
+    public function testALabelIsANameAndADetailIsMasked(): void
     {
-        $line = $this->validator()->validate($this->json([], ['label' => 'Backup of jane@example.com',
+        $line = $this->validator()->validate($this->json([], ['label' => 'Container sandbox-flow-php-fpm-1',
             'detail' => 'password=hunter2 for customer Jane Doe at +381 64 123 4567, https://x.test/?t=1']),
             self::NOW, self::NOW - 900)['checks'][0];
-        $this->assertSame('Backup of ***', $line['label']);
+        $this->assertSame('Container sandbox-flow-php-fpm-1', $line['label'], 'a name stays as it is');
         foreach (['hunter2', 'Jane', 'Doe', '123', 'x.test'] as $leak) {
             $this->assertStringNotContainsString($leak, $line['detail'], $leak);
         }
+        foreach (['Backup of jane@example.com', 'say "hi"', "it's", 'a;b', '<b>'] as $label) {
+            $this->assertStringContainsString('checks[0].label may only have letters, digits',
+                (string)$this->refusal($this->json([], ['label' => $label])), $label);
+        }
+        foreach (['Disk /', 'Certificate shop.example.com', 'Load per CPU', 'Disk /var (data)', 'Memory 85%'] as $label) {
+            $this->assertNull($this->refusal($this->json([], ['label' => $label])), $label);
+        }
+    }
+
+    public function testAContainersMetricsAreNumbersWithinBounds(): void
+    {
+        $metrics = ['cpu_percent' => 12.5, 'mem_used_bytes' => 536870912, 'mem_limit_bytes' => 2147483648,
+            'net_rx_bytes' => 1200, 'net_tx_bytes' => 3400, 'blk_read_bytes' => 0, 'blk_write_bytes' => 4096,
+            'restarts' => 2];
+        $line = $this->validator()->validate($this->json([], ['metrics' => $metrics]), self::NOW, self::NOW - 900)
+            ['checks'][0];
+        $this->assertSame($metrics, $line['metrics']);
+        $this->assertArrayNotHasKey('metrics', $this->validator()->validate($this->json(), self::NOW, self::NOW - 900)
+            ['checks'][0], 'optional: a file without it is as valid as before');
+        $this->assertArrayNotHasKey('metrics', $this->validator()->validate($this->json([], ['metrics' => []]),
+            self::NOW, self::NOW - 900)['checks'][0], 'an empty object');
+        $this->assertSame(450.5, $this->validator()->validate($this->json([], ['metrics' => ['cpu_percent' => 450.5]]),
+            self::NOW, self::NOW - 900)['checks'][0]['metrics']['cpu_percent'], 'over 100 %: several cores');
+        foreach ([
+            ['metrics has an unknown key (the 2.)', ['cpu_percent' => 1, 'pids' => 3]],
+            ['metrics.mem_used_bytes must be a whole number', ['mem_used_bytes' => -1]],
+            ['metrics.mem_used_bytes must be a whole number', ['mem_used_bytes' => 1.5]],
+            ['metrics.mem_used_bytes must be a whole number', ['mem_used_bytes' => '512M']],
+            ['metrics.restarts must be a whole number', ['restarts' => 2e9]],
+            ['metrics.cpu_percent must be a number from 0 to 100000', ['cpu_percent' => 100001]],
+            ['metrics.cpu_percent must be a number', ['cpu_percent' => null]],
+            ['checks[0].metrics must be an object', [1, 2]],
+        ] as [$expected, $bad]) {
+            $this->assertStringContainsString($expected, (string)$this->refusal($this->json([], ['metrics' => $bad])),
+                json_encode($bad));
+        }
+        $this->assertStringContainsString('checks[0].metrics must be an object',
+            (string)$this->refusal($this->json([], ['metrics' => 'cpu 5%'])));
     }
 }
