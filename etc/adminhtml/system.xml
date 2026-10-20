@@ -23,7 +23,7 @@
                 </field>
                 <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Channel</label>
-                    <comment>A Notification channel, e.g. slack (with module-notification-slack). Slack gets formatted messages; a channel without a format of its own gets plain text.</comment>
+                    <comment>A Notification channel that sends text, e.g. slack (with module-notification-slack). Slack gets formatted messages, another text channel plain text. Not email: it sends templates.</comment>
                     <validate>required-entry</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

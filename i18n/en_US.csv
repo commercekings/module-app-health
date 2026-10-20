@@ -3,7 +3,7 @@
 """%1"" is not a rule code: lowercase letters, digits and _ (a setting may name a rule as set/rule).","""%1"" is not a rule code: lowercase letters, digits and _ (a setting may name a rule as set/rule)."
 "%1 - App health reports on this shop.","%1 - App health reports on this shop."
 "%1 - stored when App health is first saved on.","%1 - stored when App health is first saved on."
-"A Notification channel, e.g. slack (with module-notification-slack). Slack gets formatted messages; a channel without a format of its own gets plain text.","A Notification channel, e.g. slack (with module-notification-slack). Slack gets formatted messages; a channel without a format of its own gets plain text."
+"A Notification channel that sends text, e.g. slack (with module-notification-slack). Slack gets formatted messages, another text channel plain text. Not email: it sends templates.","A Notification channel that sends text, e.g. slack (with module-notification-slack). Slack gets formatted messages, another text channel plain text. Not email: it sends templates."
 "A cache type disabled (at once), or invalidated and not refreshed.","A cache type disabled (at once), or invalidated and not refreshed."
 "A check still failing is sent again after this long. Default: 6.","A check still failing is sent again after this long. Default: 6."
 "A failing job counts as fixed after (minutes)","A failing job counts as fixed after (minutes)"
