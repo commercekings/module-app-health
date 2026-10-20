@@ -62,7 +62,7 @@ class TargetsTest extends TestCase
         $targets = $this->targets(['default' => self::ON + ['commercekings_app_health/general/website_channels'
             => json_encode(['_1' => ['website_id' => '2', 'channel' => 'slack', 'recipient' => 'C02']])],
             'websites/2' => ['commercekings_app_health/general/recipient' => 'C-ignored'],
-            'stores/2' => ['general/store_information/name' => 'Moj Planer']]);
+            'stores/2' => ['general/store_information/name' => 'Acme Shop']]);
         $shopWide = $targets->shopWide();
         $this->assertSame([0, 1, 'C00', '', 'Europe/Belgrade'], [$shopWide->websiteId,
             $shopWide->storeId, $shopWide->recipient, $shopWide->name, $shopWide->timezone],
@@ -73,7 +73,7 @@ class TargetsTest extends TestCase
             $websites[1]->ownChannel], 'no row: the global channel');
         $this->assertSame(['shop.example.com', 'moj.example.rs'], [$shopWide->domain, $websites[2]->domain],
             'the host of its store view\'s secure base URL, for the header');
-        $this->assertSame(['C02', 'Moj Planer', 2, true],
+        $this->assertSame(['C02', 'Acme Shop', 2, true],
             [$websites[2]->recipient, $websites[2]->name, $websites[2]->storeId, $websites[2]->ownChannel],
             'its row; a website-scope setting is not read; the Store Information name first');
         $this->assertSame('C02', $targets->forWebsite(2)->recipient);
@@ -82,9 +82,9 @@ class TargetsTest extends TestCase
 
     public function testTheGlobalNameIsTheShopsNotAWebsitesStoreName(): void
     {
-        $named = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Moj Planer Group'],
-            'stores/1' => ['general/store_information/name' => 'Moj Planer EU']]);
-        $this->assertSame(['Moj Planer Group', 'Moj Planer EU'], [$named->shopWide()->name,
+        $named = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Acme Shop Group'],
+            'stores/1' => ['general/store_information/name' => 'Acme Shop EU']]);
+        $this->assertSame(['Acme Shop Group', 'Acme Shop EU'], [$named->shopWide()->name,
             $named->websites()[1]->name], 'global: the default scope\'s Store Information name');
         $this->assertSame('', $this->targets(['default' => self::ON])->shopWide()->name,
             'none set: no store\'s name for the whole shop - the header says the domain');
@@ -92,9 +92,9 @@ class TargetsTest extends TestCase
 
     public function testWebsitesWithTheSameStoreNameAreToldApart(): void
     {
-        $targets = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Moj Planer']]);
+        $targets = $this->targets(['default' => self::ON + ['general/store_information/name' => 'Acme Shop']]);
         $websites = $targets->websites();
-        $this->assertSame(['Moj Planer (Main Website)', 'Moj Planer (Second Website)'],
+        $this->assertSame(['Acme Shop (Main Website)', 'Acme Shop (Second Website)'],
             [$websites[1]->name, $websites[2]->name], 'both inherit the name: the website says which');
     }
 

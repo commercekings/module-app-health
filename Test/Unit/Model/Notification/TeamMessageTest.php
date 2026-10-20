@@ -66,7 +66,7 @@ class TeamMessageTest extends TestCase
         });
         $targets = $this->createStub(Targets::class);
         $targets->method('forWebsite')->willReturn($target === null
-            ? new Target(1, 3, 'slack', 'C0123456789', 'Moj Planer', 'UTC')
+            ? new Target(1, 3, 'slack', 'C0123456789', 'Acme Shop', 'UTC')
             : ($target->websiteId < 0 ? null : $target));
         $logger = $this->createStub(LoggerInterface::class);
         foreach (['error', 'warning', 'info'] as $level) {
@@ -169,7 +169,7 @@ class TeamMessageTest extends TestCase
         $delivery = $this->sent[0];
         $this->assertSame([3, 'slack', 'C0123456789', false, false, 'app_health_alert'], [$delivery->storeId,
             $delivery->channel, $delivery->recipient, $delivery->useCooldown, $delivery->stoppable, $delivery->type]);
-        $this->assertSame('FAIL Cron for Moj Planer', ($delivery->content)()->text);
+        $this->assertSame('FAIL Cron for Acme Shop', ($delivery->content)()->text);
         $this->assertSame(1, $this->recorded);
         [$claim, $sent] = $this->updateData();
         $this->assertSame(['delivery_version' => 5], $claim);
