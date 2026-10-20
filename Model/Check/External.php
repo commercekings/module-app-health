@@ -51,6 +51,26 @@ class External implements CheckInterface
         return (string)__('Look at the server named above.');
     }
 
+    /** What to run on the server for a line, by the kind of its code (the host script's prefixes). */
+    private static function lineHint(string $source, string $code): string
+    {
+        return (string)match (true) {
+            str_starts_with($code, 'container_') => __('On %1: docker ps -a, then docker logs --tail 100 <container>.',
+                $source),
+            str_starts_with($code, 'disk_') => __('On %1: df -h, and du -sh var/log var/report pub/media - logs and old'
+                . ' backups fill it most often.', $source),
+            $code === 'memory' => __('On %1: top (sort by memory) or docker stats - which process takes it?', $source),
+            $code === 'load' => __('On %1: top or docker stats - which process takes the CPU (an indexer, a crawler on'
+                . ' the site)?', $source),
+            str_starts_with($code, 'service_') => __('On %1: systemctl status <service>, then journalctl -u <service>'
+                . ' -n 100.', $source),
+            $code === 'backup' => __('Did the backup job run? Its log on the server says why not.'),
+            str_starts_with($code, 'ssl_') => __('Renew the certificate (certbot renew), or see why it did not renew'
+                . ' by itself.'),
+            default => __('On %1: what is wrong there.', $source),
+        };
+    }
+
     public function getLabel(): string
     {
         return 'Server status';
@@ -115,8 +135,9 @@ class External implements CheckInterface
             if ($generatedAt <= $now - $staleAfter || !isset($present[$source])) {
                 $failing[$source . '/'] = new Cause('external_stale', 'No status from ' . $source . ' since '
                     . Format::at($generatedAt) . (isset($present[$source]) ? '' : ' (its status file is gone)'),
-                    (string)__('Is the status script still scheduled on the server (cron or systemd timer), and can'
-                        . ' it write var/app-health?'));
+                    (string)__('On %1: systemctl list-timers ck-host-status (or crontab -l) - is the status'
+                        . ' script still scheduled? Run it by hand: it says why it cannot write var/app-health.',
+                        $source));
                 $titles[$source . '/'] = 'No status from ' . $source;
                 continue;
             }
@@ -128,7 +149,7 @@ class External implements CheckInterface
                 }
                 $key = $source . '/' . $line['code'];
                 $cause = new Cause((string)$line['code'], $source . ' · ' . self::describe($line, true),
-                    (string)__('Look at the server named above.'));
+                    self::lineHint($source, (string)$line['code']));
                 $titles[$key] = $source . ' · ' . self::describe($line, false);
                 if ($status === CheckResult::FAIL) {
                     $failing[$key] = $cause;
@@ -189,9 +210,12 @@ class External implements CheckInterface
         $cursor = $this->state->get(self::CURSOR) ?? [];
         $notices = [];
         if ($status === CheckResult::FAIL && ($cursor['status'] ?? '') === CheckResult::FAIL) {
+            $hints = [];
             foreach (array_diff_key($failing, array_flip((array)($cursor['failing'] ?? []))) as $cause) {
                 $notices[] = 'Also failing: ' . $cause->detail;
+                $hints[$cause->hint] = 'Check: ' . $cause->hint; // the line's own, not the check's general one
             }
+            $notices = array_merge($notices, array_values(array_filter($hints, fn ($hint) => $hint !== 'Check: ')));
         }
         $next = $status === CheckResult::OK && $servers === 0 ? [] : ['status' => $status,
             'failing' => array_keys($failing)];

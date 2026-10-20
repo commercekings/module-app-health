@@ -35,7 +35,8 @@ class Exceptions implements CheckInterface
         /** What to do, for a problem without a hint of its own. */
     private function hint(): string
     {
-        return (string)__('var/log/exception.log: look for the class around that time, in the file it names.');
+        return (string)__('Open var/log/exception.log at that time: the first "#0" lines of the trace name the module'
+            . ' that threw it. An extension\'s: tell its vendor.');
     }
 
     public function getLabel(): string

@@ -94,7 +94,8 @@ class ExternalTest extends TestCase
         $this->assertSame('host-1 · Backup: 97.5 %', $result->title);
         $this->assertSame(['backup'], self::codes($result));
         $this->assertSame('host-1 · Backup: 97.5 % (details)', $result->causes[0]->detail);
-        $this->assertSame('Look at the server named above.', $result->causes[0]->hint, 'a line: its own hint');
+        $this->assertSame('Did the backup job run? Its log on the server says why not.', $result->causes[0]->hint,
+            'a line: its own hint');
         $this->assertSame('host-1 · Backup: 97.5 %', $result->detail, 'what the hourly status shows: the line');
 
         $this->report('host-2', ['disk' => 'fail', 'php' => 'fail']);
@@ -135,7 +136,8 @@ class ExternalTest extends TestCase
         $this->assertSame(['external_stale'], self::codes($result), 'its old lines are not news');
         $this->assertSame('No status from host-1 since {t:' . ($this->clock->now - 15 * 60) . '}',
             $result->causes[0]->detail);
-        $this->assertStringStartsWith('Is the status script still scheduled', $result->causes[0]->hint,
+        $this->assertStringStartsWith('On host-1: systemctl list-timers ck-host-status (or crontab -l)',
+            $result->causes[0]->hint,
             'no status at all: the script\'s hint, not the line\'s');
     }
 
@@ -221,13 +223,38 @@ class ExternalTest extends TestCase
         $this->assertSame(['external_unreadable'], self::codes($this->check($filesystem)));
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('hints')]
+    public function testEachKindOfLineSaysWhatToRunOnTheServer(string $code, string $hint): void
+    {
+        $this->report('host-1', [$code => 'fail']);
+        $this->assertSame($hint, $this->check()->causes[0]->hint);
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function hints(): array
+    {
+        return [
+            'a container' => ['container_php_fpm', 'On host-1: docker ps -a, then docker logs --tail 100 <container>.'],
+            'a disk' => ['disk_root', 'On host-1: df -h, and du -sh var/log var/report pub/media - logs and old'
+                . ' backups fill it most often.'],
+            'memory' => ['memory', 'On host-1: top (sort by memory) or docker stats - which process takes it?'],
+            'load' => ['load', 'On host-1: top or docker stats - which process takes the CPU (an indexer, a crawler'
+                . ' on the site)?'],
+            'a service' => ['service_nginx', 'On host-1: systemctl status <service>, then journalctl -u <service>'
+                . ' -n 100.'],
+            'a certificate' => ['ssl_shop_example_com', 'Renew the certificate (certbot renew), or see why it'
+                . ' did not renew by itself.'],
+            'anything else' => ['php', 'On host-1: what is wrong there.'],
+        ];
+    }
+
     public function testALineFailingWhileTheCheckFailsIsToldOnce(): void
     {
         $this->report('host-1', ['disk' => 'fail', 'php' => 'ok']);
         $this->assertSame([], $this->check()->notices, 'the alert tells it');
         $this->clock->now += 60;
         $this->report('host-1', ['disk' => 'fail', 'php' => 'fail']);
-        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)', 'Check: Look at the server named above.'],
+        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)', 'Check: On host-1: what is wrong there.'],
             $this->check()->notices, 'a failing line: its own hint, not the no-status one');
         $this->assertSame([], $this->check()->notices, 'once');
     }

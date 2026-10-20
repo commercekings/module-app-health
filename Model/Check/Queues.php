@@ -47,8 +47,8 @@ class Queues implements CheckInterface
         /** What to do, for a problem without a hint of its own. */
     private function hint(): string
     {
-        return (string)__('Are the consumers running (cron_consumers_runner or supervisor)?'
-            . ' bin/magento queue:consumers:list');
+        return (string)__('Do the consumers run? In app/etc/env.php cron_consumers_runner > cron_run must be true (or'
+            . ' they run under supervisor); bin/magento queue:consumers:list names them.');
     }
 
     public function getLabel(): string
