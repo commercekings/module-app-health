@@ -78,7 +78,7 @@ the website). With *Also post shared problems to website channels*, a website wi
 shared checks' alerts (`AlertPlan::scopeChecks()`; never `GLOBAL_ONLY`: security findings).
 
 The daily summary covers the last 24 hourly tallies: the global one (scope 0) the shared checks and the own checks of
-each website without a channel of its own, named ("Email sending (EU Store)", the code "email_disabled@EU Store"); a
+each website without a channel of its own, named ("Email communications disabled (EU Store)", the code "email_disabled@EU Store"); a
 website channel's only that website's checks. Each: checks not ok now, counts, checks that had problems and checks ok
 all day. It is sent from its time (the default store view's time zone; a website channel's in the website's) until 12
 hours later, once a day.
