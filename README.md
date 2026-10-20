@@ -323,7 +323,9 @@ are pinned.
 **Containers.** Each container is a line of its own with its measurements: down, restarting or unhealthy fails (a
 *Problem* at once, *Resolved* when it is back); memory over 85 % of its limit (`CK_CONTAINER_MEM_WARN`) or CPU over 90 %
 (`CK_CONTAINER_CPU_WARN`, one core = 100 %) warns (hourly status and summary). *Send status now* and the daily summary
-show them as a table per server, at most 20 rows:
+show them as a table per server, at most 20 rows (with a Compose project, the names leave out its `<project>-` prefix;
+a container without a memory limit shows the host's memory as its limit – on Docker Desktop the VM's – and MEM% of
+it):
 
 ```
 *Containers · shop-1*

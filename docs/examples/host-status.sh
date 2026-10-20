@@ -18,7 +18,7 @@
 #   DOCKER_HOST      (the environment) another Docker endpoint, e.g. tcp://docker-socket-proxy:2375 in a container
 #   CK_DISKS         mount points (default: /); CK_DISK_WARN / CK_DISK_FAIL percent used (default: 80 / 90)
 #   CK_MEM_WARN / CK_MEM_FAIL  percent of memory available below which it warns / fails (default: 10 / 5)
-#   CK_LOAD_WARN / CK_LOAD_FAIL  1-minute load per CPU (default: 2 / 4)
+#   CK_LOAD_WARN / CK_LOAD_FAIL  5-minute load per CPU (default: 2 / 4)
 #   CK_SERVICES      systemd units that must be active (default: none, e.g. "docker")
 #   CK_BACKUP_FILE   a file your backup touches when it succeeds; CK_BACKUP_WARN_HOURS / _FAIL_HOURS (default 26 / 50)
 #   CK_SSL_HOSTS     host names whose certificate expiry is checked on port 443; CK_SSL_WARN_DAYS / _FAIL_DAYS
@@ -110,9 +110,12 @@ if (( ${#running[@]} )); then
 fi
 for name in $containers; do
     code="$(code "$name" container_)"
+    # a Compose project's containers are named "<project>-<service>-<n>": the label leaves the project out (the code,
+    # unique, keeps it)
+    shown="${name#"${CK_COMPOSE_PROJECT:+$CK_COMPOSE_PROJECT-}"}"
     line=$(awk -F'\t' -v n="$name" '$1 == n' <<< "$list")
     if [[ -z "$line" ]]; then
-        add "$code" "Container $name" fail "" "" "not found"
+        add "$code" "Container $shown" fail "" "" "not found"
         continue
     fi
     running_state=$(cut -f2 <<< "$line")
@@ -148,7 +151,7 @@ for name in $containers; do
         status=warn
     fi
     [[ -n "$cpu" ]] && detail="$detail, CPU ${cpu}%"
-    add "$code" "Container $name" "$status" "${mem:+$(printf '%.1f' "$mem")}" "${mem:+%}" "$detail" "$metrics"
+    add "$code" "Container $shown" "$status" "${mem:+$(printf '%.1f' "$mem")}" "${mem:+%}" "$detail" "$metrics"
 done
 
 # disks: percent used
@@ -166,7 +169,8 @@ add memory "Memory" "$(level "$available" "${CK_MEM_WARN:-10}" "${CK_MEM_FAIL:-5
 
 # load: 1-minute load per CPU
 cpus=$(nproc)
-load=$(awk -v c="$cpus" '{ printf "%.2f", $1 / c }' /proc/loadavg)
+# the 5-minute average: a minute's spike (a reindex, a deploy) is not a warning that comes and goes
+load=$(awk -v c="$cpus" '{ printf "%.2f", $2 / c }' /proc/loadavg)
 add load "Load per CPU" "$(level "$load" "${CK_LOAD_WARN:-2}" "${CK_LOAD_FAIL:-4}" up)" "$load" "" "$cpus CPUs"
 
 # services (optional)

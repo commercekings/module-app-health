@@ -47,7 +47,9 @@ services:
       CK_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-shop}
       CK_DISKS: /
     volumes:
-      # yours: the host folder or volume that is Magento's var/ (here a bind mount of it)
+      # yours: the host folder or volume that is Magento's var/ (here a bind mount of it); the folder must exist and
+      # belong to the user above, e.g. mkdir -p var/app-health && chown 1000:1000 var/app-health (Magento creates it
+      # with the right owner on its first check run)
       - ./var/app-health:/status
       # yours: where you keep the script
       - ./host-status.sh:/usr/local/bin/host-status.sh:ro
