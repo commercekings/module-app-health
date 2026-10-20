@@ -241,6 +241,15 @@ class StatusTest extends TestCase
             === \CommerceKings\AppHealth\Api\StatusPolicyInterface::class), 'the alert type has no policy');
     }
 
+    public function testNotAgainSoonAfterOneWasSent(): void
+    {
+        $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'fail']]]]);
+        $this->send($store, gmdate('Y-m-d H:i:s', self::NOW - 600));
+        $this->assertSame([], $this->sent, 'a late copy of the queue message 10 min after a status: not due');
+        $this->send($store, gmdate('Y-m-d H:i:s', self::NOW - 3600));
+        $this->assertCount(1, $this->sent, 'an interval later: due');
+    }
+
     public function testNothingWhenItIsOff(): void
     {
         $this->send(new MemoryStore(), null, ['general/hourly_status' => '0']);

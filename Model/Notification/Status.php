@@ -71,8 +71,11 @@ class Status implements NotificationTypeInterface
             }
             $now = $this->dateTime->gmtTimestamp();
             $sentAt = (string)($row['sent_at'] ?? '');
-            $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC')
-                : $now - self::intervalMinutes($this->policy, $target->websiteId) * 60;
+            $minutes = self::intervalMinutes($this->policy, $target->websiteId);
+            if ($sentAt !== '' && (int)strtotime($sentAt . ' UTC') > $now - ($minutes - 2) * 60) {
+                return null; // a late copy of the queue message: one was sent since it was queued (as Runner: -2 min)
+            }
+            $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC') : $now - $minutes * 60;
             $rows = $this->store->load(['checks', Fingerprints::KEY, Fingerprints::ERRORS_KEY, self::POSTED_KEY]);
             $posted = (array)($rows[self::POSTED_KEY] ?? []);
             $mine = (array)($posted[$target->websiteId] ?? []);
