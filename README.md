@@ -67,7 +67,8 @@ The logs are read every 5 minutes; what you hear, and when:
 | Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | global |
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
 | New CRITICAL log entries in the first hour after install | one digest when the hour is over ("First hour: N errors seen for the first time: …"); one coming 10+ times in that hour at once | global |
-| ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
+| ERROR log entries (other files) | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
+| ERROR entries of a file in *Errors at once from* (e.g. payment.log) | at once, like CRITICAL (not in the hourly status) | global |
 | WARNING log entries | the daily summary | global |
 | The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with news since the last posted one – a new problem or warning, a new error, or a known one 10+ times in the hour (a "Still open: …" line names what it told before) – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
 | *Send status now* (admin) | when you press it: the checks run now and what they find is posted as "Status now" (problems, warnings, what is not set up, the log errors since the last hourly status) – nothing else changes: no alert is marked told, the hourly status keeps its time | global |
