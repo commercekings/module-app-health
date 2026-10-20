@@ -24,6 +24,9 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   variable part as `***`), in alerts with file:line and the message masked (on by default) – never the line itself.
 - **When the server itself is down.** A heartbeat lets an outside service alert you when the pings stop – the server,
   cron, or the sending path down.
+- **The server's status too.** A script on the server writes its containers, disk, memory, load, backups and
+  certificates to a file every minute; what it reports as failing alerts like any check, and a server that stops
+  reporting is a problem.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
 [module-notification-slack](https://github.com/commercekings/module-notification-slack), or any installed channel.
@@ -43,6 +46,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | all websites |
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
 | Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website |
+| Server status | a line a server reported as `fail` (a container down, a disk 90% full…), `warn` lines as a warning; no report from a server for 15 min. Silent until a server reports ([how](#system-status-from-your-server)) | all websites |
 
 ### Why it fails
 
@@ -58,6 +62,7 @@ Each alert says why, as far as Magento's own data shows it, and what to do (`Wha
 | Sending | the kind of mail transport failure – refused, timed out, login refused, TLS, host not found (DNS) – with the port and the latest error (masked); the failing CommerceKings notifications |
 | Email sending | the scope that disables it (default, website, store view, or env.php) |
 | Sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
+| Server status | each line not OK: the server, what, its value and the script's detail (masked); "No status from host-1 since 14:02" |
 
 ```
 *Problem: Cron jobs stuck · Main Website Store (all websites)*
@@ -195,6 +200,119 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
   show that the channel works. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
   `/checkout/cart/`): they catch a site that is up for cron but down for shoppers.
 
+## System status from your server
+
+Magento sees only itself. A script on the server – run by the server, not by Magento – reports what Magento can't:
+its containers, disks, memory, load and, when set, services, the last backup and certificate expiry. It writes the
+report to Magento's `var/app-health/status-<server>.json`; the *Server status* check reads it in its normal 5-minute
+run. No token, port, URL or Magento command: nothing is exposed and Magento is never started for it.
+
+**Each run of the script** (every minute recommended):
+
+| Does | Never |
+|---|---|
+| Asks Docker for each container's state, restarts and health; `df` for disks, `/proc` for memory and load; optionally `systemctl`, a backup's marker file and `openssl` for certificates | Starts Magento or PHP |
+| Writes `status-<server>.json` to a temporary file in the same folder, then renames it: Magento reads a whole file or none | Reads env files (only its own `CK_` settings), passwords, tokens or Magento's data |
+| Puts names and numbers only into the file (`"Disk /", 87 %, "13G free"`) | Sends anything over the network |
+
+**What App health does with it:**
+
+| When | Then |
+|---|---|
+| A line is `fail` (a container down, a disk 90% full…) | *Problem: host-1 · Container php* at once, *Resolved* when it is `ok` again; repeated every 6 h while it fails |
+| A line is `warn` | a warning in the hourly status and the daily summary |
+| No new status for 15 min (the script, its cron or the server stopped), or the file is gone | *Problem: No status from host-1* – "since 14:02"; a server whose file is gone is forgotten a day later |
+| A file breaks a rule (below) | a warning naming the file and the rule, never its content; the last good status still counts |
+| The whole server is down | nothing can run on it – the heartbeat and an outside uptime check tell you (see *Before going live*) |
+
+**Set up** (as root on the server):
+
+1. Copy [docs/examples/host-status.sh](docs/examples/host-status.sh) to `/usr/local/bin/host-status.sh` (mode 0755);
+   it needs `bash`, `jq` and – for containers – `docker`.
+2. Put its settings in `/etc/ck-host-status.env` (mode 0600): `CK_STATUS_DIR` (Magento's `var/app-health`, as this
+   server sees it), and as needed the server's name, the containers that must run, disks, a backup marker file,
+   the host names whose certificates to watch – the script's header lists them.
+3. Try it: `host-status.sh --dry-run` prints the report; `host-status.sh` writes the file.
+4. Schedule it – cron (`flock`: a slow run is never doubled):
+
+   ```
+   # /etc/cron.d/ck-host-status
+   * * * * * root flock -n /run/ck-host-status.lock /usr/local/bin/host-status.sh
+   ```
+
+   or a systemd timer (a oneshot service never overlaps itself; its output goes to the journal,
+   `journalctl -u ck-host-status`):
+
+   ```ini
+   # /etc/systemd/system/ck-host-status.service
+   [Unit]
+   Description=Server status for Magento App health
+   [Service]
+   Type=oneshot
+   ExecStart=/usr/local/bin/host-status.sh
+
+   # /etc/systemd/system/ck-host-status.timer
+   [Unit]
+   Description=Server status every minute
+   [Timer]
+   OnCalendar=*-*-* *:*:00
+   [Install]
+   WantedBy=timers.target
+   ```
+
+   then `systemctl daemon-reload && systemctl enable --now ck-host-status.timer`.
+
+| Hosting | `CK_STATUS_DIR` and permissions |
+|---|---|
+| Docker Compose (e.g. m2_infra), Warden | the host folder mounted as Magento's `var/`, e.g. `<APP_PATH>/shared/var/app-health` – the script runs on the host, not in a container (read-only containers are fine: the shared `var/` is writable). The script makes the file owned like the folder (the PHP user, also under Docker's user namespaces) and readable for all |
+| A server or VM without Docker | `<Magento root>/var/app-health`; set `CK_CONTAINERS=` (empty) and list the services instead (`CK_SERVICES="nginx php8.3-fpm mariadb"`) |
+| Several nodes | each node runs the script with its own `CK_SOURCE` into the `var/` that Magento's cron reads (a shared `var/`); one file per node, at most 20 |
+| Managed hosting without access to the server | not possible – the checks inside Magento and the heartbeat still work |
+
+**No access to the host's cron** (a development box, or Docker only): run the script in a small container next to
+Magento's, every minute, writing to `var/app-health` alone. It then reports the Docker host's disk, memory and load,
+not the containers – set `CK_CONTAINERS=` (empty). Mounting Docker's socket for the container lines is not
+read-only even with `:ro` (it is the whole Docker API, root on the host), so it is left out; on a real server the
+host cron above is preferred. A Compose service, e.g. in Warden's `.warden/warden-env.yml`:
+
+```yaml
+  host-status:
+    image: alpine:3.20
+    profiles: [host-status]   # not started with the rest: `up -d host-status`, stopped with `rm -sf host-status`
+    restart: unless-stopped
+    environment: {CK_SOURCE: dev-box, CK_STATUS_DIR: /status, CK_CONTAINERS: "", CK_DISKS: /}
+    volumes:
+      - {type: volume, source: appdata, target: /status, volume: {subpath: var/app-health}}
+      - ./host-status.sh:/usr/local/bin/host-status.sh:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache -q bash jq coreutils su-exec && exec su-exec 1000:1000 bash -c 'while :; do bash /usr/local/bin/host-status.sh; sleep 60; done'"]
+```
+
+`1000:1000` is the web server's user in Magento's PHP container (`id` in it tells); `appdata` the volume holding
+Magento's root (Warden's name).
+
+On its first run the check creates `var/app-health` (with Magento's permissions for `var/`, so the script can write
+there) and `status.json.dist` – the format with every field explained, to copy from. Only `status-*.json` files count;
+`.dist` and the script's temporary files never do.
+
+**The file** – the same JSON whatever writes it:
+
+```json
+{"report": {"version": 1, "source": "shop-1", "generated_at": "2026-10-20T14:05:00Z", "checks": [
+  {"code": "disk_root", "label": "Disk /", "status": "warn", "value": 87, "unit": "%", "detail": "13G free"}
+]}}
+```
+
+- **Rules:** named `status-<source>.json` with the same `source` (1–40 of `A-Z a-z 0-9 . _ -`); `version` 1; at
+  most 50 checks; `code` 1–40 of `a-z 0-9 _`, each once; `label` up to 60 characters, `detail` up to 160, `unit` up
+  to 10; `status` `ok`, `warn` or `fail`; `value` a number or null; at most 32 KB; no other keys.
+- **Fresh, never replayed:** `generated_at` (ISO-8601 with a time zone) at most 2 minutes ahead of Magento's clock,
+  within *No status for*, and newer than the status read before – an old copy put back is refused.
+- **Masked:** labels and details are masked like log messages (secrets after key words, names, emails, numbers,
+  URLs) – the script writes names and numbers only anyway.
+- **Light:** a file is read only when it changed (its hash); all servers' last statuses are one state entry.
+
+*Server status* settings: Enabled (Yes); No status for (15 minutes).
+
 ## Extending
 
 Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth` namespace.
@@ -210,6 +328,7 @@ Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth`
 | A validator for rules | `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
 | Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, per website: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
+| Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in the format above (version 1) – no PHP |
 | When the hourly status is posted | `Api\StatusPolicyInterface` (`getIntervalMinutes($scopeId)`, kept within 15 to 180; `shouldPost(Api\Data\StatusReport)`), shipped as `Model\Status\DefaultPolicy`; replace it with a `<preference>`. The status is still delivered every interval (quietly when not posted); urgent alerts never ask the policy |
 
 A check, in your module's `etc/di.xml`:
@@ -320,16 +439,21 @@ Always masked, in the label and the message, as `***`:
   the rest. Nothing is sent from cron directly: every message goes through Notification's queue.
 - Sales emails count only entities created in the last 24 hours; queues read the MySQL queue and RabbitMQ (AMQP)
   connections, not others (e.g. ActiveMQ).
+- Server status is one check for all servers: a line failing while another already fails is told once ("Also
+  failing: …"); an alert names the first 4. At most 20 servers, 50 lines each; needs a script run by the server
+  (not possible on managed hosting without access to it). While no server reports, *Server status* counts as OK in
+  the daily summary.
 - Messages are in English.
 
 ## Tested (as of 0.1.0)
 
-- **Automated tests:** 193 unit tests (on every push); integration tests that run the generated SQL on MySQL/MariaDB
+- **Automated tests:** 208 unit tests (on every push); integration tests that run the generated SQL on MySQL/MariaDB
   (`Test/Integration`, on copies of the tables); PHPStan level 5 and the Magento2 coding standard.
 - **End to end on Magento 2.4.9:** cron, indexers, caches, maintenance, email, exceptions, queues and sales emails
   triggered for real against a simulated Slack API – one alert, then one "recovered", the daily summary, the test
   button, the heartbeat, Slack's error modes, no private data in any message – and live to a real Slack channel.
-- **Not tested end to end yet:** the system.log and sensitive-data checks (unit-tested).
+- **Not tested end to end yet:** the system.log and sensitive-data checks (unit-tested). Server status: unit-tested
+  (Magento's own file classes on a real folder); the example script, run on Debian, writes a file the check takes.
 - **Cost:** a run with every check on takes about 47 ms and 11 queries; with a new 1 MB backlog in both system.log and
   exception.log, about 5 MB of memory (sensitive-data rules: about 13 ms per MB of log).
 

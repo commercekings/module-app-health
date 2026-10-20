@@ -65,6 +65,10 @@
                 <failed_reminders>3</failed_reminders>
                 <quiet_minutes>60</quiet_minutes>
             </email_failing>
+            <external>
+                <enabled>1</enabled>
+                <stale_minutes>15</stale_minutes>
+            </external>
             <sales_emails>
                 <enabled>1</enabled>
                 <unsent_count>3</unsent_count>

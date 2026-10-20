@@ -9,6 +9,7 @@ Health checks and team alerts in `commercekings/module-app-health`. Start with t
  CRON (every 15 min)    QueueSummaries: each website's daily summary once its time has passed
  QUEUE (Notification)   Alert, Summary: compose on fresh state, send once, record what the team was told
  ADMIN                  App health settings, "Send test alert"
+ SERVER (every minute)  host-status.sh (not Magento): var/app-health/status-<server>.json, read by the 5-min run
 ```
 
 Nothing runs on the storefront: no plugins, observers, layout or frontend routes.
@@ -85,6 +86,7 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other; on MariaDB 11.8 with 200,000 completed rows each part is a range on `(status, updated_at)`, ~50 rows); no message is read or consumed |
 | `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
 | `email_disabled` | `system/smtp/disable` per store view | configuration only |
+| `external` | `var/app-health/status-*.json` (written by a script on the server); creates the folder and `status.json.dist` when missing | at most 20 files of 32 KB, each validated only when its hash changed; no query |
 | `sales_emails` | orders (not cancelled or closed), invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |
 
 Times are UTC, like Magento's database session; the summary time is in the website's time zone.
@@ -194,6 +196,7 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 | `status:posted` | per scope, when a status was last posted, and last posted as "All checks OK" |
 | `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
 | `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW critical errors) waiting for the next alert, and the last told per check (id and time) |
+| `external` | each server's last good status from `var/app-health/status-<source>.json` (source => generated_at, its lines – code, label, status, value, unit, masked detail – the file's hash, read_at); at most 20, written only when a file changed |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
 To start over (e.g. in a test), truncate the table and delete the delivery state rows of the types `app_health_alert`,

@@ -17,6 +17,11 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
 - **Hourly status:** the problems, warnings and the hour's log errors, through the same queue every hour – the proof
   that alerts can go out; posted when something is not OK and once a day as "All checks OK", else delivered quietly.
   When it is posted: `Api\StatusPolicyInterface` (`Model\Status\DefaultPolicy`).
+- **Server status:** a script on the server (`docs/examples/host-status.sh`, every minute by cron or a systemd timer)
+  writes its containers, disk, memory, load, services, backup age and certificates to
+  `var/app-health/status-<server>.json`; the `external` check alerts on its `fail` and `warn` lines, on a server
+  without a fresh status (15 minutes) and on a file that breaks a rule (strict format, fresh, never an old copy,
+  labels and details masked). Magento creates the folder and `status.json.dist` (the format) on its first run.
 - **Daily summary** per website at its time: counts of the last 24 hours, what had problems, what was ok all day.
 - **Sending** through Notification's queue and consumer as service messages (no cooldown, stop list or quiet hours),
   once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; any

@@ -322,6 +322,21 @@
                     <depends><field id="enabled">1</field></depends>
                 </field>
             </group>
+            <group id="external" translate="label comment" sortOrder="110" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Server status (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>What your servers write to var/app-health/status-&lt;server&gt;.json (containers, disk, memory, services, backups, certificates): their "fail" lines are problems, their "warn" lines warnings. Silent until a server reports; set up in the README, "System status from your server".</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="stale_minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>No status for (minutes)</label>
+                    <comment>A server that reported before and has not for this long is a problem: its script or the server stopped. Default: 15 (the script reports every 5).</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
         </section>
     </system>
 </config>

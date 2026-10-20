@@ -16,6 +16,7 @@
                 <item name="sales_emails" xsi:type="object">CommerceKings\AppHealth\Model\Check\SalesEmails</item>
                 <item name="system_log" xsi:type="object">CommerceKings\AppHealth\Model\Check\SystemLog</item>
                 <item name="sensitive_data" xsi:type="object">CommerceKings\AppHealth\Model\Check\SensitiveData</item>
+                <item name="external" xsi:type="object">CommerceKings\AppHealth\Model\Check\External</item>
             </argument>
         </arguments>
     </type>

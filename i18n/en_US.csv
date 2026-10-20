@@ -8,6 +8,7 @@
 "A file in var/log. Default: exception.log.","A file in var/log. Default: exception.log."
 "A file in var/log. Default: system.log.","A file in var/log. Default: system.log."
 "A job running for over (minutes)","A job running for over (minutes)"
+"A server that reported before and has not for this long is a problem: its script or the server stopped. Default: 15 (the script reports every 5).","A server that reported before and has not for this long is a problem: its script or the server stopped. Default: 15 (the script reports every 5)."
 "A short status of all websites to the default recipient every hour, through the same queue as the alerts: posted when a check fails or warns or there were new log errors, and once a day as ""All checks OK"" (at the summary time); otherwise delivered quietly (recorded, not posted). With a heartbeat URL, the heartbeat stops when the status can't be delivered (the queue or its consumer down). Default: Yes.","A short status of all websites to the default recipient every hour, through the same queue as the alerts: posted when a check fails or warns or there were new log errors, and once a day as ""All checks OK"" (at the summary time); otherwise delivered quietly (recorded, not posted). With a heartbeat URL, the heartbeat stops when the status can't be delivered (the queue or its consumer down). Default: Yes."
 "A spike of new entries in var/log/exception.log, with the top 3 exception classes, and an exception never seen before (NEW). Only new lines are read; only class names, counts and fingerprints are sent.","A spike of new entries in var/log/exception.log, with the top 3 exception classes, and an exception never seen before (NEW). Only new lines are read; only class names, counts and fingerprints are sent."
 "Add a rule","Add a rule"
@@ -30,6 +31,7 @@ Alerts,Alerts
 "Caches (all websites)","Caches (all websites)"
 "Card numbers, secrets and personal data written into the logs, by rule sets (PCI, Credentials, Personal data, and those of other modules' etc/app_health_rules.xml). A finding is a high alert at once - the rule and where, never the value.","Card numbers, secrets and personal data written into the logs, by rule sets (PCI, Credentials, Personal data, and those of other modules' etc/app_health_rules.xml). A finding is a high alert at once - the rule and where, never the value."
 Channel,Channel
+"Check that the web server's user can write var/ and var/app-health.","Check that the web server's user can write var/ and var/app-health."
 "Checks Magento every 5 minutes and tells the team on a change: a problem, then ""recovered"". The checks for all websites alert once, to the default scope's recipient; each website's own checks and its daily summary go to the website's recipient. Sent through Notification's queue (consumer commerceKingsNotificationSend).","Checks Magento every 5 minutes and tells the team on a change: a problem, then ""recovered"". The checks for all websites alert once, to the default scope's recipient; each website's own checks and its daily summary go to the website's recipient. Sent through Notification's queue (consumer commerceKingsNotificationSend)."
 Code,Code
 "CommerceKings App health","CommerceKings App health"
@@ -73,6 +75,7 @@ Enabled,Enabled
 "Is the sales email cron running (async sending), and does the mail server accept mail?","Is the sales email cron running (async sending), and does the mail server accept mail?"
 Label,Label
 "Log file","Log file"
+"Look at the server named above. No status at all: is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?","Look at the server named above. No status at all: is the status script still scheduled on the server (cron or systemd timer), and can it write var/app-health?"
 "Magento's merged log: an error never seen before (NEW, with where it happened), CRITICAL entries, and a spike of errors. Only new lines are read; only safe labels, counts and fingerprints are sent.","Magento's merged log: an error never seen before (NEW, with where it happened), CRITICAL entries, and a spike of errors. Only new lines are read; only safe labels, counts and fingerprints are sent."
 "Mail counts as working again after (minutes)","Mail counts as working again after (minutes)"
 "Mail transport errors among the new exception.log entries, and CommerceKings notifications whose last send failed.","Mail transport errors among the new exception.log entries, and CommerceKings notifications whose last send failed."
@@ -83,6 +86,7 @@ Label,Label
 "New log errors at most every (minutes)","New log errors at most every (minutes)"
 "No job has run for (minutes)","No job has run for (minutes)"
 "No job has run, a job runs too long, or jobs end with an error.","No job has run, a job runs too long, or jobs end with an error."
+"No status for (minutes)","No status for (minutes)"
 "Not sent (%1): %2","Not sent (%1): %2"
 "Not sent: %1.","Not sent: %1."
 "Of a larger backlog the newest part is read, counted as ""at least"", and the size not read is reported. Default: 1024.","Of a larger backlog the newest part is read, counted as ""at least"", and the size not read is reported. Default: 1024."
@@ -112,6 +116,7 @@ Recipient,Recipient
 "Sending (all websites)","Sending (all websites)"
 "Sends one message now to the saved channel and recipient of this scope. Save the configuration first.","Sends one message now to the saved channel and recipient of this scope. Save the configuration first."
 "Sensitive data in logs (all websites)","Sensitive data in logs (all websites)"
+"Server status (all websites)","Server status (all websites)"
 "Set a channel and a recipient, save the configuration, then try again.","Set a channel and a recipient, save the configuration, then try again."
 Severity,Severity
 "Severity (critical / warning)","Severity (critical / warning)"
@@ -132,6 +137,7 @@ Test,Test
 "They were refused when the order was placed: the mail server or provider (see Sending, and var/log/system.log).","They were refused when the order was placed: the mail server or provider (see Sending, and var/log/system.log)."
 "Turn a rule set or a rule off or on, or give it another severity: e.g. ""personal"" 0, or ""pci/card_cvv"" with warning. Codes: README.","Turn a rule set or a rule off or on, or give it another severity: e.g. ""personal"" 0, or ""pci/card_cvv"" with warning. Codes: README."
 "Unsent after (minutes)","Unsent after (minutes)"
+"What your servers write to var/app-health/status-<server>.json (containers, disk, memory, services, backups, certificates): their ""fail"" lines are problems, their ""warn"" lines warnings. Silent until a server reports; set up in the README, ""System status from your server"".","What your servers write to var/app-health/status-<server>.json (containers, disk, memory, services, backups, certificates): their ""fail"" lines are problems, their ""warn"" lines warnings. Silent until a server reports; set up in the README, ""System status from your server""."
 "Within (minutes)","Within (minutes)"
 "Without a successful run of it since its last error. Default: 60.","Without a successful run of it since its last error. Default: 60."
 "bin/magento indexer:reindex %1; if it stays invalid, read its output.","bin/magento indexer:reindex %1; if it stays invalid, read its output."

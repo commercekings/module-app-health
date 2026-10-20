@@ -21,7 +21,7 @@ class ConfigFilesTest extends TestCase
             $checks[] = (string)$item['name'];
         }
         $this->assertSame(['cron', 'indexers', 'caches', 'maintenance', 'email_disabled', 'exceptions', 'queues',
-            'email_failing', 'sales_emails', 'system_log', 'sensitive_data'], $checks);
+            'email_failing', 'sales_emails', 'system_log', 'sensitive_data', 'external'], $checks);
         $defaults = $this->xml('config.xml')->default->commercekings_app_health;
         $system = $this->xml('adminhtml/system.xml');
         foreach ($checks as $code) {
