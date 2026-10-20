@@ -47,6 +47,8 @@ class CachesTest extends TestCase
         $result = $this->check(['config' => 1, 'full_page' => 0, 'block_html' => 0], []);
         $this->assertSame(CheckResult::FAIL, $result->status);
         $this->assertSame('block_html and full_page disabled', $result->detail);
+        $this->assertSame('cache_disabled', $result->causes[0]->code);
+        $this->assertStringContainsString('cache:enable block_html full_page', $result->causes[0]->hint);
     }
 
     public function testAnInvalidatedTypeWarnsAfterTheLimitFromWhenItWasFirstSeen(): void
@@ -58,6 +60,8 @@ class CachesTest extends TestCase
         $result = $this->check(['config' => 1], ['config']);
         $this->assertSame(CheckResult::WARN, $result->status);
         $this->assertSame('config invalidated for 60 min', $result->detail);
+        $this->assertSame(['cache_invalidated', 'config invalidated since {t:' . self::NOW . '}'],
+            [$result->causes[0]->code, $result->causes[0]->detail]);
         $this->assertSame(CheckResult::OK, $this->check(['config' => 1], [])->status, 'refreshed');
         $this->assertSame(['since' => []], $this->store->row('cursor:caches'));
     }

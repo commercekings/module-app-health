@@ -37,6 +37,30 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
 | Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min | the website |
 
+### Why it fails
+
+Each alert says why, as far as Magento's own data shows it, and where to look (`> Check: …`):
+
+| Check | Causes |
+|---|---|
+| Cron | nothing scheduled at all (cron not started: the container or crontab); jobs scheduled but none starting; a job stuck "running" and how many jobs of its group wait; the same job failing 3+ times in 2 h, with its latest error masked; 10+ jobs missed in an hour (cron too rare or too slow) |
+| Indexers | which indexer, invalid or stuck working since when, its mode (on save or by schedule); when `indexer_reindex_all_invalid` and `indexer_update_all_views` last ran |
+| Caches | which type: disabled, or invalidated since when |
+| Maintenance mode | on since when; "likely left on after a deployment" after 30 min |
+| Queues | which queue and its consumer; whether cron starts the consumers (`cron_consumers_runner` in env.php) and when `consumers_runner` last ran |
+| Sending | the latest mail transport error (masked); the failing CommerceKings notifications |
+| Email sending | the scope that disables it (default, website, store view, or env.php) |
+| Sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
+
+```
+🔴 *Cron jobs stuck – Main Website Store (all websites)*
+> Job indexer_reindex_all_invalid running for 3 h (since 08:12).
+> 12 other jobs in its group are waiting.
+> Check: The process may have crashed: restart cron, then clear the stuck job (status "running" in cron_schedule).
+```
+
+A check of another module gives its own causes the same way (`Api\Data\Cause` on its `CheckResult`).
+
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
 

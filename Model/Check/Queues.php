@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
@@ -12,6 +13,7 @@ use Magento\Framework\Amqp\ConfigPool;
 use Magento\Framework\App\DeploymentConfig;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Sql\Expression;
+use Magento\Framework\MessageQueue\Consumer\ConfigInterface as ConsumerConfig;
 use Magento\Framework\MessageQueue\Topology\ConfigInterface as TopologyConfig;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 use Psr\Log\LoggerInterface;
@@ -37,7 +39,8 @@ class Queues implements CheckInterface
         private readonly Config $config,
         private readonly RunState $state,
         private readonly DateTime $dateTime,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly ConsumerConfig $consumerConfig
     ) {
     }
 
@@ -89,11 +92,59 @@ class Queues implements CheckInterface
         }
         $detail = implode('; ', array_slice($parts, 0, 3))
             . (count($parts) > 3 ? '; +' . (count($parts) - 3) . ' more' : '');
-        return match (true) {
-            $full !== [] => CheckResult::fail($detail, [], 'Queue backlog'),
-            $rising !== [] => CheckResult::warn($detail, [], 'Queue growing'),
-            default => CheckResult::ok(),
-        };
+        if ($full === [] && $rising === []) {
+            return CheckResult::ok();
+        }
+        $result = $full !== [] ? CheckResult::fail($detail, [], 'Queue backlog')
+            : CheckResult::warn($detail, [], 'Queue growing');
+        return $result->withCauses($this->causes(array_slice($full + $rising, 0, 3, true), $now));
+    }
+
+    /**
+     * Which queue and its consumer, and whether cron starts the consumers (env.php cron_consumers_runner) and ran
+     * consumers_runner lately - read only when a queue backs up.
+     *
+     * @param array<string, int> $queues name => size
+     * @return Cause[]
+     */
+    private function causes(array $queues, int $now): array
+    {
+        $consumers = [];
+        foreach ($this->consumerConfig->getConsumers() as $consumer) {
+            $consumers[(string)$consumer->getQueue()][] = (string)$consumer->getName();
+        }
+        $runner = (array)$this->deploymentConfig->get('cron_consumers_runner', []);
+        $allowed = array_map('strval', (array)($runner['consumers'] ?? []));
+        $causes = [];
+        foreach ($queues as $queue => $size) {
+            $names = $consumers[$queue] ?? [];
+            $causes[] = new Cause('queue_backlog', sprintf('%s: %s messages waiting, consumer %s', $queue,
+                Format::number($size), $names !== [] ? implode(', ', $names) : 'none configured'));
+            $notAllowed = $allowed !== [] ? array_diff($names, $allowed) : [];
+            if ($notAllowed !== []) {
+                $causes[] = new Cause('queue_consumer_not_started', sprintf('%s is not in cron_consumers_runner'
+                    . ' consumers (env.php)', implode(', ', $notAllowed)), (string)__('Add it to'
+                    . ' cron_consumers_runner > consumers in app/etc/env.php, or run it under supervisor.'));
+            }
+        }
+        if (array_key_exists('cron_run', $runner) && !$runner['cron_run']) {
+            $causes[] = new Cause('queue_consumers_off', 'cron does not start the consumers'
+                . ' (cron_consumers_runner > cron_run is off in env.php)', (string)__('Run the consumers under'
+                . ' supervisor (bin/magento queue:consumers:start <name>), or turn cron_run on.'));
+            return $causes;
+        }
+        $db = $this->resource->getConnection();
+        $last = $db->fetchOne($db->select()
+            ->from($this->resource->getTableName('cron_schedule'), ['last' => 'MAX(finished_at)'])
+            ->where('job_code IN (?)', ['consumers_runner'])
+            ->where('status = ?', 'success')
+            ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $now - 86400)));
+        $causes[] = $last ? new Cause('queue_runner', 'consumers_runner last ran at '
+            . Format::at((int)strtotime($last . ' UTC')), (string)__('Is the consumer process running and finishing?'
+            . ' bin/magento queue:consumers:start <name> by hand shows its errors.'))
+            : new Cause('queue_runner_not_running', 'consumers_runner has not run in 24 h',
+                (string)__('Cron starts the consumers: see the Cron check.'));
+        return $causes;
     }
 
     /** Never smaller from one run to the next since $from, at least 2 runs, and larger at the end. */

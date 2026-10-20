@@ -43,6 +43,10 @@ class MaintenanceTest extends TestCase
         $result = $this->check(true);
         $this->assertSame(CheckResult::FAIL, $result->status);
         $this->assertSame('on for 15 min', $result->detail);
+        $this->assertSame(['maintenance_on'], array_map(fn ($c) => $c->code, $result->causes));
+        $this->clock->now += 15 * 60;
+        $this->assertSame(['maintenance_on', 'maintenance_left_on'],
+            array_map(fn ($c) => $c->code, $this->check(true)->causes), 'over 30 minutes');
         $this->assertSame(CheckResult::OK, $this->check(false)->status);
         $this->clock->now += 60;
         $this->assertSame(CheckResult::OK, $this->check(true)->status, 'on again: timed from now');

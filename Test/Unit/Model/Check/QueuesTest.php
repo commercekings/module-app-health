@@ -13,6 +13,8 @@ use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
 use Magento\Framework\Amqp\Config as AmqpConfig;
 use Magento\Framework\Amqp\ConfigPool;
 use Magento\Framework\App\DeploymentConfig;
+use Magento\Framework\MessageQueue\Consumer\Config\ConsumerConfigItemInterface;
+use Magento\Framework\MessageQueue\Consumer\ConfigInterface as ConsumerConfig;
 use Magento\Framework\MessageQueue\Topology\Config\QueueConfigItemInterface;
 use Magento\Framework\MessageQueue\Topology\ConfigInterface;
 use PhpAmqpLib\Channel\AMQPChannel;
@@ -37,9 +39,10 @@ class QueuesTest extends TestCase
      * @param array<string, int> $database waiting messages by queue in the MySQL queue
      * @param array<string, int>|null $broker messages by queue on RabbitMQ; null: no AMQP connection configured
      */
-    private function check(array $database, ?array $broker = null, bool $tables = true): CheckResult
+    private function check(array $database, ?array $broker = null, bool $tables = true, array $runner = [],
+        ?string $lastRunner = null): CheckResult
     {
-        $db = $this->db(['fetchPairs' => [$database]]);
+        $db = $this->db(['fetchPairs' => [$database], 'fetchOne' => [$lastRunner]]);
         $db->method('isTableExists')->willReturn($tables);
         $queues = [];
         foreach (array_keys($broker ?? []) as $name) {
@@ -59,11 +62,17 @@ class QueuesTest extends TestCase
         $pool->method('get')->willReturn($amqpConfig);
         $deployment = $this->createStub(DeploymentConfig::class);
         $deployment->method('getConfigData')->willReturn($broker === null ? [] : ['amqp' => ['host' => 'rabbitmq']]);
+        $deployment->method('get')->willReturn($runner);
+        $consumer = $this->createStub(ConsumerConfigItemInterface::class);
+        $consumer->method('getName')->willReturn('commerceKingsNotificationSend');
+        $consumer->method('getQueue')->willReturn('commercekings.notification.send');
+        $consumers = $this->createStub(ConsumerConfig::class);
+        $consumers->method('getConsumers')->willReturn([$consumer]);
         $state = new RunState($this->store);
         $state->begin();
         $result = (new Queues($this->resource($db), $topology, $pool, $deployment,
             $this->config(['queues/max_messages' => '100', 'queues/growing_minutes' => '15']), $state, $this->clock,
-            $this->createStub(LoggerInterface::class)))->run();
+            $this->createStub(LoggerInterface::class), $consumers))->run();
         $state->commit();
         $this->clock->now += 300;
         return $result;
@@ -95,7 +104,24 @@ class QueuesTest extends TestCase
     {
         $result = $this->check([], ['product_action_attribute.update' => 120], false);
         $this->assertSame('product_action_attribute.update: 120 messages', $result->detail);
-        $this->assertSame([], array_filter($this->calls, fn ($call) => $call[0] === 'from'),
-            'no MySQL queue tables: no query');
+        $this->assertSame([], array_filter($this->calls, fn ($call) => $call[0] === 'from'
+            && $call[1] === 'queue_message_status'), 'no MySQL queue tables: no query of them');
+    }
+
+    public function testCausesNameTheConsumerAndWhetherCronStartsIt(): void
+    {
+        $now = $this->clock->now;
+        $result = $this->check(['commercekings.notification.send' => 150], null, true, [], gmdate('Y-m-d H:i:s',
+            $now - 120));
+        $this->assertSame(['queue_backlog', 'queue_runner'], array_map(fn ($c) => $c->code, $result->causes));
+        $this->assertSame('commercekings.notification.send: 150 messages waiting, consumer'
+            . ' commerceKingsNotificationSend', $result->causes[0]->detail);
+        $this->assertSame('consumers_runner last ran at {t:' . ($now - 120) . '}', $result->causes[1]->detail);
+        $off = $this->check(['commercekings.notification.send' => 150], null, true, ['cron_run' => false,
+            'consumers' => ['async.operations.all']]);
+        $this->assertSame(['queue_backlog', 'queue_consumer_not_started', 'queue_consumers_off'],
+            array_map(fn ($c) => $c->code, $off->causes));
+        $none = $this->check(['commercekings.notification.send' => 150]);
+        $this->assertSame('queue_runner_not_running', $none->causes[1]->code);
     }
 }

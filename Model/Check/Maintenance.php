@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
@@ -15,6 +16,8 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 class Maintenance implements CheckInterface
 {
     public const CODE = 'maintenance';
+    /** On this long: likely left on after a deployment. */
+    public const LEFT_ON_MINUTES = 30;
 
     public function __construct(
         private readonly MaintenanceMode $maintenanceMode,
@@ -50,8 +53,15 @@ class Maintenance implements CheckInterface
         $now = $this->dateTime->gmtTimestamp();
         $since = (int)($this->state->get('cursor:' . self::CODE)['since'] ?? 0) ?: $now;
         $this->state->set('cursor:' . self::CODE, ['since' => $since]);
-        return $since <= $now - $this->config->getInt(self::CODE, 'minutes', 15) * 60
-            ? CheckResult::fail('on for ' . Format::duration($now - $since), [], 'Maintenance mode left on')
-            : CheckResult::ok();
+        if ($since > $now - $this->config->getInt(self::CODE, 'minutes', 15) * 60) {
+            return CheckResult::ok();
+        }
+        $causes = [new Cause('maintenance_on', 'on since ' . Format::at($since) . ' (var/.maintenance.flag)')];
+        if ($since <= $now - self::LEFT_ON_MINUTES * 60) {
+            $causes[] = new Cause('maintenance_left_on', 'likely left on after a deployment', (string)__('If the'
+                . ' deployment is done: bin/magento maintenance:disable. If it stopped halfway, finish it first.'));
+        }
+        return CheckResult::fail('on for ' . Format::duration($now - $since), [], 'Maintenance mode left on')
+            ->withCauses($causes);
     }
 }

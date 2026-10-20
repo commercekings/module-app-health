@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
@@ -69,9 +70,19 @@ class Caches implements CheckInterface
         if ($old !== []) {
             $parts[] = Format::list(array_keys($old)) . ' invalidated for ' . Format::duration($now - min($old));
         }
+        $causes = [];
+        if ($disabled !== []) {
+            $causes[] = new Cause('cache_disabled', Format::list($disabled) . ' disabled: every page and setting is'
+                . ' built again on each request', (string)__('System > Cache Management: enable them'
+                . ' (bin/magento cache:enable %1).', implode(' ', $disabled)));
+        }
+        foreach (array_slice($old, 0, 3, true) as $type => $first) {
+            $causes[] = new Cause('cache_invalidated', sprintf('%s invalidated since %s', $type, Format::at($first)),
+                (string)__('Refresh it: System > Cache Management, or bin/magento cache:clean %1.', $type));
+        }
         return match (true) {
-            $disabled !== [] => CheckResult::fail(implode('; ', $parts), [], 'Cache disabled'),
-            $old !== [] => CheckResult::warn(implode('; ', $parts), [], 'Cache invalidated'),
+            $disabled !== [] => CheckResult::fail(implode('; ', $parts), [], 'Cache disabled')->withCauses($causes),
+            $old !== [] => CheckResult::warn(implode('; ', $parts), [], 'Cache invalidated')->withCauses($causes),
             default => CheckResult::ok(),
         };
     }
