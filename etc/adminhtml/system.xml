@@ -1,0 +1,218 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="commercekings_app_health" translate="label" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="0">
+            <label>App health</label>
+            <tab>commercekings</tab>
+            <resource>CommerceKings_AppHealth::config</resource>
+            <group id="general" translate="label comment" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Alerts</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Checks Magento every 5 minutes and tells the team on a change: a problem, then "recovered". The checks for all websites alert once, to the default scope's recipient; each website's own checks and its daily summary go to the website's recipient. Sent through Notification's queue (consumer commerceKingsNotificationSend).</comment>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Default scope: the alerts of the checks for all websites (cron, indexers, caches, maintenance mode, exceptions, queues, sending). Website scope: that website's own alerts (email settings, sales emails) and its daily summary.</comment>
+                </field>
+                <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Channel</label>
+                    <comment>A Notification channel code: "slack" with commercekings/module-notification-slack, or any installed channel.</comment>
+                    <validate>required-entry</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="recipient" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Recipient</label>
+                    <comment>The address on the channel, e.g. a Slack channel ID (in Slack: the channel's details, at the bottom; C0123456789). Default scope: gets the alerts for all websites, once. Website scope: gets that website's alerts and summary; a website without its own uses this one.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="summary" translate="label comment" type="select" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Daily summary</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Per website, to its recipient: the checks for all websites and its own, over the last 24 hours.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="summary_time" translate="label comment" type="time" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Daily summary at</label>
+                    <comment>In the website's time zone (General > Locale Options).</comment>
+                    <depends><field id="enabled">1</field><field id="summary">1</field></depends>
+                </field>
+                <field id="repeat_hours" translate="label comment" type="text" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Repeat a failing check after (hours)</label>
+                    <comment>A check still failing is sent again after this long. Default: 6.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="heartbeat_url" translate="label comment" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Heartbeat URL</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Optional. Pinged after every complete run (every 5 minutes), e.g. a Healthchecks.io, Better Stack or UptimeRobot heartbeat: when the pings stop - the server, PHP, the database or cron down - that service alerts you. Stored encrypted. Empty: off.</comment>
+                </field>
+                <field id="test" translate="label comment" type="button" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Test</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\TestAlert</frontend_model>
+                    <comment>Sends one message now to the saved channel and recipient of this scope. Save the configuration first.</comment>
+                </field>
+            </group>
+            <group id="cron" translate="label comment" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Cron (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>No job has run, a job runs too long, or jobs end with an error.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="stale_minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>No job has run for (minutes)</label>
+                    <comment>Default: 5.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="running_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>A job running for over (minutes)</label>
+                    <comment>Default: 60.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="indexers" translate="label comment" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Indexers (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>An indexer invalid, or stuck working.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>For over (minutes)</label>
+                    <comment>Default: 60.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="caches" translate="label comment" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Caches (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>A cache type disabled (at once), or invalidated and not refreshed.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Invalidated for over (minutes)</label>
+                    <comment>Default: 60.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="maintenance" translate="label comment" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Maintenance mode (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Maintenance mode left on.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>On for over (minutes)</label>
+                    <comment>Default: 15.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="exceptions" translate="label comment" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Exceptions (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>A spike of new entries in var/log/exception.log, with the top 3 exception classes. Only new lines are read; only class names are sent.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="count" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Alert at (entries)</label>
+                    <comment>Default: 20.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="window_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Within (minutes)</label>
+                    <comment>Default: 15.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="max_read_kb" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Read at most (KB per run)</label>
+                    <comment>A larger backlog is skipped and counted as "at least". Default: 1024.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="queues" translate="label comment" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Queues (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker on every run.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="max_messages" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Alert at (messages in a queue)</label>
+                    <comment>Default: 1000.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="growing_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Or growing for (minutes)</label>
+                    <comment>Default: 15.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="email_failing" translate="label comment" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Sending (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Mail transport errors among the new exception.log entries, and CommerceKings notifications whose last send failed.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="failed_reminders" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Alert at (failing notifications)</label>
+                    <comment>Failed in the last hour, e.g. cart reminders. Default: 3.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="email_disabled" translate="label comment" sortOrder="90" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Email sending (per website)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Disable Email Communications (Stores > Configuration > Advanced > System > Mail Sending Settings) set to Yes for any of the website's store views. To the website's recipient.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+            <group id="sales_emails" translate="label comment" sortOrder="100" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Sales emails (per website)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Orders, invoices, shipments and credit memos to be emailed but not sent, created in the last 24 hours (a bounded range of each table's created_at index). To the website's recipient.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="unsent_count" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Alert at (unsent emails)</label>
+                    <comment>Default: 3.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="unsent_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Unsent after (minutes)</label>
+                    <comment>Default: 30.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

@@ -1,0 +1,12 @@
+{
+    "ck_app_health_state": {
+        "column": {
+            "state_key": true,
+            "value": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    }
+}

@@ -1,0 +1,94 @@
+<?php
+declare(strict_types=1);
+
+namespace CommerceKings\AppHealth\Model\Check;
+
+use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
+use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Format;
+use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\DB\Select;
+use Magento\Framework\DB\Sql\Expression;
+use Magento\Framework\Stdlib\DateTime\DateTime;
+use Magento\Store\Model\StoreManagerInterface;
+
+/**
+ * Per website: "unsent_count" or more sales emails (orders, invoices, shipments, credit memos) meant to be sent
+ * (send_email = 1) without email_sent after "unsent_minutes" (fail). One query: per table a range of the last
+ * LOOKBACK_HOURS on its created_at index, at most CAP rows, counted by store view.
+ */
+class SalesEmails implements WebsiteCheckInterface
+{
+    public const CODE = 'sales_emails';
+    public const LOOKBACK_HOURS = 24;
+    private const CAP = 100;
+    private const TABLES = ['order' => 'sales_order', 'invoice' => 'sales_invoice', 'shipment' => 'sales_shipment',
+        'credit memo' => 'sales_creditmemo'];
+
+    public function __construct(
+        private readonly ResourceConnection $resource,
+        private readonly StoreManagerInterface $storeManager,
+        private readonly Config $config,
+        private readonly DateTime $dateTime
+    ) {
+    }
+
+    public function getCode(): string
+    {
+        return self::CODE;
+    }
+
+    public function getLabel(): string
+    {
+        return 'Sales emails';
+    }
+
+    public function runForWebsites(array $websiteIds): array
+    {
+        $minutes = $this->config->getInt(self::CODE, 'unsent_minutes', 30);
+        $threshold = $this->config->getInt(self::CODE, 'unsent_count', 3);
+        $websiteOf = [];
+        foreach ($this->storeManager->getStores() as $store) {
+            $websiteOf[(int)$store->getId()] = (int)$store->getWebsiteId();
+        }
+        $unsent = array_fill_keys($websiteIds, []);
+        foreach ($this->unsent($minutes) as $row) {
+            $websiteId = $websiteOf[(int)$row['store_id']] ?? null;
+            if ($websiteId !== null && isset($unsent[$websiteId])) {
+                $unsent[$websiteId][$row['entity']] = ($unsent[$websiteId][$row['entity']] ?? 0) + (int)$row['count'];
+            }
+        }
+        $results = [];
+        foreach ($unsent as $websiteId => $counts) {
+            $total = array_sum($counts);
+            $results[$websiteId] = $total < $threshold ? CheckResult::ok()
+                : CheckResult::fail(sprintf('%d sales emails not sent after %s (%s)', $total,
+                    Format::duration($minutes * 60), Format::top($counts)));
+        }
+        return $results;
+    }
+
+    /** @return array<int, array<string, mixed>> entity, store_id, count */
+    private function unsent(int $minutes): array
+    {
+        $db = $this->resource->getConnection();
+        $now = $this->dateTime->gmtTimestamp();
+        $from = gmdate('Y-m-d H:i:s', $now - self::LOOKBACK_HOURS * 3600);
+        $to = gmdate('Y-m-d H:i:s', $now - $minutes * 60);
+        $parts = [];
+        foreach (self::TABLES as $entity => $table) {
+            $rows = $db->select()->from($this->resource->getTableName($table), ['store_id'])
+                ->where('created_at >= ?', $from)->where('created_at < ?', $to)
+                ->where('send_email = 1')
+                // async sending counts failed attempts up from a negative number; null = never tried
+                ->where('email_sent IS NULL OR email_sent <= 0')
+                ->limit(self::CAP);
+            $parts[] = $db->select()->from(['t' => $rows], ['entity' => new Expression($db->quote($entity)),
+                'store_id', 'count' => new Expression('COUNT(*)')])->group('store_id');
+        }
+        $union = $db->select();
+        $union->union($parts, Select::SQL_UNION_ALL);
+        return $db->fetchAll($union);
+    }
+}

@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- the checks, in the order they run (argument "checks": name => CheckInterface for a shop-wide check,
+         WebsiteCheckInterface for a check per website); another module adds its own -->
+    <type name="CommerceKings\AppHealth\Model\CheckPool">
+        <arguments>
+            <argument name="checks" xsi:type="array">
+                <item name="cron" xsi:type="object">CommerceKings\AppHealth\Model\Check\Cron</item>
+                <item name="indexers" xsi:type="object">CommerceKings\AppHealth\Model\Check\Indexers</item>
+                <item name="caches" xsi:type="object">CommerceKings\AppHealth\Model\Check\Caches</item>
+                <item name="maintenance" xsi:type="object">CommerceKings\AppHealth\Model\Check\Maintenance</item>
+                <item name="email_disabled" xsi:type="object">CommerceKings\AppHealth\Model\Check\EmailDisabled</item>
+                <item name="exceptions" xsi:type="object">CommerceKings\AppHealth\Model\Check\Exceptions</item>
+                <item name="queues" xsi:type="object">CommerceKings\AppHealth\Model\Check\Queues</item>
+                <item name="email_failing" xsi:type="object">CommerceKings\AppHealth\Model\Check\EmailFailing</item>
+                <item name="sales_emails" xsi:type="object">CommerceKings\AppHealth\Model\Check\SalesEmails</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- the broker is only reached when the queue check runs -->
+    <type name="CommerceKings\AppHealth\Model\Check\Queues">
+        <arguments>
+            <argument name="amqp" xsi:type="object">Magento\Framework\Amqp\ConfigPool\Proxy</argument>
+        </arguments>
+    </type>
+    <!-- the alert and the daily summary go through Notification's queue and consumer -->
+    <type name="CommerceKings\Notification\Model\TypePool">
+        <arguments>
+            <argument name="types" xsi:type="array">
+                <item name="app_health_alert" xsi:type="object">CommerceKings\AppHealth\Model\Notification\Alert</item>
+                <item name="app_health_summary" xsi:type="object">CommerceKings\AppHealth\Model\Notification\Summary</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

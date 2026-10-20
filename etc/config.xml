@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <commercekings_app_health>
+            <general>
+                <enabled>0</enabled>
+                <channel>slack</channel>
+                <summary>1</summary>
+                <summary_time>08,00,00</summary_time>
+                <repeat_hours>6</repeat_hours>
+                <heartbeat_url backend_model="Magento\Config\Model\Config\Backend\Encrypted"/>
+            </general>
+            <cron>
+                <enabled>1</enabled>
+                <stale_minutes>5</stale_minutes>
+                <running_minutes>60</running_minutes>
+            </cron>
+            <indexers>
+                <enabled>1</enabled>
+                <minutes>60</minutes>
+            </indexers>
+            <caches>
+                <enabled>1</enabled>
+                <minutes>60</minutes>
+            </caches>
+            <maintenance>
+                <enabled>1</enabled>
+                <minutes>15</minutes>
+            </maintenance>
+            <email_disabled>
+                <enabled>1</enabled>
+            </email_disabled>
+            <exceptions>
+                <enabled>1</enabled>
+                <count>20</count>
+                <window_minutes>15</window_minutes>
+                <max_read_kb>1024</max_read_kb>
+            </exceptions>
+            <!-- off by default: a broker connection on every run -->
+            <queues>
+                <enabled>0</enabled>
+                <max_messages>1000</max_messages>
+                <growing_minutes>15</growing_minutes>
+            </queues>
+            <email_failing>
+                <enabled>1</enabled>
+                <failed_reminders>3</failed_reminders>
+            </email_failing>
+            <sales_emails>
+                <enabled>1</enabled>
+                <unsent_count>3</unsent_count>
+                <unsent_minutes>30</unsent_minutes>
+            </sales_emails>
+        </commercekings_app_health>
+    </default>
+</config>

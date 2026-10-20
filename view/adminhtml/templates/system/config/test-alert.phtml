@@ -1,0 +1,12 @@
+<?php
+/** @var \CommerceKings\AppHealth\Block\Adminhtml\System\Config\TestAlert $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$config = ['CommerceKings_AppHealth/js/test-alert' => ['url' => $block->getSendUrl(),
+    'website' => $block->getWebsiteId()]];
+?>
+<div data-mage-init="<?= $escaper->escapeHtmlAttr(json_encode($config)) ?>">
+    <button type="button" class="action-default" data-role="send">
+        <span><?= $escaper->escapeHtml(__('Send test alert')) ?></span>
+    </button>
+    <p class="note" data-role="result" aria-live="polite"></p>
+</div>

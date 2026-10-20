@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <!-- health checks for the shop team: admin, cron and Notification's queue only, nothing on the storefront -->
+    <module name="CommerceKings_AppHealth">
+        <sequence>
+            <module name="CommerceKings_Core"/>
+            <module name="CommerceKings_Notification"/>
+            <module name="Magento_Backend"/>
+            <module name="Magento_Config"/>
+            <module name="Magento_Cron"/>
+            <module name="Magento_Store"/>
+        </sequence>
+    </module>
+</config>

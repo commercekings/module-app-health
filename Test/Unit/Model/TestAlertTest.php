@@ -1,0 +1,65 @@
+<?php
+declare(strict_types=1);
+
+namespace CommerceKings\AppHealth\Test\Unit\Model;
+
+use CommerceKings\AppHealth\Model\Messages;
+use CommerceKings\AppHealth\Model\Target;
+use CommerceKings\AppHealth\Model\Targets;
+use CommerceKings\AppHealth\Model\TestAlert;
+use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
+use CommerceKings\Notification\Api\Data\Delivery;
+use CommerceKings\Notification\Api\SenderInterface;
+use Magento\Framework\Exception\LocalizedException;
+use PHPUnit\Framework\TestCase;
+
+class TestAlertTest extends TestCase
+{
+    use Pool;
+
+    /** @var Delivery[] */
+    private array $sent = [];
+
+    private function testAlert(?Target $target, \Throwable|string $answer = SenderInterface::SENT): TestAlert
+    {
+        $targets = $this->createStub(Targets::class);
+        $targets->method('resolve')->willReturn($target);
+        $sender = $this->createStub(SenderInterface::class);
+        $sender->method('send')->willReturnCallback(function (Delivery $delivery) use ($answer) {
+            $this->sent[] = $delivery;
+            if ($answer instanceof \Throwable) {
+                throw $answer;
+            }
+            return $answer;
+        });
+        return new TestAlert($targets, new Messages($this->pool([])), $sender);
+    }
+
+    public function testSentAtOnceAsAServiceMessage(): void
+    {
+        $this->assertSame('C0123', $this->testAlert(new Target(0, 1, 'slack', 'C0123', 'Shop', 'UTC'))->send(0));
+        $this->assertSame([false, false, 'app_health_test'], [$this->sent[0]->useCooldown, $this->sent[0]->stoppable,
+            $this->sent[0]->type]);
+        $this->assertStringStartsWith('App health - Shop (all websites)', ($this->sent[0]->content)()->text);
+    }
+
+    public function testTheAdminSeesWhyNot(): void
+    {
+        $target = new Target(1, 1, 'slack', 'not-a-channel', 'Shop', 'UTC');
+        $cases = [
+            [null, SenderInterface::SENT, 'Set a channel and a recipient'],
+            [$target, new \InvalidArgumentException('x'),
+                '"not-a-channel" is not a recipient the "slack" channel takes.'],
+            [$target, new \RuntimeException('channel_not_found'), 'Not sent (RuntimeException): channel_not_found'],
+            [$target, SenderInterface::COOLDOWN, 'Not sent: recipient cooldown.'],
+        ];
+        foreach ($cases as [$caseTarget, $answer, $message]) {
+            try {
+                $this->testAlert($caseTarget, $answer)->send(1);
+                $this->fail('sent');
+            } catch (LocalizedException $e) {
+                $this->assertStringStartsWith($message, $e->getMessage());
+            }
+        }
+    }
+}
