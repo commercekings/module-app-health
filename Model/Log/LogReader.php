@@ -42,6 +42,12 @@ class LogReader
     ) {
     }
 
+    /** Whether the check's sources were read in this run (entries()). */
+    public function wasRead(string $check): bool
+    {
+        return $this->state->hasMemo(self::class . '|' . $check);
+    }
+
     /**
      * @return array{entries: list<array<string, mixed>>, partial: bool, skipped: int,
      *     sensitive: list<array<string, mixed>>} Normalizer::safe() entries of all the check's sources at WARNING

@@ -56,6 +56,10 @@ class SensitiveData implements CheckInterface
         $now = $this->dateTime->gmtTimestamp();
         $findings = [];
         foreach ([SystemLog::CODE, Exceptions::CODE] as $check) {
+            if ($this->config->isCheckEnabled($check) && !$this->reader->wasRead($check)) {
+                // its check was left out (time budget): its lines stay unread - found when it reads them next run
+                continue;
+            }
             foreach ($this->reader->entries($check)['sensitive'] as $entry) {
                 foreach ((array)$entry['sensitive'] as $rule => $matches) {
                     $key = $rule . '|' . $entry['fingerprint'];

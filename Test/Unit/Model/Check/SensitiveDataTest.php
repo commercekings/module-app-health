@@ -37,10 +37,33 @@ class SensitiveDataTest extends TestCase
         $this->state = new RunState($this->store);
         $this->clock = new Clock(1792483260);
         $this->logClock = $this->clock;
+        // the log checks off: it reads the logs itself (with them on it takes what they read this run)
         $config = $this->config(['system_log/max_read_kb' => '1024', 'exceptions/max_read_kb' => '1024',
-            'general/include_log_message' => '1']);
+            'general/include_log_message' => '1', 'system_log/enabled' => '0', 'exceptions/enabled' => '0']);
         $this->check = new SensitiveData($this->logReader($this->state, $config), $this->detector(), $config,
             $this->state, $this->clock);
+    }
+
+    public function testWithTheLogChecksOnItTakesOnlyWhatTheyReadThisRun(): void
+    {
+        $config = $this->config(['system_log/max_read_kb' => '1024', 'exceptions/max_read_kb' => '1024']);
+        $reader = $this->logReader($this->state, $config);
+        $this->check = new SensitiveData($reader, $this->detector(), $config, $this->state, $this->clock);
+        $run = function (bool $logCheckRan) use ($reader): int {
+            $this->state->begin();
+            if ($logCheckRan) {
+                $reader->entries(\CommerceKings\AppHealth\Model\Check\SystemLog::CODE);
+            }
+            $found = (int)$this->check->run([])[0]->counts['found'];
+            $this->state->commit();
+            return $found;
+        };
+        $this->appendLog('', 'system.log');
+        $run(true);
+        $this->appendLog(self::line('INFO', 'Gateway request card 4111 1111 1111 1111 cvv ok'), 'system.log');
+        $this->assertSame(0, $run(false), 'the system.log check left out by the time budget: its lines not read -'
+            . ' not by this check either, so they are found next run');
+        $this->assertSame(1, $run(true), 'the same line, once its check read it');
     }
 
     protected function tearDown(): void

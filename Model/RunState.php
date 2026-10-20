@@ -51,6 +51,12 @@ class RunState
         $this->changed[$key] = true;
     }
 
+    /** Whether memo() computed the key in this run. */
+    public function hasMemo(string $key): bool
+    {
+        return array_key_exists($key, $this->memo);
+    }
+
     /** $compute's result, computed once per run. */
     public function memo(string $key, \Closure $compute): mixed
     {

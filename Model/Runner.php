@@ -6,6 +6,7 @@ namespace CommerceKings\AppHealth\Model;
 use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Api\StatusPolicyInterface;
+use CommerceKings\AppHealth\Model\Check\SensitiveData;
 use CommerceKings\AppHealth\Model\Notification\Alert;
 use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
@@ -46,6 +47,8 @@ class Runner
     /** How late the hourly status may be before the heartbeat stops. */
     public const STATUS_GRACE_MINUTES = 10;
     public const BUDGET_SECONDS = 5.0;
+    /** A check the budget left out this many runs in a row: "not checked", not its old result. */
+    public const SKIPPED_RUNS = 3;
 
     public function __construct(
         private readonly CheckPool $pool,
@@ -97,17 +100,19 @@ class Runner
         $checks = [];
         $notices = [];
         $websiteIds = array_values(array_filter(array_keys($targets)));
-        foreach ($this->pool->getAll() as $code => $check) {
+        $lastSkipped = (array)($this->state->get('skipped') ?? []);
+        foreach ($this->order($lastSkipped) as $code => $check) {
             if (!$this->config->isCheckEnabled($code)) {
                 continue;
             }
             // the scopes the check had last time
             $known = array_keys(array_filter($previous, fn ($row) => is_array($row) && isset($row[$code])));
-            if (microtime(true) - $started >= $this->budgetSeconds) {
+            // sensitive data: only what the log checks read this run - never left out, their lines are read once
+            if ($code !== SensitiveData::CODE && microtime(true) - $started >= $this->budgetSeconds) {
                 $report['skipped'][] = $code;
                 $report['complete'] = false;
                 foreach ($known as $scope) {
-                    $checks[$scope][$code] = $previous[$scope][$code];
+                    $checks[$scope][$code] = $this->notChecked((array)$previous[$scope][$code], $now);
                 }
                 continue;
             }
@@ -161,6 +166,9 @@ class Runner
         if ($report['skipped'] !== []) {
             $this->logger->warning(sprintf('CommerceKings_AppHealth: time budget used up; skipped %s',
                 implode(', ', $report['skipped'])));
+        }
+        if ($report['skipped'] !== $lastSkipped) {
+            $this->state->set('skipped', $report['skipped']); // they go first next time
         }
         $this->state->set('checks', $checks);
         $this->state->set($hour, $tally);
@@ -259,4 +267,40 @@ class Runner
         }
         return $sum;
     }
+
+    /**
+     * The checks in the order they run: those the budget left out last time first (none starved by a slow one
+     * ahead of it), then the pool's order; sensitive data last (it reads what the log checks read).
+     *
+     * @param string[] $lastSkipped
+     * @return array<string, CheckInterface>
+     */
+    private function order(array $lastSkipped): array
+    {
+        $all = $this->pool->getAll();
+        $ordered = array_intersect_key(array_merge(array_fill_keys($lastSkipped, null), $all), $all);
+        $last = array_intersect_key($ordered, [SensitiveData::CODE => true]);
+        return array_diff_key($ordered, $last) + $last;
+    }
+
+    /**
+     * A check the budget left out: its last result - after SKIPPED_RUNS runs in a row, a warning that it was not
+     * checked (an OK from long ago is no OK).
+     *
+     * @param array<string, mixed> $last
+     * @return array<string, mixed>
+     */
+    private function notChecked(array $last, int $now): array
+    {
+        $skips = (int)($last['skips'] ?? 0) + 1;
+        if ($skips < self::SKIPPED_RUNS) {
+            return ['skips' => $skips] + $last;
+        }
+        $was = ($last['status'] ?? null) === CheckResult::WARN && isset($last['skips']) && $skips > self::SKIPPED_RUNS;
+        return ['status' => CheckResult::WARN, 'detail' => sprintf('not checked in the last %d runs (the time budget'
+            . ' ran out before it)', $skips), 'title' => '', 'gauges' => [], 'causes' => [],
+            'since' => $was ? (int)($last['since'] ?? $now) : $now, 'runs' => $was ? (int)($last['runs'] ?? 1) + 1 : 1,
+            'checked_at' => (int)($last['checked_at'] ?? 0), 'ms' => 0, 'skips' => $skips];
+    }
+
 }

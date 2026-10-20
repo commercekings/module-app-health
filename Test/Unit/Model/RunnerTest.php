@@ -57,6 +57,9 @@ class RunnerTest extends TestCase
         $this->clock = new Clock();
     }
 
+    /** @var array<string, string> the shop-wide checks, in the pool's order */
+    private array $shopWideChecks = ['cron' => 'Cron', 'caches' => 'Caches'];
+
     private function runner(): Runner
     {
         $targets = $this->createStub(Targets::class);
@@ -97,7 +100,7 @@ class RunnerTest extends TestCase
             return $this->statusSentAt === null ? null : ['sent_at' => $this->statusSentAt === 'recent'
                 ? gmdate('Y-m-d H:i:s', $this->clock->now - 600) : $this->statusSentAt];
         });
-        return new Runner($this->pool(['cron' => 'Cron', 'caches' => 'Caches'], ['email_disabled' => 'Email']),
+        return new Runner($this->pool($this->shopWideChecks, ['email_disabled' => 'Email']),
             $this->config($this->settings), new RunState($this->store), $this->store, $targets, $teamMessage,
             $heartbeat, $this->clock, $logger, $deliveryState, $this->policy ?? new DefaultPolicy($this->config(
                 $this->settings)), $this->siteDomain ?? $this->siteDomain(), 0.05);
@@ -424,6 +427,58 @@ class RunnerTest extends TestCase
         $this->assertSame('fail', $this->store->row('checks')[0]['caches']['status'], 'the last result stays');
         $this->assertSame('ok', $this->store->row('checks')[1]['email_disabled']['status']);
         $this->assertStringContainsString('time budget used up', implode("\n", $this->logs));
+    }
+
+    public function testChecksSkippedByTheBudgetGoFirstNextTime(): void
+    {
+        $this->results['cron'] = function () {
+            usleep(60000);
+            return CheckResult::ok();
+        };
+        $this->assertSame(['caches', 'email_disabled'], $this->run5()['skipped']);
+        $this->assertSame([], $this->run5()['skipped'], 'caches and email first: not starved by cron');
+        $this->assertSame([1, 1], [$this->runs['caches'], $this->runs['email_disabled']]);
+        $this->assertSame(['caches', 'email_disabled'], $this->run5()['skipped'], 'then the pool\'s order again');
+    }
+
+    public function testACheckNotRunForSeveralRunsSaysSoNotItsOldResult(): void
+    {
+        $slow = function () {
+            usleep(60000);
+            return CheckResult::ok();
+        };
+        $this->run5();
+        $this->results['cron'] = $slow;
+        $this->results['caches'] = $slow;
+        $this->run5(); // cron; caches and email skipped
+        $this->run5(); // caches; email skipped again, cron skipped
+        $this->assertSame('ok', $this->store->row('checks')[1]['email_disabled']['status'] ?? null,
+            'skipped twice: its last result');
+        $this->results['cron'] = CheckResult::ok();
+        $this->results['caches'] = CheckResult::ok();
+        $this->store->seed(['skipped' => ['caches', 'cron']]); // both ahead of it once more
+        $this->results['caches'] = $slow;
+        $this->run5();
+        $email = $this->store->row('checks')[1]['email_disabled'];
+        $this->assertSame(['warn', 'not checked in the last 3 runs (the time budget ran out before it)'],
+            [$email['status'], $email['detail']]);
+    }
+
+    public function testSensitiveDataRunsLastAndIsNeverSkipped(): void
+    {
+        $this->shopWideChecks = ['sensitive_data' => 'Sensitive data in logs', 'cron' => 'Cron', 'caches' => 'Caches'];
+        $order = [];
+        foreach (array_keys($this->shopWideChecks) as $code) {
+            $this->results[$code] = function () use ($code, &$order) {
+                $order[] = $code;
+                usleep($code === 'cron' ? 60000 : 0);
+                return CheckResult::ok();
+            };
+        }
+        $report = $this->run5();
+        $this->assertSame(['cron', 'sensitive_data'], $order, 'it reads what the log checks read this run: after'
+            . ' them, and never left out (their lines are gone once read)');
+        $this->assertSame(['caches', 'email_disabled'], $report['skipped']);
     }
 
     public function testNothingRunsWhileAlertsAreOffAndNoHeartbeatIsSet(): void
