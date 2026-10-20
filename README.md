@@ -59,7 +59,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 
 | Check | Alert when (default) | Sent to |
 |---|---|---|
-| Cron | no job has run for 5 min; a job running for over 60 min; a job ending with an error (warning, until it succeeds again); cron was down (warning, when it is back) | global |
+| Cron | no job has run for 5 min; a job running for over 60 min; a job ending with an error (warning, until it succeeds again); cron was down (a notice when it is back) | global |
 | Indexers | an indexer invalid or stuck working for over 60 min | global |
 | Caches | a cache type disabled; invalidated for over 60 min (warning) | global |
 | Maintenance mode | on for over 15 min | global |
@@ -106,6 +106,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | What | When | Where |
 |---|---|---|
 | A check going to *Problem* (cron, indexers, caches, ...) | at once; again every 6 h while it fails; *Resolved* at the first OK run – for system.log, exception.log, Queues and Sending after 2 OK runs in a row | its recipient |
+| Cron back after it was down | at once: "Cron was down from 23:10 to 06:40 (7 h)" – not "Cron stopped" | global |
 | A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | global (a website's own: its summary) |
 | Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | global |
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
@@ -243,7 +244,9 @@ All settings are global (default scope); a website gets its own channel through 
   UptimeRobot) expecting a ping every 5 minutes, connect that service's **Slack integration**, and paste its URL into
   *Heartbeat URL*. With the hourly status on, a run pings only while the hourly status goes out: due and still not
   delivered after 10 minutes (each run tries it again), the pings stop – the queue or its consumer is down – and the
-  service tells you. A quiet status proves the queue, not the channel: the daily "All checks OK" post and the alerts
+  service tells you. The pings also stop while App health is on but has no channel or recipient, and while a message
+  fails to go out (a revoked token, a recipient the channel no longer takes); the hourly status is then posted for
+  real, never quietly, until a post goes through again. A quiet status proves the queue, not the channel: the daily "All checks OK" post and the alerts
   show that the channel works. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
   `/checkout/cart/`): they catch a site that is up for cron but down for shoppers.
 
