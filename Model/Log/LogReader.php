@@ -25,6 +25,8 @@ use Psr\Log\LoggerInterface;
 class LogReader
 {
     public const OLD_SECONDS = 300;
+    /** The most a check reads per run, whatever its setting (16 MB). */
+    public const MAX_READ_KB = 16384;
     public const BUDGET_SECONDS = 1.0;
     /** The previous read's time, kept next to the source's own cursor (never handed to the source). */
     private const READ_AT = '_read_at';
@@ -40,6 +42,12 @@ class LogReader
         private readonly LoggerInterface $logger,
         private readonly float $budgetSeconds = self::BUDGET_SECONDS
     ) {
+    }
+
+    /** The bytes a check may read per run: its "max_read_kb", within 1 KB and MAX_READ_KB. */
+    public static function cap(int $kb): int
+    {
+        return min(max($kb, 1), self::MAX_READ_KB) * 1024;
     }
 
     /** Whether the check's sources were read in this run (entries()). */
@@ -58,7 +66,7 @@ class LogReader
     {
         return $this->state->memo(self::class . '|' . $check, function () use ($check): array {
             $result = ['entries' => [], 'partial' => false, 'skipped' => 0, 'sensitive' => []];
-            $cap = $this->config->getInt($check, 'max_read_kb', 1024) * 1024;
+            $cap = self::cap($this->config->getInt($check, 'max_read_kb', 1024));
             $deadline = microtime(true) + $this->budgetSeconds;
             foreach ($this->pool->forCheck($check) as $code => $item) {
                 $read = $this->read($code, $item, $cap, $deadline);
