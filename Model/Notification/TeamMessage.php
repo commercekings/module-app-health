@@ -97,7 +97,7 @@ class TeamMessage
         $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
         $composed = $target !== null ? $compose($target, $row) : null;
         if ($composed === null) {
-            $this->release($type, $websiteId, $queuedAt);
+            $this->release($type, $websiteId, $queuedAt, $target === null);
             return false;
         }
         [$text, $sent] = $composed;
@@ -201,9 +201,18 @@ class TeamMessage
     public function isFailing(): bool
     {
         $db = $this->resource->getConnection();
-        return (bool)$db->fetchOne($db->select()->from($this->deliveryState->getTableName(), ['failing' => new
-            Expression('1')])->where('type LIKE ?', 'app\\_health\\_%')
-            ->where('(failed_sends > 0 OR skip_until > NOW())')->limit(1));
+        // only a scope that still has somewhere to send: a website deleted or its channel removed leaves a row behind;
+        // a type switched off (summaries) stops touching its row, which ages out after a day
+        $scopes = $db->fetchCol($db->select()->from($this->deliveryState->getTableName(), ['reference_id'])
+            ->where('type LIKE ?', 'app\\_health\\_%')
+            ->where('(failed_sends > 0 OR skip_until > NOW())')
+            ->where('updated_at > NOW() - INTERVAL 1 DAY')->group('reference_id')->limit(20));
+        foreach ($scopes as $websiteId) {
+            if ($this->targets->forWebsite((int)$websiteId) !== null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @param array<int|string, mixed> $mine */
@@ -215,11 +224,14 @@ class TeamMessage
     }
 
     /** Nothing to send for this message: clear the mark it was queued with (a newer one stays). */
-    private function release(string $type, int $websiteId, ?string $queuedAt): void
+    /** @param bool $forget no target any more: its failures are not a reason to hold the heartbeat */
+    private function release(string $type, int $websiteId, ?string $queuedAt, bool $forget = false): void
     {
-        if ($queuedAt !== null) {
-            $this->resource->getConnection()->update($this->deliveryState->getTableName(), ['queued_at' => null],
-                $this->deliveryState->keyCondition($type, $websiteId) + ['queued_at = ?' => $queuedAt]);
+        if ($queuedAt !== null || $forget) {
+            $this->resource->getConnection()->update($this->deliveryState->getTableName(), ['queued_at' => null]
+                + ($forget ? ['failed_sends' => 0, 'skip_until' => null] : []),
+                $this->deliveryState->keyCondition($type, $websiteId)
+                + ($queuedAt !== null ? ['queued_at = ?' => $queuedAt] : []));
         }
     }
 }

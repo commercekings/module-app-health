@@ -121,10 +121,13 @@ class GeneratedSqlTest extends TestCase
     {
         $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
         $deliveryState->method('getTableName')->willReturn($this->table('ck_notification_delivery_state'));
+        $targets = $this->createStub(\CommerceKings\AppHealth\Model\Targets::class);
+        $targets->method('forWebsite')->willReturnCallback(fn (int $id) => $id === 0
+            ? new \CommerceKings\AppHealth\Model\Target(0, 1, 'slack', 'C0', 'Shop', 'UTC') : null);
         $teamMessage = new \CommerceKings\AppHealth\Model\Notification\TeamMessage($this->resource, $deliveryState,
             $this->createStub(\CommerceKings\Notification\Api\QueueInterface::class),
             $this->createStub(\CommerceKings\Notification\Api\SenderInterface::class),
-            $this->createStub(\CommerceKings\AppHealth\Model\Targets::class),
+            $targets,
             $this->createStub(\Psr\Log\LoggerInterface::class),
             $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class));
         $row = ['reference_id' => 0, 'subject_key' => '', 'delivery_version' => 1];
@@ -132,6 +135,13 @@ class GeneratedSqlTest extends TestCase
             ['type' => 'app_health_status', 'failed_sends' => 0] + $row,
             ['type' => 'cart_reminder', 'failed_sends' => 3] + $row]);
         $this->assertFalse($teamMessage->isFailing(), 'another type\'s failures are not App health\'s');
+        $this->db->insertMultiple($this->table('ck_notification_delivery_state'), [
+            ['type' => 'app_health_summary', 'failed_sends' => 2, 'updated_at' => gmdate('Y-m-d H:i:s',
+                $this->now - 2 * 86400)] + $row,
+            ['type' => 'app_health_alert', 'failed_sends' => 2, 'updated_at' => gmdate('Y-m-d H:i:s', $this->now),
+                'reference_id' => 7] + $row]);
+        $this->assertFalse($teamMessage->isFailing(), 'a row left two days ago (summaries off), a website gone:'
+            . ' obsolete');
         $this->db->insert($this->table('ck_notification_delivery_state'), ['type' => 'app_health_alert',
             'reference_id' => 0, 'subject_key' => '', 'delivery_version' => 1, 'failed_sends' => 0,
             'skip_until' => gmdate('Y-m-d H:i:s', $this->now + 600)]);

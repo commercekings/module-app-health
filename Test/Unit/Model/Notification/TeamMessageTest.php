@@ -135,14 +135,21 @@ class TeamMessageTest extends TestCase
     public function testFailingWhileAnAppHealthMessageHasFailuresOrAWaitingRetry(): void
     {
         $this->calls = [];
-        $teamMessage = new TeamMessage($this->resource($this->db(['fetchOne' => ['1', false]])),
+        $targets = $this->createStub(Targets::class);
+        $targets->method('forWebsite')->willReturnCallback(fn (int $id) => $id === 0
+            ? new \CommerceKings\AppHealth\Model\Target(0, 1, 'slack', 'C0', 'Shop', 'UTC') : null);
+        $teamMessage = new TeamMessage($this->resource($this->db(['fetchCol' => [['5', '0'], ['5'], []]])),
             $this->createStub(DeliveryStateInterface::class), $this->createStub(QueueInterface::class),
-            $this->createStub(SenderInterface::class), $this->createStub(Targets::class),
+            $this->createStub(SenderInterface::class), $targets,
             $this->createStub(LoggerInterface::class), $this->siteDomain());
-        $this->assertTrue($teamMessage->isFailing());
+        $this->assertTrue($teamMessage->isFailing(), 'the global scope\'s message fails');
+        $this->assertFalse($teamMessage->isFailing(), 'only a website without a target any more (deleted, its'
+            . ' channel removed): obsolete, it holds nothing');
         $this->assertFalse($teamMessage->isFailing());
         $this->assertContains('type LIKE ?', $this->wheres(), 'App health\'s own messages: a prefix of the key');
         $this->assertContains('(failed_sends > 0 OR skip_until > NOW())', $this->wheres());
+        $this->assertContains('updated_at > NOW() - INTERVAL 1 DAY', $this->wheres(), 'a type switched off: its'
+            . ' row ages out');
     }
 
     public function testQueueAlreadyMarkedPublishesNothing(): void
@@ -193,7 +200,8 @@ class TeamMessageTest extends TestCase
         $this->teamMessage(self::ROW, target: new Target(-1, 0, '', '', '', ''))
             ->deliver('app_health_alert', '1', $this->compose());
         $this->assertSame([], $this->sent);
-        $this->assertSame([['queued_at' => null], ['queued_at' => null]], $this->updateData());
+        $this->assertSame([['queued_at' => null], ['queued_at' => null, 'failed_sends' => 0, 'skip_until' => null]],
+            $this->updateData(), 'no target any more: its failures forgotten (they no longer hold the heartbeat)');
         $this->assertSame('2026-10-20 08:00:00', $this->updates[0][2]['queued_at = ?'], 'only the mark it read');
     }
 
