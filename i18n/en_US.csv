@@ -36,6 +36,7 @@ Alerts,Alerts
 "App health needs a Channel and a Recipient to switch on: set both under Alerts.","App health needs a Channel and a Recipient to switch on: set both under Alerts."
 "App health now reports on %1. Reload the page.","App health now reports on %1. Reload the page."
 "App health stays silent on a copy of this shop (staging, a developer's database).","App health stays silent on a copy of this shop (staging, a developer's database)."
+"App health's hourly status is %1 min overdue, so alerts may not be reaching you. Is the queue consumer commerceKingsNotificationSend running? (Magento's cron starts it with cron_consumers_runner in app/etc/env.php, else bin/magento queue:consumers:start commerceKingsNotificationSend.)","App health's hourly status is %1 min overdue, so alerts may not be reaching you. Is the queue consumer commerceKingsNotificationSend running? (Magento's cron starts it with cron_consumers_runner in app/etc/env.php, else bin/magento queue:consumers:start commerceKingsNotificationSend.)"
 "Are the consumers running (cron_consumers_runner or supervisor)? bin/magento queue:consumers:list","Are the consumers running (cron_consumers_runner or supervisor)? bin/magento queue:consumers:list"
 "Asynchronous sending is on: is the sales_send_order_emails cron running? Then the mail server (see Sending).","Asynchronous sending is on: is the sales_send_order_emails cron running? Then the mail server (see Sending)."
 "At least (per entry)","At least (per entry)"

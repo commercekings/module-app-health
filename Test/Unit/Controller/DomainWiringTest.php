@@ -28,9 +28,10 @@ class DomainWiringTest extends TestCase
 
     public function testTheSystemMessageIsRegisteredForTheAdminOnly(): void
     {
-        $this->assertSame(['CommerceKings\AppHealth\Model\System\CopyMessage'], array_map('strval',
+        $this->assertSame(['CommerceKings\AppHealth\Model\System\CopyMessage',
+            'CommerceKings\AppHealth\Model\System\StatusOverdueMessage'], array_map('strval',
             $this->xml('adminhtml/di.xml')->xpath('//type[@name="Magento\Framework\Notification\MessageList"]'
-                . '//item[@name="commercekings_app_health_copy"]')));
+                . '//item')));
         $this->assertSame([], $this->xml('di.xml')->xpath('//type[@name="Magento\Framework\Notification\MessageList"]'),
             'not in the global di.xml: built on admin pages only');
     }
