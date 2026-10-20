@@ -101,6 +101,14 @@ class Status implements NotificationTypeInterface
                     $posted[$target->websiteId] = ['at' => $now, 'open' => $open]
                         + ($report->isAllOk() ? ['ok_at' => $now] : array_intersect_key($mine, ['ok_at' => 1]));
                     $this->store->save([self::POSTED_KEY => $posted]);
+                    return;
+                }
+                // quiet: nothing new was told, but what is no longer open is forgotten - back later, it is new
+                $still = array_values(array_intersect(array_map('strval', (array)($mine['open'] ?? [])),
+                    array_map('strval', $open)));
+                if ($still !== array_values(array_map('strval', (array)($mine['open'] ?? [])))) {
+                    $posted[$target->websiteId] = ['open' => $still] + $mine;
+                    $this->store->save([self::POSTED_KEY => $posted]);
                 }
             }, $post];
         });

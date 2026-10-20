@@ -141,6 +141,22 @@ class StatusTest extends TestCase
         $this->assertSame(['cron', 'queues'], $store->row(Status::POSTED_KEY)[0]['open']);
     }
 
+    public function testAWarningThatClearedQuietlyIsNewWhenItComesBack(): void
+    {
+        $warn = ['status' => 'warn', 'detail' => 'growing'];
+        $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => $warn]]]);
+        $this->send($store); // posted: Cron and Queue open
+        $store->seed(['checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => ['status' => 'ok']]]]);
+        $this->send($store);
+        $this->assertSame([true, false], $this->posted, 'Queue OK again, Cron told: quiet');
+        $this->assertSame(['cron'], $store->row(Status::POSTED_KEY)[0]['open'], 'the quiet status still forgets'
+            . ' what is no longer open');
+        $store->seed(['checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => $warn]]]);
+        $this->send($store);
+        $this->assertSame([true, false, true], $this->posted, 'the warning back: new, posted');
+        $this->assertStringStartsWith("*Hourly status · Shop*\n\nWarnings: Queue (growing)", $this->sent[2]);
+    }
+
     public function testAKnownErrorIsListedAgainFromTheThresholdANewOneAtOnce(): void
     {
         $store = (new MemoryStore())->seed([Fingerprints::KEY => ['aaaaaaaa' => ['label' => 'Unable to send'],
