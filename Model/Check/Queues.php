@@ -66,7 +66,10 @@ class Queues implements CheckInterface
         $now = $this->dateTime->gmtTimestamp();
         $max = $this->config->getInt(self::CODE, 'max_messages', 1000);
         $growing = $this->config->getInt(self::CODE, 'growing_minutes', 15) * 60;
-        $sizes = $this->databaseSizes($max * 2) + $this->brokerSizes();
+        $database = $this->databaseSizes($max * 2);
+        $sizes = $database + $this->brokerSizes();
+        // "over": a database count stops at the cap; RabbitMQ's is exact
+        $capped = array_filter($database, fn (int $size) => $size >= $max * 2);
         $samples = (array)($this->state->get('cursor:' . self::CODE)['samples'] ?? []);
         $kept = [];
         foreach ($sizes as $queue => $size) {
@@ -86,9 +89,12 @@ class Queues implements CheckInterface
                 $rising[$queue] = $size;
             }
         }
+        // the biggest first: those named, the rest counted
+        arsort($full);
+        arsort($rising);
         $parts = [];
         foreach ($full + $rising as $queue => $size) {
-            $parts[] = sprintf('%s: %s%s messages%s', $queue, $size >= $max * 2 ? 'over ' : '',
+            $parts[] = sprintf('%s: %s%s messages%s', $queue, isset($capped[$queue]) ? 'over ' : '',
                 Format::number($size), isset($rising[$queue]) ? ', growing for ' . Format::duration($growing) : '');
         }
         $detail = implode('; ', array_slice($parts, 0, 3))

@@ -105,6 +105,21 @@ class QueuesTest extends TestCase
             fn ($c) => $c[0] === 'where')));
     }
 
+    public function testTheLargestQueuesAreNamedFirst(): void
+    {
+        $result = $this->check(['a' => 120, 'b' => 150, 'c' => 110, 'd' => 190, 'e' => 130]);
+        $this->assertSame('d: 190 messages; b: 150 messages; e: 130 messages; +2 more', $result->detail,
+            'the biggest backlogs named, the small ones counted');
+        $this->assertSame(['d', 'b', 'e'], array_map(fn ($cause) => explode(':', $cause->detail)[0],
+            array_values(array_filter($result->causes, fn ($cause) => $cause->code === 'queue_backlog'))));
+    }
+
+    public function testOverOnlyForACountedUpToTheCap(): void
+    {
+        $result = $this->check([], ['exact' => 250], false);
+        $this->assertSame('exact: 250 messages', $result->detail, 'RabbitMQ counts every message: no "over"');
+    }
+
     public function testAQueueGrowingForTheWindowWarns(): void
     {
         foreach ([3, 5, 5] as $size) {
