@@ -27,6 +27,8 @@ class Messages
     private const LOGS = ['system_log', 'exceptions'];
     /** A check's notices with a title of their own (the high alert for sensitive data in logs). */
     private const NOTICE_TITLES = ['sensitive_data' => 'Security: sensitive data in logs'];
+    /** Notices shown per message (folded ones can add up), then "…and N more". */
+    private const NOTICES = 10;
     /** Causes shown per alert. */
     private const CAUSES = 4;
     /** The summary's log errors per level, the latest first. */
@@ -91,7 +93,17 @@ class Messages
                 $facts[] = $notice;
             }
         }
-        $errors = count(array_filter($facts, fn (string $fact) => !str_starts_with($fact, '…')));
+        $more = array_filter($facts, fn (string $fact) => str_starts_with($fact, '…'));
+        $facts = array_values(array_diff_key($facts, $more));
+        $errors = count($facts);
+        if ($errors > self::NOTICES || $more !== []) {
+            $extra = $errors - min($errors, self::NOTICES) + array_sum(array_map(fn (string $fact) => preg_match(
+                '/\d+/', $fact, $m) ? (int)$m[0] : 0, $more));
+            $facts = array_slice($facts, 0, self::NOTICES);
+            if ($extra > 0) {
+                $facts[] = '…and ' . $extra . ' more (see the daily summary)';
+            }
+        }
         $title = self::NOTICE_TITLES[$code]
             ?? 'New ' . ($errors > 1 ? 'errors' : 'error') . ' in ' . $this->pool->getLabel($code);
         $several = array_filter($facts, fn (string $fact) => str_contains($fact, "\n")) !== [];

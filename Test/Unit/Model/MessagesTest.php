@@ -100,6 +100,16 @@ class MessagesTest extends TestCase
             ]));
     }
 
+    public function testFoldedNoticesAreCappedWithTheRestCounted(): void
+    {
+        $notices = array_map(fn ($i) => 'Critical: e' . $i . ' ({t:' . self::NOW . '})', range(1, 12));
+        $notices[] = '…and 4 more (see the daily summary)';
+        $text = $this->messages->notices($this->target(), 'system_log', $notices);
+        $this->assertStringContainsString("Critical: e10 (10:00)\n…and 6 more (see the daily summary)\n\nWhat to do:",
+            $text, 'ten, then the two over and the four the check counted');
+        $this->assertStringNotContainsString('e11', $text);
+    }
+
     public function testTheDailySummary(): void
     {
         $checks = [

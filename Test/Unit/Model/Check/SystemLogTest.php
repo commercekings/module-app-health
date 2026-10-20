@@ -94,6 +94,23 @@ class SystemLogTest extends TestCase
         $this->assertStringStartsWith('Critical: Payment gateway down ({t:', $again->notices[0], 'not "NEW"');
     }
 
+    public function testAnErrorDroppedFromTheMemoryIsNotNewAgainWithinADay(): void
+    {
+        $this->run5();
+        $this->assertCount(1, $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices, 'new');
+        $fp = (string)array_key_first(array_filter($this->store->row(Fingerprints::KEY),
+            fn ($e) => $e['level'] === 'CRITICAL'));
+        $lines = '';
+        for ($i = 0; $i < Fingerprints::LIMIT + 5; $i++) {
+            $kind = str_repeat('a', 1 + $i % 26) . ' ' . chr(97 + intdiv($i, 26));
+            $lines .= self::line('WARNING', 'Slow kind ' . $kind);
+        }
+        $this->run5($lines); // newer warnings push it out of the 500
+        $this->assertArrayNotHasKey($fp, $this->store->row(Fingerprints::KEY), 'pushed out of the 500');
+        $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices,
+            'seen within the day: not "new" again');
+    }
+
     public function testTheFingerprintMemoryIsBounded(): void
     {
         $this->run5();

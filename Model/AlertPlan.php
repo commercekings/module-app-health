@@ -14,7 +14,7 @@ class AlertPlan
 {
     /** One-off news per scope: {"next": id, "items": [[id, time, check code, text], ...]}. */
     public const NOTICES = 'notices:';
-    /** The last notice told per check code: {"<code>": id}. */
+    /** The last notice told per check code, and when: {"<code>": {"id": id, "at": time}}. */
     public const NOTICED = 'noticed:';
     public const NOTICES_KEPT = 30;
     public const NOTICES_HOURS = 24;
@@ -26,15 +26,20 @@ class AlertPlan
     /**
      * @param array<string, array<mixed>> $checks code => ['status' => ..., ...] (the "checks" row)
      * @param array<string, array<mixed>> $alerted code => ['status' => ..., 'at' => unix time]
+     * @param int $recoverRuns ok runs in a row ("runs" in the checks row) before a problem counts as recovered
      * @return array<string, string> code => self::PROBLEM, RECOVERED or REPEAT, in the checks' order
      */
-    public static function changes(array $checks, array $alerted, int $now, int $repeatSeconds): array
+    public static function changes(array $checks, array $alerted, int $now, int $repeatSeconds,
+        int $recoverRuns = 1): array
     {
         $changes = [];
         foreach ($checks as $code => $check) {
             $status = (string)($check['status'] ?? CheckResult::OK);
             $told = (string)($alerted[$code]['status'] ?? CheckResult::OK);
             if ($status !== $told) {
+                if ($status === CheckResult::OK && (int)($check['runs'] ?? $recoverRuns) < $recoverRuns) {
+                    continue; // not ok for long enough: no "recovered" that a flapping check takes back
+                }
                 $changes[$code] = $status === CheckResult::OK ? self::RECOVERED : self::PROBLEM;
             } elseif ($status === CheckResult::FAIL && (int)($alerted[$code]['at'] ?? 0) <= $now - $repeatSeconds) {
                 $changes[$code] = self::REPEAT;
@@ -86,21 +91,37 @@ class AlertPlan
     }
 
     /**
-     * The notices not told yet, by check code in the order they came.
+     * The notices not told yet, by check code in the order they came - of a check told less than $gapSeconds ago,
+     * none yet: they wait and go together in its next message.
      *
      * @param array<mixed> $row the notices row
      * @param array<mixed> $noticed the noticed row
      * @return array<string, array<int, string>> code => [id => text]
      */
-    public static function pendingNotices(array $row, array $noticed): array
+    public static function pendingNotices(array $row, array $noticed, int $now = 0, int $gapSeconds = 0): array
     {
         $pending = [];
         foreach ((array)($row['items'] ?? []) as $item) {
             [$id, , $code, $text] = array_pad((array)$item, 4, '');
-            if ((int)$id > (int)($noticed[$code] ?? 0)) {
+            $told = (array)($noticed[$code] ?? []);
+            if ((int)($told['at'] ?? 0) > $now - $gapSeconds) {
+                continue;
+            }
+            if ((int)$id > (int)($told['id'] ?? 0)) {
                 $pending[(string)$code][(int)$id] = (string)$text;
             }
         }
         return $pending;
+    }
+
+    /**
+     * The noticed row after a message with $code's notices up to $id went out at $now.
+     *
+     * @param array<mixed> $noticed
+     * @return array<mixed>
+     */
+    public static function noticed(array $noticed, string $code, int $id, int $now): array
+    {
+        return [$code => ['id' => $id, 'at' => $now]] + $noticed;
     }
 }

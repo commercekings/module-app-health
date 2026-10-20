@@ -48,6 +48,33 @@ class AlertPlanTest extends TestCase
         $this->assertSame([], AlertPlan::changes($checks, $after, self::NOW + 300, self::REPEAT));
     }
 
+    public function testRecoveredOnlyAfterEnoughOkRunsInARow(): void
+    {
+        $told = ['cron' => ['status' => 'fail', 'at' => self::NOW - 600]];
+        $checks = ['cron' => ['status' => 'ok', 'since' => self::NOW, 'runs' => 1]];
+        $this->assertSame([], AlertPlan::changes($checks, $told, self::NOW, self::REPEAT, 2), 'one ok run: not yet');
+        $checks['cron']['runs'] = 2;
+        $this->assertSame(['cron' => AlertPlan::RECOVERED], AlertPlan::changes($checks, $told, self::NOW,
+            self::REPEAT, 2));
+        $checks = ['cron' => ['status' => 'warn', 'since' => self::NOW, 'runs' => 1]];
+        $this->assertSame(['cron' => AlertPlan::PROBLEM], AlertPlan::changes($checks, $told, self::NOW,
+            self::REPEAT, 2), 'fail to warn is news at once');
+    }
+
+    public function testNoticesOfACheckAtMostOncePerIntervalTheRestFoldedIntoTheNext(): void
+    {
+        $row = AlertPlan::addNotices([], ['system_log' => ['a', 'b'], 'exceptions' => ['x']], self::NOW - 60);
+        $row = AlertPlan::addNotices($row, ['system_log' => ['c']], self::NOW);
+        $noticed = AlertPlan::noticed([], 'system_log', 0, self::NOW - 600); // told 10 min ago
+        $this->assertSame(['exceptions' => [3 => 'x']], AlertPlan::pendingNotices($row, $noticed, self::NOW, 1800),
+            'system.log waits for its 30 minutes');
+        $this->assertSame([1 => 'a', 2 => 'b', 4 => 'c'], AlertPlan::pendingNotices($row, $noticed, self::NOW + 1200,
+            1800)['system_log'], 'then all of them in one message');
+        $noticed = AlertPlan::noticed($noticed, 'system_log', 4, self::NOW + 1200);
+        $this->assertSame(['exceptions'], array_keys(AlertPlan::pendingNotices($row, $noticed, self::NOW + 4000,
+            1800)));
+    }
+
     public function testAWorseOrBetterProblemIsNews(): void
     {
         $told = ['cron' => ['status' => 'warn', 'at' => self::NOW - 60], 'caches' => ['status' => 'fail', 'at' => 0]];

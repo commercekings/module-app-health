@@ -89,6 +89,7 @@ class RunnerTest extends TestCase
 
     public function testAFailIsAlertedOnceToItsScopeThenRecoveredOnce(): void
     {
+        $this->settings = ['general/recover_runs' => '1'];
         $this->assertSame([], $this->run5()['queued'], 'all ok: nothing');
         $this->results['cron'] = CheckResult::fail('no job has run for 12 min');
         $this->assertSame([0], $this->run5()['queued'], 'a shop-wide check: the default scope');
@@ -106,7 +107,7 @@ class RunnerTest extends TestCase
         $row = $this->store->row(AlertPlan::NOTICES . '0');
         $this->assertSame([[1, $this->clock->now - 300, 'caches', 'NEW ERROR main: x x1 #12345678']], $row['items']);
         $this->results['caches'] = CheckResult::ok();
-        $this->store->seed([AlertPlan::NOTICED . '0' => ['caches' => 1]]); // the consumer told it
+        $this->store->seed([AlertPlan::NOTICED . '0' => ['caches' => ['id' => 1, 'at' => 0]]]); // the consumer told it
         $this->assertSame([], $this->run5()['queued']);
     }
 
@@ -120,6 +121,19 @@ class RunnerTest extends TestCase
         $this->assertSame(['cron', 'caches'], array_keys($checks[0]));
         $this->assertSame('fail', $checks[2]['email_disabled']['status']);
         $this->assertSame('ok', $checks[1]['email_disabled']['status']);
+    }
+
+    public function testRunsInARowWithTheSameStatusAreCounted(): void
+    {
+        $this->results['cron'] = CheckResult::fail('x');
+        $this->run5();
+        $this->run5();
+        $this->assertSame(2, $this->store->row('checks')[0]['cron']['runs']);
+        $this->results['cron'] = CheckResult::ok();
+        $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => 1]]]);
+        $this->assertSame([], $this->run5()['queued'], 'one ok run: not recovered yet (Recover after 2 runs)');
+        $this->assertSame(1, $this->store->row('checks')[0]['cron']['runs']);
+        $this->assertSame([0], $this->run5()['queued'], 'the second: recovered');
     }
 
     public function testTheTimeSinceTheStatusChangedIsKept(): void
@@ -148,6 +162,7 @@ class RunnerTest extends TestCase
 
     public function testAcrossTheHourAProblemIsAlertedAndAFailIsNotRepeated(): void
     {
+        $this->settings = ['general/recover_runs' => '1'];
         $this->clock->now = 1792504799; // 13:59:59 UTC
         $this->assertSame([], $this->runner()->run()['queued'], 'all ok before the hour');
         $this->clock->now += 2; // 14:00:01: the hour's first run, which also cleans up the old tallies

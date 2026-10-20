@@ -99,7 +99,8 @@ class AlertAndSummaryTest extends TestCase
         $this->assertStringContainsString("*New errors in system.log · Shop (all websites)*\n\n"
             . "Error: a (07:00)\nWhere: a.php:1\n\nError: b (2×, 07:10)\n\nWhat to do: ",
             $this->sent[0]);
-        $this->assertSame(['system_log' => 2], $this->store->row(AlertPlan::NOTICED . '0'));
+        $this->assertSame(['system_log' => ['id' => 2, 'at' => self::NOW]],
+            $this->store->row(AlertPlan::NOTICED . '0'));
         $this->sent = [];
         $this->alert(0);
         $this->assertSame([], $this->sent);

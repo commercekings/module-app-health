@@ -10,14 +10,18 @@ use CommerceKings\AppHealth\Model\RunState;
 /**
  * The log entries seen (WARNING and above), by fingerprint, in the "fingerprints" row: label, level, channel, where,
  * the latest masked message (unless it is turned off), first and last seen, the count, and when it was last told. At
- * most LIMIT, the least recently seen go first. record() returns what the team should hear of this run: an error (ERROR and
- * above) seen for the first time ("NEW"), or - for checks that ask - a CRITICAL one not told within the repeat
- * interval.
+ * most LIMIT, the least recently seen go first - into the "fingerprints:recent" row (when first seen, when dropped;
+ * kept RECENT_SECONDS, at most RECENT_LIMIT), so an error dropped and seen again within a day is not "NEW" again.
+ * record() returns what the team should hear of this run: an error (ERROR and above) seen for the first time
+ * ("NEW"), or - for checks that ask - a CRITICAL one not told within the repeat interval.
  */
 class Fingerprints
 {
     public const KEY = 'fingerprints';
     public const LIMIT = 500;
+    public const RECENT_KEY = 'fingerprints:recent';
+    public const RECENT_LIMIT = 2000;
+    public const RECENT_SECONDS = 86400;
     public const LEVELS = ['CRITICAL' => 'Critical', 'ERROR' => 'Error', 'WARNING' => 'Warning'];
 
     public function __construct(
@@ -46,10 +50,18 @@ class Fingerprints
             return [];
         }
         $known = (array)($this->state->get(self::KEY) ?? []);
+        $recent = (array)($this->state->get(self::RECENT_KEY) ?? []);
+        $recentChanged = false;
         $repeat = $this->config->getRepeatHours() * 3600;
         $news = [];
         foreach ($runs as $fp => $run) {
             $seen = $known[$fp] ?? null;
+            if ($seen === null && (int)($recent[$fp][1] ?? 0) > $now - self::RECENT_SECONDS) {
+                // dropped from the memory within the day: known, told when it was dropped at the latest
+                $seen = ['first' => (int)$recent[$fp][0], 'told' => (int)$recent[$fp][1]];
+                unset($recent[$fp]);
+                $recentChanged = true;
+            }
             $level = Normalizer::group((int)$run['rank']);
             $kind = match (true) {
                 (int)$run['rank'] < 2 => null,
@@ -61,14 +73,25 @@ class Fingerprints
                 'location' => $run['location'], 'message' => $run['message'] ?? null,
                 'first' => (int)($seen['first'] ?? $now), 'last' => max((int)($seen['last'] ?? 0), $run['last']),
                 'count' => (int)($seen['count'] ?? 0) + $run['count'],
-                'told' => $kind !== null ? $now : (int)($seen['told'] ?? 0)];
+                'told' => $kind !== null ? $now : (int)($seen['told'] ?? 0), 'seen' => $now];
             if ($kind !== null) {
                 $news[] = ['kind' => $kind, 'fingerprint' => $fp, 'count' => $run['count']] + $known[$fp];
             }
         }
         if (count($known) > self::LIMIT) {
-            uasort($known, fn ($a, $b) => (int)$b['last'] <=> (int)$a['last']);
+            // the least recently seen (by run, then by the log's own time) go
+            uasort($known, fn ($a, $b) => [(int)($b['seen'] ?? $b['last']), (int)$b['last']]
+                <=> [(int)($a['seen'] ?? $a['last']), (int)$a['last']]);
+            foreach (array_slice($known, self::LIMIT, null, true) as $fp => $dropped) {
+                $recent[$fp] = [(int)$dropped['first'], $now];
+            }
             $known = array_slice($known, 0, self::LIMIT, true);
+            $recentChanged = true;
+        }
+        if ($recentChanged) {
+            $recent = array_filter($recent, fn ($item) => (int)($item[1] ?? 0) > $now - self::RECENT_SECONDS);
+            uasort($recent, fn ($a, $b) => (int)$b[1] <=> (int)$a[1]);
+            $this->state->set(self::RECENT_KEY, array_slice($recent, 0, self::RECENT_LIMIT, true));
         }
         $this->state->set(self::KEY, $known);
         usort($news, fn ($a, $b) => $b['count'] <=> $a['count']);

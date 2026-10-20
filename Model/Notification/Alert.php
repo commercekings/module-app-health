@@ -51,7 +51,8 @@ class Alert implements NotificationTypeInterface
         $rows = $this->store->load(array_merge(['checks'], $keys));
         $checks = (array)($rows['checks'][$scope] ?? []);
         $alerted = $rows[$keys[0]] ?? [];
-        $changes = AlertPlan::changes($checks, $alerted, $now, $this->config->getRepeatHours() * 3600);
+        $changes = AlertPlan::changes($checks, $alerted, $now, $this->config->getRepeatHours() * 3600,
+            $this->config->getRecoverRuns());
         uksort($changes, fn ($a, $b) => $this->order($checks[$b] ?? [], $changes[$b])
             <=> $this->order($checks[$a] ?? [], $changes[$a]));
         foreach ($changes as $code => $change) {
@@ -60,9 +61,10 @@ class Alert implements NotificationTypeInterface
                     [$code => $change], $now)])];
         }
         $noticed = $rows[$keys[2]] ?? [];
-        foreach (AlertPlan::pendingNotices($rows[$keys[1]] ?? [], $noticed) as $code => $notices) {
-            return [$this->messages->notices($target, $code, $notices),
-                fn () => $this->store->save([$keys[2] => [$code => max(array_keys($notices))] + $noticed])];
+        $gap = $this->config->getNoticeMinutes() * 60;
+        foreach (AlertPlan::pendingNotices($rows[$keys[1]] ?? [], $noticed, $now, $gap) as $code => $notices) {
+            return [$this->messages->notices($target, $code, $notices), fn () => $this->store->save([$keys[2]
+                => AlertPlan::noticed($noticed, (string)$code, max(array_keys($notices)), $now)])];
         }
         return null;
     }

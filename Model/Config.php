@@ -62,6 +62,19 @@ class Config
      * The heartbeat URL; '' when none is set or it is not http(s). Stored encrypted; config.xml's backend_model makes
      * Magento decrypt it on reading.
      */
+    /** OK runs in a row before a problem counts as recovered (at least 1). */
+    public function getRecoverRuns(): int
+    {
+        return max(1, (int)($this->scopeConfig->getValue(self::GENERAL . 'recover_runs') ?: 2));
+    }
+
+    /** At most one message of a check's notices per this many minutes (per scope); 0: no limit. */
+    public function getNoticeMinutes(): int
+    {
+        $value = $this->scopeConfig->getValue(self::GENERAL . 'notice_minutes');
+        return $value === null || $value === '' ? 30 : max(0, (int)$value);
+    }
+
     public function getHeartbeatUrl(): string
     {
         $url = trim((string)$this->scopeConfig->getValue(self::GENERAL . 'heartbeat_url'));

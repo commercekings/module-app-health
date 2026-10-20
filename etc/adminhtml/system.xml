@@ -43,6 +43,18 @@
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
+                <field id="recover_runs" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Recovered after (OK runs in a row)</label>
+                    <comment>A problem is sent as recovered only after this many OK runs in a row (5 minutes apart), so a check that flaps doesn't send "recovered" and the problem again. Default: 2.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="notice_minutes" translate="label comment" type="text" sortOrder="62" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>New log errors at most every (minutes)</label>
+                    <comment>At most one message of a check's new critical log errors or sensitive-data findings per this many minutes; what comes in between goes in the next one. The first is sent at once. Default: 30; 0: no limit.</comment>
+                    <validate>required-entry validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Add the masked log message</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>

@@ -105,7 +105,8 @@ class Runner
                 $checks[$scope][$code] = ['status' => $result->status, 'detail' => $result->detail,
                     'title' => $result->title, 'gauges' => $result->gauges,
                     'causes' => array_map(fn ($cause) => $cause->toArray(), $result->causes),
-                    'since' => $unchanged ? (int)$last['since'] : $now, 'checked_at' => $now, 'ms' => $ms];
+                    'since' => $unchanged ? (int)$last['since'] : $now,
+                    'runs' => $unchanged ? (int)($last['runs'] ?? 1) + 1 : 1, 'checked_at' => $now, 'ms' => $ms];
                 if ($result->notices !== []) {
                     $notices[$scope][$code] = $result->notices;
                 }
@@ -150,8 +151,9 @@ class Runner
         foreach (array_keys($targets) as $scope) {
             $alerted = $this->state->get('alerted:' . $scope) ?? [];
             $pending = AlertPlan::pendingNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [],
-                $this->state->get(AlertPlan::NOTICED . $scope) ?? []);
-            if (AlertPlan::changes($checks[$scope] ?? [], $alerted, $now, $repeat) === [] && $pending === []) {
+                $this->state->get(AlertPlan::NOTICED . $scope) ?? [], $now, $this->config->getNoticeMinutes() * 60);
+            if (AlertPlan::changes($checks[$scope] ?? [], $alerted, $now, $repeat, $this->config->getRecoverRuns())
+                === [] && $pending === []) {
                 continue;
             }
             try {
