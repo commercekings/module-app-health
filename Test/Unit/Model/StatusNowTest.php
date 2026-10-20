@@ -8,6 +8,7 @@ use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Runner;
+use CommerceKings\AppHealth\Model\SiteDomain;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Model\Status\DefaultPolicy;
 use CommerceKings\AppHealth\Model\StatusNow;
@@ -42,6 +43,7 @@ class StatusNowTest extends TestCase
     private array $snapshot;
     private \Throwable|string $answer = SenderInterface::SENT;
     private bool $snapshotTaken = false;
+    private bool $copy = false;
 
     protected function setUp(): void
     {
@@ -87,8 +89,12 @@ class StatusNowTest extends TestCase
         $messages = new Messages($pool, new Clock(self::NOW));
         $status = new Status($this->createStub(TeamMessage::class), $this->store, $messages, $pool, $config,
             new Clock(self::NOW), new DefaultPolicy($config));
+        $domain = $this->createStub(SiteDomain::class);
+        $domain->method('matches')->willReturnCallback(fn () => !$this->copy);
+        $domain->method('stored')->willReturn('shop.example.com');
+        $domain->method('current')->willReturn('staging.example.com');
         return new StatusNow($targets, $runner, $state, $status, $config, $deliveryState, $sender,
-            new Clock(self::NOW), $messages);
+            new Clock(self::NOW), $messages, $domain);
     }
 
     public function testTheChecksAsTheyAreNowArePostedToTheGlobalRecipient(): void
@@ -122,6 +128,19 @@ class StatusNowTest extends TestCase
         $this->statusNow()->send();
         $this->assertStringEndsWith("*Containers · host-1*\n```\nNAME    CPU        MEM  MEM%  RESTARTS\n"
             . "php   12.3%  512M / 2G   25%         0\n```", ($this->sent[0]->content)()->text);
+    }
+
+    public function testACopyOfTheShopPostsNothing(): void
+    {
+        $this->copy = true;
+        try {
+            $this->statusNow()->send();
+            $this->fail('posted from a copy');
+        } catch (LocalizedException $e) {
+            $this->assertSame('App health is silent: this looks like a copy of shop.example.com (now'
+                . ' staging.example.com). Use the new domain first if this is the shop.', $e->getMessage());
+        }
+        $this->assertSame([false, []], [$this->snapshotTaken, $this->sent], 'no checks run, nothing sent');
     }
 
     public function testAnIncompleteSnapshotSaysWhat(): void

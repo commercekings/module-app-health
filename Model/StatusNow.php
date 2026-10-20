@@ -33,7 +33,8 @@ class StatusNow
         private readonly DeliveryStateInterface $deliveryState,
         private readonly SenderInterface $sender,
         private readonly DateTime $dateTime,
-        private readonly Messages $messages
+        private readonly Messages $messages,
+        private readonly SiteDomain $siteDomain
     ) {
     }
 
@@ -45,10 +46,16 @@ class StatusNow
 
     /**
      * @return array{0: string, 1: string} the recipient and the channel it was posted to
-     * @throws LocalizedException when app health is off or has no global recipient, or when the channel did not take it
+     * @throws LocalizedException on a copy of the shop, when app health is off or has no global recipient, or when the
+     *     channel did not take it
      */
     public function send(): array
     {
+        if (!$this->siteDomain->matches()) {
+            // a copy of the shop (SiteDomain): silent, as the runtime is - not even the checks run
+            throw new LocalizedException(__('App health is silent: this looks like a copy of %1 (now %2). Use the'
+                . ' new domain first if this is the shop.', $this->siteDomain->stored(), $this->siteDomain->current()));
+        }
         $target = $this->targets->shopWide();
         if ($target === null) {
             throw new LocalizedException(__('Set a channel and recipient under Alerts first.'));

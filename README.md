@@ -133,7 +133,8 @@ the alerts do.
 
 ### Where messages go
 
-Every setting is global (*Stores > Configuration > CommerceKings > App health*, default scope):
+Every header names the shop and its domain: *Problem: Cron stopped · Main Website Store · shop.example.com*. Every
+setting is global (*Stores > Configuration > CommerceKings > App health*, default scope):
 
 | Messages | Go to |
 |---|---|
@@ -232,8 +233,9 @@ All settings are global (default scope); a website gets its own channel through 
 - Set the channel and recipient (and *Website channels* where a website has its own), save, then *Send test alert*.
 - Keep `commerceKingsNotificationSend` running – the same consumer as every CommerceKings notification.
 - **Staging and copies stay silent.** App health stores the shop's domain when it is first switched on (*Shop
-  domain*). A copy of the database at another domain – staging, a developer's machine – sends no alert and pings no
-  heartbeat, and the admin says so; after a real move, *Use <domain>* makes the new domain the shop's. To keep a
+  domain*). A copy of the database at another domain – staging, a developer's machine – sends no message, no summary
+  and no heartbeat ping (a copy never pings production's heartbeat), messages a copied queue still holds are dropped
+  by its consumer, and the admin says so; after a real move, *Use <domain>* makes the new domain the shop's. To keep a
   staging site off for good, lock it there: `bin/magento config:set commercekings_app_health/general/enabled 0
   --lock-env` (written to its `app/etc/env.php`, so a fresh copy of the production database can't switch it on).
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
