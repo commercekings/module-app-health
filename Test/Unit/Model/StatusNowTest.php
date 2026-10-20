@@ -95,7 +95,7 @@ class StatusNowTest extends TestCase
         $domain->method('stored')->willReturn('shop.example.com');
         $domain->method('current')->willReturn('staging.example.com');
         return new StatusNow($targets, $runner, $state, $status, $config, $deliveryState, $sender,
-            new Clock(self::NOW), $messages, $domain, Renderers::pool());
+            new Clock(self::NOW), $messages, $domain, Renderers::pool(), $this->store);
     }
 
     public function testTheChecksAsTheyAreNowArePostedToTheGlobalRecipient(): void
@@ -117,7 +117,24 @@ class StatusNowTest extends TestCase
             . 'Server status: not set up (no status file from a server yet)', $text);
         $this->assertStringContainsString("New errors this hour: 3\n• Unable to send order (3×)", $text,
             'the errors since the last hourly status, as it would say them');
-        $this->assertSame($rows, $this->store->rows, 'nothing written');
+        $this->assertSame(['at' => self::NOW], $this->store->row(StatusNow::KEY), 'when, for the next click');
+        unset($this->store->rows[StatusNow::KEY]);
+        $this->assertSame($rows, $this->store->rows, 'nothing else written');
+    }
+
+    public function testNotTwiceWithinHalfAMinute(): void
+    {
+        $this->statusNow()->send();
+        try {
+            $this->statusNow()->send();
+            $this->fail('a second click right after');
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+            $this->assertSame('A status was sent 0 seconds ago. Try again in 30 seconds.', $e->getMessage());
+        }
+        $this->assertCount(1, $this->sent);
+        $this->store->seed([StatusNow::KEY => ['at' => self::NOW - StatusNow::WAIT_SECONDS]]);
+        $this->statusNow()->send();
+        $this->assertCount(2, $this->sent, 'half a minute later: again');
     }
 
     public function testTheServersContainersComeAsATable(): void
@@ -166,6 +183,7 @@ class StatusNowTest extends TestCase
             [$t, SenderInterface::COOLDOWN, 'Not posted: recipient cooldown.'],
         ] as [$target, $answer, $message]) {
             [$this->target, $this->answer, $this->snapshotTaken] = [$target, $answer, false];
+            unset($this->store->rows[StatusNow::KEY]); // each a first click
             try {
                 $this->statusNow()->send();
                 $this->fail('posted');

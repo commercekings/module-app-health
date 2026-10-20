@@ -24,6 +24,10 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
  */
 class StatusNow
 {
+    /** The state key of the last "Send status now", and how long the next one waits. */
+    public const KEY = 'status_now';
+    public const WAIT_SECONDS = 30;
+
     public const TYPE = 'app_health_status_now';
 
     public function __construct(
@@ -37,7 +41,8 @@ class StatusNow
         private readonly DateTime $dateTime,
         private readonly Messages $messages,
         private readonly SiteDomain $siteDomain,
-        private readonly RendererPool $renderers
+        private readonly RendererPool $renderers,
+        private readonly StateStore $store
     ) {
     }
 
@@ -63,9 +68,16 @@ class StatusNow
         if ($target === null) {
             throw new LocalizedException(__('Set a channel and recipient under Alerts first.'));
         }
+        // a click or two too many sends no burst to the channel
+        $now = (int)$this->dateTime->gmtTimestamp();
+        $last = (int)($this->store->load([self::KEY])[self::KEY]['at'] ?? 0);
+        if ($last > $now - self::WAIT_SECONDS) {
+            throw new LocalizedException(__('A status was sent %1 seconds ago. Try again in %2 seconds.',
+                max(0, $now - $last), self::WAIT_SECONDS - max(0, $now - $last)));
+        }
+        $this->store->save([self::KEY => ['at' => $now]]);
         $snapshot = $this->runner->run(snapshot: true);
         // the log errors since the last hourly status went out, else over one interval
-        $now = (int)$this->dateTime->gmtTimestamp();
         $sentAt = (string)($this->deliveryState->load(Status::CODE, 0)['sent_at'] ?? '');
         $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC')
             : $now - $this->config->getHourlyStatusMinutes() * 60;
