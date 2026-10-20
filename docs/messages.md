@@ -30,10 +30,12 @@ Failed for 1 h; OK again since 11:52.
 
 Critical: PaymentException (3×, 14:02)
 Where: app/code/Vendor/Pay/Model/Gateway.php:120
-Message: Card *** declined for order ***
 
 What to do: var/log/system.log: look for the error around that time, in the file it names.
 ```
+
+With *Add the masked log message* on (off by default), a third line adds the message, masked:
+`Message: Card *** declined for order ***`.
 
 The daily summary leaves out file paths and messages, and any section without content:
 

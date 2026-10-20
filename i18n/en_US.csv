@@ -64,6 +64,7 @@ Cron,Cron
 "Default: 5.","Default: 5."
 "Default: 60.","Default: 60."
 "Default: 60; 15 to 180.","Default: 60; 15 to 180."
+"Default: No - only the error's type, count, time and file:line leave the server. Yes: also a masked one-line message (emails, phones, numbers, tokens and secrets hidden; names and free text may show).","Default: No - only the error's type, count, time and file:line leave the server. Yes: also a masked one-line message (emails, phones, numbers, tokens and secrets hidden; names and free text may show)."
 "Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.","Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable."
 "Did the backup job run? Its log on the server says why not.","Did the backup job run? Its log on the server says why not."
 "Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.","Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels."
@@ -156,7 +157,6 @@ Severity,Severity
 "Severity (critical / warning)","Severity (critical / warning)"
 "Severity is critical or warning, not ""%1"".","Severity is critical or warning, not ""%1""."
 "Shop domain","Shop domain"
-"Show a masked one-line message with log errors. Emails, phones, numbers, tokens and secrets are hidden; names and free text may show.","Show a masked one-line message with log errors. Emails, phones, numbers, tokens and secrets are hidden; names and free text may show."
 "Start the cron container, or install Magento's crontab (bin/magento cron:install).","Start the cron container, or install Magento's crontab (bin/magento cron:install)."
 Status,Status
 "Stop logging it where the entry is written, then remove or rotate the log file.","Stop logging it where the entry is written, then remove or rotate the log file."

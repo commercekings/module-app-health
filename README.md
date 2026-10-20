@@ -23,7 +23,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 - **Light.** Admin, cron and Notification's queue only – nothing on the storefront or in checkout. Indexed, bounded
   queries; only the new bytes of the exception log; a 5-second budget per run.
 - **Private.** Log errors are sent as a safe label (the exception class, or the message's first words with every
-  variable part as `***`), in alerts with file:line and the message masked (on by default) – never the line itself.
+  variable part as `***`), in alerts with file:line and – only if you switch it on – the message masked; never the
+  line itself.
 - **When the server itself is down.** A heartbeat lets an outside service alert you when the pings stop – the server,
   cron, or the sending path down.
 - **The server's status too.** A script on the server writes its containers, disk, memory, load, backups and
@@ -65,7 +66,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | Cron back after it was down | at once: "Cron was down from 23:10 to 06:40 (7 h)" – not "Cron stopped" | global |
 | A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | global (a website's own: its summary) |
 | Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | global |
-| A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
+| A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit: type, count, time and file:line (the masked message only with *Add the masked log message* on) | global |
 | New CRITICAL log entries in the first hour after install | one digest when the hour is over ("First hour: N errors seen for the first time: …"); one coming 10+ times in that hour at once | global |
 | ERROR log entries (other files) | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
 | ERROR entries of a file in *Errors at once from* (e.g. payment.log) | at once, like CRITICAL (not in the hourly status) | global |
@@ -152,7 +153,7 @@ Examples of every message, and why each check fails: [Messages](docs/messages.md
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Shop domain (stored when first switched on; *Use <domain>* after a move); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
+| Alerts | Enabled (No); Shop domain (stored when first switched on; *Use <domain>* after a move); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (No); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 

@@ -91,7 +91,7 @@
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Add the masked log message</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>Show a masked one-line message with log errors. Emails, phones, numbers, tokens and secrets are hidden; names and free text may show.</comment>
+                    <comment>Default: No - only the error's type, count, time and file:line leave the server. Yes: also a masked one-line message (emails, phones, numbers, tokens and secrets hidden; names and free text may show).</comment>
                 </field>
                 <field id="heartbeat_url" translate="label comment" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Heartbeat URL</label>

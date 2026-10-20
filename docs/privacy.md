@@ -32,9 +32,9 @@ quantifiers, fast on long lines and on a realistic 80 KB log sample): see [Exten
 ## What is masked
 
 A log line never leaves the server as it is. An error is shown by its label – the exception class, else
-the message's first 3 words – and, in alerts, file:line (relative to the Magento root) and the masked message. *Add
-the masked log message* is **on by default**, because a readable message is what makes an alert useful; turn it off
-when your logs may hold free text you don't want in a chat.
+the message's first 3 words – and, in alerts, file:line (relative to the Magento root). *Add the masked log message* is
+**off by default**: only the error's type, count, time and file:line leave the server. Switched on, alerts also carry
+a masked one-line message – more useful to read, but names and other free text in it may still show.
 
 Always masked, in the label and the message, as `***`:
 
@@ -49,4 +49,5 @@ Always masked, in the label and the message, as `***`:
   key word before it, or SQL. The latest per error is kept in the module's state (at most 500 errors).
 - **The label:** at most 3 words, with URLs, emails, quoted values, hex strings, numbers and paths after their first
   segment – and any capitalized word after the first (often a name) – as `***`. The daily summary shows labels only.
-- **Off** (*Add the masked log message* = No): labels only, everywhere; a cron job's error text is not read either.
+- **Off** (*Add the masked log message* = No, the default): labels only, everywhere; a cron job's error text is not read
+  either.
