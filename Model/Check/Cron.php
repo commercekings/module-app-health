@@ -82,7 +82,7 @@ class Cron implements CheckInterface
         if ($lastActivity === null) {
             $fail[] = sprintf('no job has run for over %s', Format::duration($window));
         } elseif ($lastActivity < $now - $staleMinutes * 60) {
-            $fail[] = sprintf('no job has run for %s', Format::duration($now - $lastActivity));
+            $fail[] = 'no job has run since ' . Format::at($lastActivity);
         }
         if ($errors !== []) {
             $warn[] = sprintf('%d new cron %s (%s)', array_sum($errors), array_sum($errors) === 1 ? 'error' : 'errors',

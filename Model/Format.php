@@ -17,6 +17,15 @@ class Format
         };
     }
 
+    /**
+     * A time in a detail: "{t:<unix time>}", shown by Model\Messages in each recipient's time zone ("14:05", or
+     * "19 Oct 14:05" when not today).
+     */
+    public static function at(int $time): string
+    {
+        return '{t:' . $time . '}';
+    }
+
     public static function number(int $number): string
     {
         return number_format($number);

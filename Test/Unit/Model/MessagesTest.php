@@ -6,11 +6,14 @@ namespace CommerceKings\AppHealth\Test\Unit\Model;
 use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Target;
+use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use PHPUnit\Framework\TestCase;
 
 class MessagesTest extends TestCase
 {
+    private const MESSAGES_NOW = 1792483200;
+
     use Pool;
 
     private const NOW = 1792483200; // 2026-10-20 08:00 UTC, 10:00 in Belgrade
@@ -20,7 +23,7 @@ class MessagesTest extends TestCase
     protected function setUp(): void
     {
         $this->messages = new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
-            'exceptions' => 'Exceptions'], ['email_disabled' => 'Email sending']));
+            'exceptions' => 'Exceptions'], ['email_disabled' => 'Email sending']), new Clock(self::MESSAGES_NOW));
     }
 
     private function target(int $websiteId = 0): Target
@@ -37,12 +40,23 @@ class MessagesTest extends TestCase
             'exceptions' => ['status' => 'ok', 'detail' => '', 'since' => self::NOW],
         ];
         $this->assertSame("App health - Moj Planer (all websites)\n"
-            . "FAIL Cron: no job has run for 12 min (since 09:48)\n"
-            . "WARN Caches: config invalidated for 2 h (since 10:00)\n"
+            . "FAIL Cron: no job has run for 12 min (first seen 09:48)\n"
+            . "WARN Caches: config invalidated for 2 h (first seen 10:00)\n"
             . "RECOVERED Indexers\n"
             . 'OK Exceptions',
             $this->messages->alert($this->target(), $checks, ['cron' => AlertPlan::PROBLEM,
                 'indexers' => AlertPlan::RECOVERED, 'caches' => AlertPlan::PROBLEM]));
+    }
+
+    public function testATimeInADetailIsShownInTheRecipientsZone(): void
+    {
+        $alert = fn (int $time) => $this->messages->alert($this->target(), ['cron' => ['status' => 'fail',
+            'detail' => 'no job has run since {t:' . $time . '}', 'since' => self::NOW]],
+            ['cron' => AlertPlan::PROBLEM]);
+        $this->assertSame("App health - Moj Planer (all websites)\nFAIL Cron: no job has run since 09:48",
+            $alert(self::NOW - 720), 'today: the time only, and no "first seen" next to it');
+        $this->assertStringEndsWith('FAIL Cron: no job has run since 18 Oct 22:00', $alert(self::NOW - 36 * 3600),
+            'another day: with the date');
     }
 
     public function testAWebsitesAlertNamesTheShopOnly(): void
@@ -68,7 +82,7 @@ class MessagesTest extends TestCase
                 'exceptions' => ['w' => 2, 'c' => ['exceptions' => 5, 'exceptions:B\\NoSuchEntityException' => 5]]],
         ];
         $this->assertSame("Daily summary - Moj Planer - 20 Oct\n"
-            . "FAIL Caches: full_page disabled (since 09:00)\n"
+            . "FAIL Caches: full_page disabled (first seen 09:00)\n"
             . "Cron: 1,437 runs, 2 errors (sitemap_generate x2)\n"
             . "Exceptions: 14 exceptions (A\\PaymentException x9, B\\NoSuchEntityException x5)\n"
             . "Had problems: Cron (warn) and Exceptions (fail)\n"

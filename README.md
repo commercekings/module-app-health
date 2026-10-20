@@ -40,7 +40,7 @@ go to the website's recipient (the default one unless the website sets its own).
 
 ```
 App health - Moj Planer (all websites)
-FAIL Cron: no job has run for 12 min (since 14:05)
+FAIL Cron: no job has run since 14:05
 RECOVERED Indexers
 OK Caches, Maintenance mode, Exceptions and Sending
 ```

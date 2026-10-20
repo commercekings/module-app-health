@@ -25,6 +25,8 @@ use PHPUnit\Framework\TestCase;
  */
 class PrivacyTest extends TestCase
 {
+    private const MESSAGES_NOW = 1792483200;
+
     use Db;
     use LogDir;
     use Pool;
@@ -69,7 +71,8 @@ class PrivacyTest extends TestCase
         $checksRow = [0 => ['exceptions' => ['status' => $exceptions->status, 'detail' => $exceptions->detail],
             'email_failing' => ['status' => $sending->status, 'detail' => $sending->detail]]];
         $target = new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC');
-        $messages = new Messages($this->pool(['exceptions' => 'Exceptions', 'email_failing' => 'Sending']));
+        $messages = new Messages($this->pool(['exceptions' => 'Exceptions', 'email_failing' => 'Sending']),
+            new Clock(self::MESSAGES_NOW));
         $everything = json_encode([$exceptions, $sending, $store->rows]) . "\n"
             . $messages->alert($target, $checksRow[0], AlertPlan::changes($checksRow[0], [], $clock->now, 3600)) . "\n"
             . $messages->summary($target, $checksRow[0], [['exceptions' => ['w' => 2, 'c' => $exceptions->counts],

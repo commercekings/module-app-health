@@ -4,19 +4,21 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
+use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
  * The plain-text messages, built only from the shop's name, check labels, statuses, data-free details and counts:
  *
  *   App health - Moj Planer (all websites)
- *   FAIL Cron: no job has run for 12 min (since 14:05)
+ *   FAIL Cron: no job has run since 14:05
  *   RECOVERED Indexers
  *   OK Caches, Maintenance mode and Exceptions
  */
 class Messages
 {
     public function __construct(
-        private readonly CheckPool $pool
+        private readonly CheckPool $pool,
+        private readonly DateTime $dateTime
     ) {
     }
 
@@ -104,14 +106,30 @@ class Messages
         return $target->name . ($target->isShopWide() ? ' (all websites)' : '');
     }
 
-    /** @param array<mixed> $check */
+    /**
+     * "FAIL Cron: no job has run since 14:05"; a detail without a time of its own says when the problem was first
+     * seen.
+     *
+     * @param array<mixed> $check
+     */
     private function problem(Target $target, string $code, array $check): string
     {
         $detail = (string)($check['detail'] ?? '');
         $since = (int)($check['since'] ?? 0);
+        $timed = preg_match('/\{t:\d+\}/', $detail) === 1;
+        $detail = (string)preg_replace_callback('/\{t:(\d+)\}/',
+            fn (array $match) => $this->when($target, (int)$match[1]), $detail);
         return strtoupper((string)$check['status']) . ' ' . $this->pool->getLabel($code)
             . ($detail !== '' ? ': ' . $detail : '')
-            . ($since > 0 ? ' (since ' . $this->local($target, $since, 'H:i') . ')' : '');
+            . ($since > 0 && !$timed ? ' (first seen ' . $this->when($target, $since) . ')' : '');
+    }
+
+    /** "14:05" today in the recipient's time zone, else "19 Oct 14:05". */
+    private function when(Target $target, int $time): string
+    {
+        $today = $this->local($target, $this->dateTime->gmtTimestamp(), 'Y-m-d')
+            === $this->local($target, $time, 'Y-m-d');
+        return $this->local($target, $time, $today ? 'H:i' : 'j M H:i');
     }
 
     /**

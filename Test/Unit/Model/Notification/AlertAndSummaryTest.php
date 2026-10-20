@@ -18,6 +18,8 @@ use PHPUnit\Framework\TestCase;
 /** What the consumer composes on fresh state, and what it records once sent. */
 class AlertAndSummaryTest extends TestCase
 {
+    private const MESSAGES_NOW = 1792483200;
+
     use Pool;
     use Settings;
 
@@ -54,7 +56,7 @@ class AlertAndSummaryTest extends TestCase
     private function messages(): Messages
     {
         return new Messages($this->pool(['cron' => 'Cron', 'caches' => 'Caches'],
-            ['email_disabled' => 'Email sending']));
+            ['email_disabled' => 'Email sending']), new Clock(self::MESSAGES_NOW));
     }
 
     private function alert(int $scope): void
@@ -67,7 +69,7 @@ class AlertAndSummaryTest extends TestCase
     {
         $this->alert(0);
         $this->assertSame("App health - Shop (all websites)\n"
-            . "FAIL Cron: no job has run for 12 min (since 07:48)\nOK Caches", $this->composed[0]);
+            . "FAIL Cron: no job has run for 12 min (first seen 07:48)\nOK Caches", $this->composed[0]);
         ($this->composed[1])();
         $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $this->store->row('alerted:0'));
         $this->composed = null;
@@ -78,7 +80,7 @@ class AlertAndSummaryTest extends TestCase
     public function testAWebsitesAlertCarriesOnlyItsOwnChecks(): void
     {
         $this->alert(2);
-        $this->assertSame("App health - Shop\nFAIL Email sending: emails are disabled (since 08:00)",
+        $this->assertSame("App health - Shop\nFAIL Email sending: emails are disabled (first seen 08:00)",
             $this->composed[0]);
         $this->composed = null;
         $this->alert(1);
@@ -95,8 +97,8 @@ class AlertAndSummaryTest extends TestCase
     public function testTheSummaryCoversTheShopWideChecksAndTheWebsitesOwnForTheLastDay(): void
     {
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
-        $this->assertSame("Daily summary - Shop - 20 Oct\nFAIL Cron: no job has run for 12 min (since 07:48)\n"
-            . "FAIL Email sending: emails are disabled (since 08:00)\nCron: 10 runs\nOK all day: Caches",
+        $this->assertSame("Daily summary - Shop - 20 Oct\nFAIL Cron: no job has run for 12 min (first seen 07:48)\n"
+            . "FAIL Email sending: emails are disabled (first seen 08:00)\nCron: 10 runs\nOK all day: Caches",
             $this->composed[0], 'the tally of 25 hours ago is left out');
     }
 

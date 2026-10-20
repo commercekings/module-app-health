@@ -7,6 +7,7 @@ use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Model\TestAlert;
+use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\Notification\Api\Data\Delivery;
 use CommerceKings\Notification\Api\SenderInterface;
@@ -15,6 +16,8 @@ use PHPUnit\Framework\TestCase;
 
 class TestAlertTest extends TestCase
 {
+    private const MESSAGES_NOW = 1792483200;
+
     use Pool;
 
     /** @var Delivery[] */
@@ -32,7 +35,7 @@ class TestAlertTest extends TestCase
             }
             return $answer;
         });
-        return new TestAlert($targets, new Messages($this->pool([])), $sender);
+        return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender);
     }
 
     public function testSentAtOnceAsAServiceMessage(): void
