@@ -35,7 +35,7 @@ class Maintenance implements CheckInterface
 
     public function getLabel(): string
     {
-        return 'Maintenance';
+        return 'Maintenance mode';
     }
 
     public function run(array $websiteIds): array

@@ -53,7 +53,7 @@ class Queues implements CheckInterface
 
     public function getLabel(): string
     {
-        return 'Queue';
+        return 'Queues';
     }
 
     public function run(array $websiteIds): array

@@ -66,7 +66,7 @@ class EmailFailing implements CheckInterface
 
     public function getLabel(): string
     {
-        return 'Sending';
+        return 'Mail delivery errors';
     }
 
     public function run(array $websiteIds): array

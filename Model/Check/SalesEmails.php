@@ -45,7 +45,7 @@ class SalesEmails implements CheckInterface
 
     public function getLabel(): string
     {
-        return 'Sales emails';
+        return 'Unsent sales emails';
     }
 
     public function run(array $websiteIds): array
@@ -87,9 +87,9 @@ class SalesEmails implements CheckInterface
                     $gauges, [new Cause('sales_emails_unsent', sprintf('%d unsent (%s), the oldest'
                     . ' from %s', $total, Format::top($counts), Format::at($oldest[$websiteId] ?? 0)), $async
                     ? (string)__('Asynchronous sending is on: is the sales_send_order_emails cron running? Then the'
-                        . ' mail server (see Sending).')
+                        . ' mail server (see Mail delivery errors).')
                     : (string)__('They were refused when the order was placed: the mail server or provider (see'
-                        . ' Sending, and var/log/system.log).'))]);
+                        . ' Mail delivery errors, and var/log/system.log).'))]);
         }
         return $results;
     }

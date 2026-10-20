@@ -37,7 +37,7 @@ class EmailDisabled implements CheckInterface
 
     public function getLabel(): string
     {
-        return 'Email sending';
+        return 'Email communications disabled';
     }
 
     public function run(array $websiteIds): array
