@@ -35,19 +35,32 @@ Typical cost: two queries for the state, one to three per check that reads the d
 ## Sending
 
 `Model\Notification\TeamMessage` queues and sends a team message per scope through Notification, with its delivery state
-(`ck_notification_delivery_state`, type `app_health_alert` or `app_health_summary`, reference = the scope):
+(`ck_notification_delivery_state`, type `app_health_alert`, `app_health_summary` or `app_health_status`, reference =
+the scope):
 
 - **Queue:** one UPDATE marks the row queued only while it is free (not queued, or queued for over 60 minutes; no retry
   waiting) – and for the summary only while it was not sent since today's summary time – then publishes
   `<type>|<scope>` to `commercekings.notification.send`. A failed publish clears the mark.
 - **Send (consumer):** the type composes the text on the state as it is now (nothing new: the mark is cleared,
   nothing is sent), claims the delivery version, and sends `Delivery::text(..., useCooldown: false, stoppable: false)`
-  from the scope's default store view – no cooldown, stop list or quiet hours. Sent: `sent_at`, and the alert records
-  what it told.
+  from the scope's default store view – no cooldown, stop list or quiet hours. Sent: `sent_at` and what the alert told,
+  in one transaction.
 - **Failures:** a provider's temporary refusal waits its Retry-After (1 minute to 1 hour) without counting; any other
   failure waits 5, 15, 30, then 60 minutes and keeps retrying (a team alert is never given up) – the next run queues it
   again after the wait. A recipient the channel rejects is logged as a setting to fix. A message that may have gone out
   (`MessageSentException`) is never sent again.
+
+**Pace:** a check's change is sent at once (a "recovered" only after *Recovered after* OK runs in a row, the
+`runs` in the checks row); a check's notices – new CRITICAL log entries, exceptions, sensitive data – at most once per
+*New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10 shown). ERROR
+log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`, and the
+hourly status lists them. WARNING entries only count, for the daily summary.
+
+**The hourly status** (`Model\Notification\Status`, reference 0, to the default scope's recipient): the Runner tries
+to queue it once per *Hourly status every* (the `status` row; a statement only then), and only when none went out
+within the interval. Its text: "All checks OK" or the checks not OK in every scope, then "New errors this hour" since
+the last status. It proves the sending path works: with it on, the heartbeat is pinged only while the last status went
+out within its interval plus `Runner::STATUS_GRACE_MINUTES` (one read of its delivery state per run).
 
 The daily summary covers the last 24 hourly tallies of the shop-wide checks and the website's own: checks not ok now,
 counts, checks that had problems and checks ok all day. It is sent from its time until 12 hours later, once a day.
@@ -80,9 +93,10 @@ to the Magento root, plus the line), a fingerprint and a safe label – and the 
 - **Fingerprint:** a hash of the channel, the level group (warning, error, critical), the exception class and the
   normalized message (URLs, emails, quoted values, hex, numbers and paths after their first segment as placeholders),
   so the same error with other values is one fingerprint.
-- **NEW:** `Model\Log\Fingerprints` keeps the errors seen (ERROR and above) in the `fingerprints` row, at most 500, the
-  least recently seen dropped first. An error never seen before is a notice ("NEW ERROR ..."); for `system_log` a
-  CRITICAL one is told again after the repeat interval.
+- **NEW:** `Model\Log\Fingerprints` keeps the entries seen (WARNING and above) in the `fingerprints` row, at most 500,
+  the least recently seen dropped first (and remembered for a day in `fingerprints:recent`). A CRITICAL entry never
+  seen before is a notice; for `system_log` a CRITICAL one is told again after the repeat interval. ERROR entries go
+  to the hourly status (`errors:recent`), WARNING entries to the daily summary.
 - **Notices** are one-off news: kept in `notices:<scope>` (30, for 24 hours) and told once (`noticed:<scope>`), in one
   message per check – no "recovered" follows.
 
@@ -163,13 +177,16 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 
 | Key | Holds |
 |---|---|
-| `checks` | the last result per scope and check: status, detail, since, checked_at, ms |
+| `checks` | the last result per scope and check: status, detail, since, runs (in a row with this status), checked_at, ms |
 | `alerted:<scope>` | what that team was last told per check: status and time |
 | `cursor:<name>` | what a check remembers: cron's last run, first-seen times, samples; `cursor:log:<source>` a log source's cursor |
-| `fingerprints` | the log errors seen: label, level, channel, where, first and last seen, count, last told (at most 500) |
+| `fingerprints` | the log errors seen: label, level, channel, where, first and last seen, count, last told, the run that last saw it (at most 500) |
+| `fingerprints:recent` | errors pushed out of `fingerprints`: first seen and when dropped, for a day (at most 2,000) – not "NEW" again |
+| `errors:recent` | ERROR entries per run and error: time, fingerprint, count, new (3 hours, at most 500) – for the hourly status |
+| `status` | when the hourly status was last tried |
 | `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
-| `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW errors) waiting for the next alert, and the last told per check |
+| `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW critical errors) waiting for the next alert, and the last told per check (id and time) |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
-To start over (e.g. in a test), truncate the table and delete the delivery state rows of the types `app_health_alert`
-and `app_health_summary`.
+To start over (e.g. in a test), truncate the table and delete the delivery state rows of the types `app_health_alert`,
+`app_health_summary` and `app_health_status`.

@@ -12,8 +12,10 @@ use CommerceKings\AppHealth\Model\RunState;
  * the latest masked message (unless it is turned off), first and last seen, the count, and when it was last told. At
  * most LIMIT, the least recently seen go first - into the "fingerprints:recent" row (when first seen, when dropped;
  * kept RECENT_SECONDS, at most RECENT_LIMIT), so an error dropped and seen again within a day is not "NEW" again.
- * record() returns what the team should hear of this run: an error (ERROR and above) seen for the first time
- * ("NEW"), or - for checks that ask - a CRITICAL one not told within the repeat interval.
+ * record() returns what the team should hear at once: a CRITICAL entry seen for the first time ("NEW"), or - for
+ * checks that ask - one not told within the repeat interval. ERROR entries go to the hourly status instead: each run's
+ * count per fingerprint in the "errors:recent" row ([time, fingerprint, count, new], RECENT_ERRORS_HOURS, at most
+ * RECENT_ERRORS_LIMIT). WARNING entries are only counted (the daily summary).
  */
 class Fingerprints
 {
@@ -22,6 +24,9 @@ class Fingerprints
     public const RECENT_KEY = 'fingerprints:recent';
     public const RECENT_LIMIT = 2000;
     public const RECENT_SECONDS = 86400;
+    public const ERRORS_KEY = 'errors:recent';
+    public const RECENT_ERRORS_HOURS = 3;
+    public const RECENT_ERRORS_LIMIT = 500;
     public const LEVELS = ['CRITICAL' => 'Critical', 'ERROR' => 'Error', 'WARNING' => 'Warning'];
 
     public function __construct(
@@ -32,8 +37,8 @@ class Fingerprints
 
     /**
      * @param list<array<string, mixed>> $entries Normalizer::safe() entries
-     * @return list<array<string, mixed>> news, the most frequent first: kind ("NEW" or "CRITICAL"), fingerprint,
-     *     count, and the fingerprint's entry (label, level, channel, location, message, first, last)
+     * @return list<array<string, mixed>> CRITICAL news, the most frequent first: kind ("NEW" or "CRITICAL"),
+     *     fingerprint, count, and the fingerprint's entry (label, level, channel, location, message, first, last)
      */
     public function record(array $entries, int $now, bool $repeatCritical): array
     {
@@ -54,6 +59,7 @@ class Fingerprints
         $recentChanged = false;
         $repeat = $this->config->getRepeatHours() * 3600;
         $news = [];
+        $errors = [];
         foreach ($runs as $fp => $run) {
             $seen = $known[$fp] ?? null;
             if ($seen === null && (int)($recent[$fp][1] ?? 0) > $now - self::RECENT_SECONDS) {
@@ -63,8 +69,11 @@ class Fingerprints
                 $recentChanged = true;
             }
             $level = Normalizer::group((int)$run['rank']);
+            if ($level === 'ERROR') {
+                $errors[] = [$now, (string)$fp, (int)$run['count'], $seen === null ? 1 : 0];
+            }
             $kind = match (true) {
-                (int)$run['rank'] < 2 => null,
+                $level !== 'CRITICAL' => null,
                 $seen === null => 'NEW',
                 $repeatCritical && $level === 'CRITICAL' && (int)($seen['told'] ?? 0) <= $now - $repeat => 'CRITICAL',
                 default => null,
@@ -94,6 +103,12 @@ class Fingerprints
             $this->state->set(self::RECENT_KEY, array_slice($recent, 0, self::RECENT_LIMIT, true));
         }
         $this->state->set(self::KEY, $known);
+        if ($errors !== []) {
+            $kept = array_filter((array)($this->state->get(self::ERRORS_KEY) ?? []),
+                fn ($item) => is_array($item) && (int)($item[0] ?? 0) > $now - self::RECENT_ERRORS_HOURS * 3600);
+            $this->state->set(self::ERRORS_KEY, array_slice(array_merge(array_values($kept), $errors),
+                -self::RECENT_ERRORS_LIMIT));
+        }
         usort($news, fn ($a, $b) => $b['count'] <=> $a['count']);
         return $news;
     }
@@ -132,8 +147,12 @@ class Fingerprints
         return implode("\n", $lines);
     }
 
-    /** @param array<string, mixed> $known */
-    private static function name(array $known): string
+    /**
+     * The label, an exception's class without its namespace.
+     *
+     * @param array<string, mixed> $known
+     */
+    public static function name(array $known): string
     {
         $label = (string)($known['label'] ?? 'Unknown error');
         return preg_match('/^[A-Za-z_][A-Za-z0-9_\\\\]*$/D', $label) && str_contains($label, '\\')

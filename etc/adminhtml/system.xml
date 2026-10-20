@@ -55,6 +55,18 @@
                     <validate>required-entry validate-digits</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
+                <field id="hourly_status" translate="label comment" type="select" sortOrder="63" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Hourly status</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>A short message to the default recipient every hour: "All checks OK" or the problems, and the log errors of the hour. It goes the same way as the alerts, so when it stops coming, alerts can't go out either (the queue, its consumer or the channel). With a heartbeat URL, the heartbeat is pinged only while the last hourly status went out. Default: Yes.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="hourly_status_minutes" translate="label comment" type="text" sortOrder="64" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Hourly status every (minutes)</label>
+                    <comment>Default: 60; at least 15.</comment>
+                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <depends><field id="enabled">1</field><field id="hourly_status">1</field></depends>
+                </field>
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Add the masked log message</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -63,7 +75,7 @@
                 <field id="heartbeat_url" translate="label comment" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Heartbeat URL</label>
                     <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
-                    <comment>Optional. Pinged after every complete run (every 5 minutes), e.g. a Healthchecks.io, Better Stack or UptimeRobot heartbeat: when the pings stop - the server, PHP, the database or cron down - that service alerts you. Stored encrypted. Empty: off.</comment>
+                    <comment>Pinged after every run (every 5 minutes) while the last hourly status went out, e.g. a Healthchecks.io, Better Stack or UptimeRobot heartbeat: when the pings stop - the server, PHP, the database or cron down, or alerts can't be sent - that service alerts you. Stored encrypted. Empty: off.</comment>
                 </field>
                 <field id="test" translate="label comment" type="button" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Test</label>

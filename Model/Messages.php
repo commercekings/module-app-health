@@ -148,6 +148,27 @@ class Messages
             . implode('', array_map(fn (string $section) => "\n\n" . $section, array_filter($sections)));
     }
 
+    /**
+     * The hourly status: "All checks OK" or "2 problems: Cron, Queue", then "New errors this hour: N" with a line per
+     * error ("• Unable to send (3×, new)") when there were any.
+     *
+     * @param string[] $problems the labels of the checks not ok
+     * @param list<array{0: string, 1: int, 2: bool}> $errors label, count, first seen since the last status
+     */
+    public function status(Target $target, array $problems, int $errorCount, array $errors, int $moreErrors): string
+    {
+        $text = '*Hourly status · ' . $this->where($target) . "*\n\n" . ($problems === [] ? 'All checks OK'
+            : Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems));
+        if ($errorCount > 0) {
+            $text .= "\n\nNew errors this hour: " . Format::number($errorCount);
+            foreach ($errors as [$label, $count, $new]) {
+                $text .= "\n• " . $label . ' (' . Format::number($count) . '×' . ($new ? ', new' : '') . ')';
+            }
+            $text .= $moreErrors > 0 ? "\n• …and " . $moreErrors . ' more' : '';
+        }
+        return $text;
+    }
+
     public function test(Target $target): string
     {
         $gets = $target->isShopWide()

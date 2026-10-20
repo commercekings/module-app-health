@@ -71,7 +71,7 @@ class LogSourcePoolTest extends TestCase
         $config = $this->config(['system_log/error_count' => '20', 'system_log/window_minutes' => '5',
             'system_log/max_read_kb' => '1024']);
         $feed = $this->thirdParty([
-            json_encode(['severity' => 'ERROR', 'text' => 'Sync of order 1234 for jane@example.com failed',
+            json_encode(['severity' => 'CRITICAL', 'text' => 'Sync of order 1234 for jane@example.com failed',
                 'file' => '/var/www/html/app/code/Erp/Sync/Model/Push.php', 'line' => 31]),
             json_encode(['severity' => 'DEBUG', 'text' => 'ignored']),
         ]);
@@ -80,9 +80,9 @@ class LogSourcePoolTest extends TestCase
         $state->begin();
         $result = $check->run();
         $state->commit();
-        $this->assertSame(1, $result->counts['errors']);
+        $this->assertSame(1, $result->counts['critical']);
         $this->assertCount(1, $result->notices);
-        $this->assertMatchesRegularExpression('/^Error: Sync of order \(\{t:\d+\}\)\n'
+        $this->assertMatchesRegularExpression('/^Critical: Sync of order \(\{t:\d+\}\)\n'
             . 'Where: app\/code\/Erp\/Sync\/Model\/Push.php:31$/u', $result->notices[0]);
         $this->assertStringNotContainsString('jane', json_encode($result));
         $this->assertSame(2, $state->get('cursor:log:erp_feed')['line'], 'its cursor is kept for it');

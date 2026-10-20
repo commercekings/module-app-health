@@ -101,6 +101,7 @@
             <argument name="types" xsi:type="array">
                 <item name="app_health_alert" xsi:type="object">CommerceKings\AppHealth\Model\Notification\Alert</item>
                 <item name="app_health_summary" xsi:type="object">CommerceKings\AppHealth\Model\Notification\Summary</item>
+                <item name="app_health_status" xsi:type="object">CommerceKings\AppHealth\Model\Notification\Status</item>
             </argument>
         </arguments>
     </type>

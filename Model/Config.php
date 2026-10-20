@@ -75,6 +75,19 @@ class Config
         return $value === null || $value === '' ? 30 : max(0, (int)$value);
     }
 
+    /** The hourly status: on by default (also the proof that alerts can go out, for the heartbeat). */
+    public function isHourlyStatusEnabled(): bool
+    {
+        $value = $this->scopeConfig->getValue(self::GENERAL . 'hourly_status');
+        return $value === null || $value === '' || (bool)(int)$value;
+    }
+
+    /** Minutes between two hourly statuses: 60 by default, at least 15. */
+    public function getHourlyStatusMinutes(): int
+    {
+        return max(15, (int)($this->scopeConfig->getValue(self::GENERAL . 'hourly_status_minutes') ?: 60));
+    }
+
     public function getHeartbeatUrl(): string
     {
         $url = trim((string)$this->scopeConfig->getValue(self::GENERAL . 'heartbeat_url'));

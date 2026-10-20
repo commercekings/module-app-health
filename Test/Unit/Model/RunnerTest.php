@@ -36,6 +36,10 @@ class RunnerTest extends TestCase
     private array $websites = [1];
     private bool $heartbeat = false;
     private bool $queueThrows = false;
+    /** The hourly status's sent_at (UTC), null: never sent; queued: its queue() calls and their conditions. */
+    private ?string $statusSentAt = 'recent';
+    /** @var string[] */
+    private array $statusQueued = [];
     /** @var array<string, mixed> */
     private array $settings = [];
 
@@ -53,7 +57,12 @@ class RunnerTest extends TestCase
         $targets->method('websites')->willReturn(array_combine($this->websites, array_map(
             fn ($id) => new Target($id, $id, 'slack', 'C' . $id, 'Shop', 'UTC'), $this->websites)) ?: []);
         $teamMessage = $this->createStub(TeamMessage::class);
-        $teamMessage->method('queue')->willReturnCallback(function ($type, $scope) {
+        $teamMessage->method('queue')->willReturnCallback(function ($type, $scope, $condition = '') {
+            if ($type === 'app_health_status') {
+                $this->assertSame(0, $scope);
+                $this->statusQueued[] = $condition;
+                return true;
+            }
             $this->assertSame('app_health_alert', $type);
             if ($this->queueThrows) {
                 throw new \RuntimeException('queue down');
@@ -73,9 +82,15 @@ class RunnerTest extends TestCase
                 $this->logs[] = $message;
             });
         }
+        $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
+        $deliveryState->method('load')->willReturnCallback(function ($type, $id) {
+            $this->assertSame(['app_health_status', 0], [$type, $id]);
+            return $this->statusSentAt === null ? null : ['sent_at' => $this->statusSentAt === 'recent'
+                ? gmdate('Y-m-d H:i:s', $this->clock->now - 600) : $this->statusSentAt];
+        });
         return new Runner($this->pool(['cron' => 'Cron', 'caches' => 'Caches'], ['email_disabled' => 'Email']),
             $this->config($this->settings), new RunState($this->store), $this->store, $targets, $teamMessage,
-            $heartbeat, $this->clock, $logger, 0.05);
+            $heartbeat, $this->clock, $logger, $deliveryState, 0.05);
     }
 
     /** @return array<string, mixed> */
@@ -214,6 +229,36 @@ class RunnerTest extends TestCase
         $this->assertStringContainsString('RuntimeException', implode("\n", $this->logs));
         $this->results['cron'] = CheckResult::ok();
         $this->assertFalse($this->run5()['degraded']);
+        $this->assertSame(2, $this->pings);
+    }
+
+    public function testTheHourlyStatusIsQueuedOncePerInterval(): void
+    {
+        $this->run5();
+        $this->assertSame(['(sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)'], $this->statusQueued);
+        for ($i = 0; $i < 11; $i++) {
+            $this->run5();
+        }
+        $this->assertCount(1, $this->statusQueued, 'the runs of the next 55 minutes: not even tried');
+        $this->run5();
+        $this->assertCount(2, $this->statusQueued, 'an hour later');
+        $this->settings = ['general/hourly_status' => '0'];
+        $this->clock->now += 3600;
+        $this->run5();
+        $this->assertCount(2, $this->statusQueued, 'off');
+    }
+
+    public function testTheHeartbeatOnlyWhileTheHourlyStatusGoesOut(): void
+    {
+        $this->heartbeat = true;
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'the last status 10 min ago');
+        $this->statusSentAt = gmdate('Y-m-d H:i:s', $this->clock->now - 71 * 60);
+        $this->assertSame('held: no hourly status went out recently', $this->run5()['heartbeat'],
+            '60 minutes and 10 of grace passed: the sending path is broken');
+        $this->statusSentAt = null;
+        $this->assertSame('held: no hourly status went out recently', $this->run5()['heartbeat'], 'never sent');
+        $this->settings = ['general/hourly_status' => '0'];
+        $this->assertSame('pinged', $this->run5()['heartbeat'], 'without the hourly status: every finished run');
         $this->assertSame(2, $this->pings);
     }
 

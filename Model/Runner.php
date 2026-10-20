@@ -6,7 +6,9 @@ namespace CommerceKings\AppHealth\Model;
 use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Notification\Alert;
+use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
+use CommerceKings\Notification\Api\DeliveryStateInterface;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 use Psr\Log\LoggerInterface;
 
@@ -19,12 +21,19 @@ use Psr\Log\LoggerInterface;
  * The results go to the "checks" row by scope and code (with the time since the status last changed and the run
  * time), their worst status and counts to the hour's tally, their notices to "notices:<scope>". Then each scope with
  * news (AlertPlan: a change, or a notice not told yet) gets one queued alert - the shop-wide checks' to the default
- * scope's recipient, a website's own to the website's - and a finished run pings the heartbeat, also when a check
- * threw or the budget left one out ("degraded" in the report): cron runs and the run got to its end. Nothing runs
- * while alerts are off everywhere and no heartbeat is set.
+ * scope's recipient, a website's own to the website's - and, once per *Hourly status every*, the hourly status to the
+ * default scope's recipient (tried at most once per interval: one statement; no read on the other runs).
+ *
+ * A finished run pings the heartbeat - also when a check threw or the budget left one out ("degraded" in the report):
+ * cron runs and the run got to its end - unless an alert could not be queued, or (with the hourly status on) the
+ * last hourly status did not go out within its interval and STATUS_GRACE_MINUTES: then alerts can't reach the team,
+ * and the outside service is the one to tell them. Nothing runs while alerts are off everywhere and no heartbeat is
+ * set.
  */
 class Runner
 {
+    /** How late the hourly status may be before the heartbeat stops. */
+    public const STATUS_GRACE_MINUTES = 10;
     public const BUDGET_SECONDS = 5.0;
 
     public function __construct(
@@ -37,6 +46,7 @@ class Runner
         private readonly Heartbeat $heartbeat,
         private readonly DateTime $dateTime,
         private readonly LoggerInterface $logger,
+        private readonly DeliveryStateInterface $deliveryState,
         private readonly float $budgetSeconds = self::BUDGET_SECONDS
     ) {
     }
@@ -123,6 +133,12 @@ class Runner
         }
         $this->state->set('checks', $checks);
         $this->state->set($hour, $tally);
+        $statusMinutes = $this->config->getHourlyStatusMinutes();
+        $status = $shopWide !== null && $this->config->isHourlyStatusEnabled();
+        $statusDue = $status && (int)($this->state->get('status')['tried'] ?? 0) <= $now - ($statusMinutes - 1) * 60;
+        if ($statusDue) {
+            $this->state->set('status', ['tried' => $now]);
+        }
         foreach ($notices as $scope => $byCode) {
             $this->state->set(AlertPlan::NOTICES . $scope,
                 AlertPlan::addNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [], $byCode, $now));
@@ -132,12 +148,34 @@ class Runner
             $this->store->deleteOldTallies($now); // once an hour
         }
         $this->queueAlerts($targets, $checks, $now, $report);
+        if ($statusDue) {
+            try {
+                // not when one went out within the interval (e.g. a run's clock a little early)
+                $report['status'] = $this->teamMessage->queue(Status::CODE, 0, sprintf('(sent_at IS NULL OR sent_at'
+                    . ' < NOW() - INTERVAL %d MINUTE)', $statusMinutes - 2));
+            } catch (\Throwable $e) {
+                $this->logger->error(sprintf('CommerceKings_AppHealth: hourly status not queued (%s)', get_class($e)));
+                $report['queue_failed'] = true;
+            }
+        }
         $report['degraded'] = !$report['complete'];
-        if (empty($report['queue_failed']) && $this->heartbeat->isConfigured()) {
-            $this->heartbeat->ping();
+        if ($this->heartbeat->isConfigured()) {
+            $report['heartbeat'] = match (true) {
+                !empty($report['queue_failed']) => 'held: an alert could not be queued',
+                $status && !$this->statusWentOut($now, $statusMinutes) => 'held: no hourly status went out recently',
+                default => $this->heartbeat->ping() ? 'pinged' : 'ping failed',
+            };
         }
         $report['ms'] = round((microtime(true) - $started) * 1000, 1);
         return $report;
+    }
+
+    /** Whether the last hourly status went out within its interval and the grace time (one read). */
+    private function statusWentOut(int $now, int $statusMinutes): bool
+    {
+        $sentAt = (string)($this->deliveryState->load(Status::CODE, 0)['sent_at'] ?? '');
+        return $sentAt !== ''
+            && (int)strtotime($sentAt . ' UTC') >= $now - ($statusMinutes + self::STATUS_GRACE_MINUTES) * 60;
     }
 
     /**

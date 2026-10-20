@@ -79,7 +79,7 @@ class PrivacyTest extends TestCase
             . ' coupon "VIP-2026", order 000000123';
         $this->appendLog(self::entry('Magento\\Framework\\Exception\\MailException', 'Unable to send mail to ' . $pii)
             . self::entry('Vendor\\Payment\\Exception\\CardDeclined', 'Declined: ' . $pii));
-        $this->appendLog(self::line('ERROR', 'Customer Jane Doe could not pay: ' . $pii,
+        $this->appendLog(self::line('CRITICAL', 'Customer Jane Doe could not pay: ' . $pii,
             '{"email":"jane.doe@example.com","file":"/var/www/html/app/code/Vendor/Pay/Model/Gateway.php:120"}')
             . self::line('CRITICAL', 'Payment gateway down for jane.doe@example.com in'
             . ' /var/www/html/vendor/vendor/pay/src/Client.php:88', '[]', 'payment')
@@ -100,6 +100,18 @@ class PrivacyTest extends TestCase
         }
         $tally = array_map(fn ($result) => ['w' => 2, 'c' => $result->counts], $results);
         $out[] = $messages->summary($target, $checksRow, [$tally], $clock->now, $store->row(Fingerprints::KEY) ?? []);
+        $teamMessage = $this->createStub(\CommerceKings\AppHealth\Model\Notification\TeamMessage::class);
+        $teamMessage->method('deliver')->willReturnCallback(function ($type, $ref, \Closure $compose) use (
+            $target,
+            &$out
+        ) {
+            $out[] = $compose($target, ['sent_at' => null])[0];
+            return true;
+        });
+        $store->seed(['checks' => [0 => $checksRow]]);
+        (new \CommerceKings\AppHealth\Model\Notification\Status($teamMessage, $store, $messages, $this->pool([
+            'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending']), $config,
+            new Clock(self::MESSAGES_NOW)))->process('0');
         return implode("\n", $out);
     }
 
@@ -111,9 +123,10 @@ class PrivacyTest extends TestCase
         }
         $this->assertStringContainsString('Vendor\\\\Payment\\\\Exception\\\\CardDeclined', $everything);
         $this->assertStringContainsString('app/code/Vendor/Pay/Model/Gateway.php:120', $everything, 'where, relative');
-        $this->assertStringContainsString('Error: Customer *** could (', $everything, 'names masked, 3 words');
+        $this->assertStringContainsString('Critical: Customer *** could (', $everything, 'names masked, 3 words');
         $this->assertStringContainsString('Critical: Payment gateway down (', $everything);
-        $this->assertStringContainsString('Error: login failed: password (', $everything);
+        $this->assertStringContainsString("New errors this hour: 1\n• login failed: password (1×, new)", $everything,
+            'an error: in the hourly status');
         $this->assertStringContainsString('1 new mail transport error', $everything);
     }
 
@@ -126,6 +139,7 @@ class PrivacyTest extends TestCase
         $this->assertStringContainsString("Where: app/code/Vendor/Pay/Model/Gateway.php:120\n"
             . 'Message: Customer *** could not pay: Jane Doe <***>, ***', $everything,
             'the message, masked: a name after "customer" masked, other capitalized names remain (README)');
-        $this->assertStringContainsString('Message: login failed: password *** for customer *** from ***', $everything);
+        $this->assertStringContainsString('login failed: password *** for customer *** from ***', $everything,
+            'kept masked in the module\'s table');
     }
 }

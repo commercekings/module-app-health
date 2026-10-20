@@ -10,8 +10,11 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   alert at once – the rule and where, never the value.
 - **Ten checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
   `exception.log` (new errors, with where they happened), queue backlogs, and sales emails that don't go out.
-- **Only news.** A message when something breaks and one when it is back ("recovered"); a check still failing is
-  repeated every 6 hours, never every 5 minutes.
+- **Only news, at the right pace.** A problem at once, "recovered" once it is OK for two runs in a row; a check still
+  failing is repeated every 6 hours. Critical log errors and sensitive data at once, log errors in the hourly status,
+  warnings in the daily summary.
+- **Proof that alerts can go out.** An hourly status ("All checks OK", or the problems) through the same queue and
+  channel: when it stops coming, so does the heartbeat.
 - **The right channel.** Checks for the whole shop go to one channel; each website's own (its email settings, its
   unsent order emails, its daily summary) to its own.
 - **A daily summary.** Cron runs and errors, exceptions by class, and what had problems – at the time you choose.
@@ -19,7 +22,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   queries; only the new bytes of the exception log; a 5-second budget per run.
 - **Private.** Log errors are sent as a safe label (the exception class, or the message's first words with every
   variable part as `***`), in alerts with file:line and the message masked (on by default) – never the line itself.
-- **When the server itself is down.** An optional heartbeat lets an outside service alert you when the pings stop.
+- **When the server itself is down.** A heartbeat lets an outside service alert you when the pings stop – the server,
+  cron, or the sending path down.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
 [module-notification-slack](https://github.com/commercekings/module-notification-slack), or any installed channel.
@@ -32,7 +36,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | Indexers | an indexer invalid or stuck working for over 60 min | all websites |
 | Caches | a cache type disabled; invalidated for over 60 min (warning) | all websites |
 | Maintenance mode | on for over 15 min | all websites |
-| system.log | an error never seen before (NEW, with its file:line); a CRITICAL entry (again after 6 h); 20 or more errors in 5 min | all websites |
+| system.log | a CRITICAL entry never seen before, with its file:line (again after 6 h); ERROR entries in the hourly status; 20 or more errors in 5 min | all websites |
 | exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | all websites |
 | Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | all websites |
 | Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | all websites |
@@ -65,6 +69,30 @@ What to do: The process may have crashed: restart cron, then clear the stuck job
 ```
 
 A check of another module gives its own causes the same way (`Api\Data\Cause` on its `CheckResult`).
+
+### When you hear about what
+
+The logs are read every 5 minutes; what you hear, and when:
+
+| What | When | Where |
+|---|---|---|
+| A check going to *Problem* or *Warning* (cron, indexers, caches, ...) | at once; again every 6 h while it fails; *Resolved* after 2 OK runs in a row | its recipient |
+| Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | default recipient |
+| A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | default recipient |
+| ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | default recipient |
+| WARNING log entries | the daily summary | each website's recipient |
+| The hourly status | every hour, always – "All checks OK" or the problems: the proof that alerts can go out | default recipient |
+| The daily summary | once a day at *Daily summary at* | each website's recipient |
+
+```
+*Hourly status · Main Website Store (all websites)*
+
+2 problems: Cron, Queue
+
+New errors this hour: 14
+• Unable to send (9×, new)
+• NoSuchEntityException (5×)
+```
 
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
@@ -140,7 +168,7 @@ when `cron_consumers_runner` is on), or a Slack outage delays the alerts instead
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Recovered after (2 OK runs in a row); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
@@ -154,7 +182,9 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
   or cron is down, no check runs. Create a heartbeat check in an uptime service (e.g. Healthchecks.io, Better Stack or
   UptimeRobot) expecting a ping every 5 minutes, connect that service's **Slack integration**, and paste its URL into
-  *Heartbeat URL*. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
+  *Heartbeat URL*. With the hourly status on, a run pings only while the last hourly status went out (within its hour
+  and 10 minutes): when alerts can't be sent – the queue, its consumer or the channel down – the pings stop too, and
+  the service tells you. The first ping follows the first hourly status. In the same service add **HTTP checks of your homepage and your checkout** (e.g.
   `/checkout/cart/`): they catch a site that is up for cron but down for shoppers.
 
 ## Extending
@@ -255,7 +285,8 @@ Always masked, in the label and the message, as `***`:
 ## Limitations
 
 - Checks run inside Magento's cron: a cron that is down entirely is reported when it comes back – use the heartbeat for
-  the rest.
+  the rest. Nothing is sent from cron directly: every message goes through Notification's queue.
+- A check's *Warning* is sent at once like a *Problem*.
 - Sales emails count only entities created in the last 24 hours; queues read the MySQL queue and RabbitMQ (AMQP)
   connections, not others (e.g. ActiveMQ).
 - Messages are in English.

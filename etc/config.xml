@@ -10,6 +10,8 @@
                 <repeat_hours>6</repeat_hours>
                 <recover_runs>2</recover_runs>
                 <notice_minutes>30</notice_minutes>
+                <hourly_status>1</hourly_status>
+                <hourly_status_minutes>60</hourly_status_minutes>
                 <heartbeat_url backend_model="Magento\Config\Model\Config\Backend\Encrypted"/>
                 <include_log_message>1</include_log_message>
             </general>

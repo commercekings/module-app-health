@@ -63,7 +63,7 @@ class SystemLogTest extends TestCase
         $this->assertGreaterThan(0, $result->gauges['skipped kb']);
     }
 
-    public function testLevelsNewErrorsOnceAndASpike(): void
+    public function testLevelsNewCriticalsAtOnceErrorsForTheHourlyStatusAndASpike(): void
     {
         $this->run5(self::line('ERROR', 'before the first run'));
         $first = $this->run5(self::line('INFO', 'Cron Job x is run') . self::line('WARNING', 'Slow 1200 ms')
@@ -71,15 +71,21 @@ class SystemLogTest extends TestCase
         $this->assertSame(['critical' => 0, 'errors' => 2, 'warnings' => 1],
             array_intersect_key($first->counts, ['critical' => 1, 'errors' => 1, 'warnings' => 1]));
         $this->assertSame(CheckResult::OK, $first->status);
-        $this->assertCount(1, $first->notices, 'one error, twice');
-        $this->assertMatchesRegularExpression('/^Error: Unable to send \(2×, \{t:\d+\}\)$/u',
-            $first->notices[0]);
+        $this->assertSame([], $first->notices, 'an error: not at once');
+        $errors = $this->store->row(Fingerprints::ERRORS_KEY);
+        $this->assertCount(1, $errors, 'one error, twice: for the hourly status');
+        $this->assertSame([2, 1], [$errors[0][2], $errors[0][3]], 'its count in the run, new');
+        $critical = $this->run5(self::line('CRITICAL', 'Payment gateway down 77'), 1);
+        $this->assertCount(1, $critical->notices, 'a new critical: at once');
+        $this->assertMatchesRegularExpression('/^Critical: Payment gateway down \(\{t:\d+\}\)$/u',
+            $critical->notices[0]);
         $again = $this->run5(self::line('ERROR', 'Unable to send order 5'));
-        $this->assertSame([], $again->notices, 'seen before');
+        $this->assertSame([], $again->notices);
+        $this->assertSame(0, $this->store->row(Fingerprints::ERRORS_KEY)[1][3], 'seen before: not new');
         $this->assertSame(CheckResult::FAIL, $again->status, '3 errors within 5 minutes');
         $this->assertSame('Error spike', $again->title);
-        $this->assertMatchesRegularExpression('/^3 errors in 5 min \(Unable to send x3\)$/',
-            $again->detail);
+        $this->assertMatchesRegularExpression('/^4 errors in 5 min \(Unable to send x3, Payment gateway down x1\)$/',
+            $again->detail, 'errors and criticals');
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the window passed');
     }
 
@@ -117,7 +123,7 @@ class SystemLogTest extends TestCase
         $lines = '';
         for ($i = 0; $i < Fingerprints::LIMIT + 20; $i++) {
             $kind = str_repeat('a', 1 + $i % 26) . ' ' . chr(97 + intdiv($i, 26));
-            $lines .= self::line('ERROR', 'Error kind ' . $kind);
+            $lines .= self::line('CRITICAL', 'Error kind ' . $kind);
         }
         $result = $this->run5($lines);
         $this->assertCount(Fingerprints::LIMIT, $this->store->row(Fingerprints::KEY));
