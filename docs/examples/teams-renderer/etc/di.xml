@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  Example: how a module for a "teams" channel (e.g. a future CommerceKings_NotificationTeams) gives App health's
+  messages its own text. Copy into that module's etc/di.xml; App health itself needs no change. The item name is the
+  channel code, as the module registers its channel with Notification. Without this, the "teams" channel gets plain
+  text (PlainTextRenderer).
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="CommerceKings\AppHealth\Model\Message\RendererPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="teams" xsi:type="object">Vendor\NotificationTeams\Model\AppHealthRenderer</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

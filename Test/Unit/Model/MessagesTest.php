@@ -7,6 +7,7 @@ use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\SlackMessages;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use PHPUnit\Framework\TestCase;
 
@@ -20,14 +21,14 @@ class MessagesTest extends TestCase
 
     private const NOW = 1792483200; // 2026-10-20 08:00 UTC, 10:00 in Belgrade
 
-    private Messages $messages;
+    private SlackMessages $messages;
 
     protected function setUp(): void
     {
-        $this->messages = new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
+        $this->messages = new SlackMessages(new Messages($this->pool(['cron' => 'Cron', 'indexers' => 'Indexers', 'caches' => 'Caches',
             'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending',
             'external' => 'Server status'],
-            ['email_disabled' => 'Email sending', 'sales_emails' => 'Sales emails']), new Clock(self::NOW));
+            ['email_disabled' => 'Email sending', 'sales_emails' => 'Sales emails']), new Clock(self::NOW)));
     }
 
     private function target(int $websiteId = 0): Target

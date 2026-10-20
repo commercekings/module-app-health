@@ -23,13 +23,13 @@
                 </field>
                 <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Channel</label>
-                    <comment>A Notification channel, e.g. "slack" (with module-notification-slack).</comment>
+                    <comment>A Notification channel, e.g. slack (with module-notification-slack). Slack gets formatted messages; a channel without a format of its own gets plain text.</comment>
                     <validate>required-entry</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="recipient" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Recipient</label>
-                    <comment>Where the global messages go, e.g. a Slack channel ID (C0123456789, at the bottom of the channel's details).</comment>
+                    <comment>Where the global messages go, in the channel's format, e.g. for slack a Slack channel ID (C0123456789, at the bottom of the channel's details).</comment>
                     <validate>required-entry</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

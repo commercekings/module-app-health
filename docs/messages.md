@@ -5,9 +5,10 @@ What App health posts and why. Start with the [README](../README.md).
 ## How a message looks
 
 Every header names the shop and its domain (without a *Store Information* name, the domain alone: *Hourly status ·
-shop.example.com*). One message per problem, in plain Slack text without emoji: a bold first line that says what and
-where (what a phone
-notification shows; *Problem*, *Warning*, *Resolved*, *New error*, *Security*), then one fact per line and what to do:
+shop.example.com*). One message per problem, without emoji: a first line that says what and where (what a phone
+notification shows; *Problem*, *Warning*, *Resolved*, *New error*, *Security*), then one fact per line and what to do.
+As Slack shows it (a bold first line; other channels get plain text, or their module's renderer:
+[Extending](extending.md)):
 
 ```
 *Problem: Cron stopped · Acme Shop · shop.example.com*

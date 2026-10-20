@@ -20,6 +20,15 @@
             </argument>
         </arguments>
     </type>
+    <!-- the messages' text per channel (argument "renderers": channel code => TeamMessageRendererInterface); a channel
+         without one gets plain text. Another module adds its channel's renderer -->
+    <type name="CommerceKings\AppHealth\Model\Message\RendererPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="slack" xsi:type="object">CommerceKings\AppHealth\Model\Message\SlackRenderer</item>
+            </argument>
+        </arguments>
+    </type>
     <!-- the log sources and their parsers, by the check that reads them (argument "sources":
          code => [source => LogSourceInterface, parser => LogParserInterface, check => code]; the item name is the
          source's code, its cursor "cursor:log:<code>"); another module adds its own -->

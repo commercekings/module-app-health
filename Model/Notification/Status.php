@@ -9,7 +9,9 @@ use CommerceKings\AppHealth\Api\StatusPolicyInterface;
 use CommerceKings\AppHealth\Model\CheckPool;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
+use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\AppHealth\Model\Messages;
+use CommerceKings\AppHealth\Api\Data\TeamMessageContent;
 use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\Notification\Api\NotificationTypeInterface;
@@ -50,7 +52,8 @@ class Status implements NotificationTypeInterface
         private readonly CheckPool $pool,
         private readonly Config $config,
         private readonly DateTime $dateTime,
-        private readonly StatusPolicyInterface $policy
+        private readonly StatusPolicyInterface $policy,
+        private readonly RendererPool $renderers
     ) {
     }
 
@@ -157,11 +160,21 @@ class Status implements NotificationTypeInterface
     }
 
     /** @param array<string, mixed> $parts parts() */
-    public function text(Target $target, array $parts, string $heading = 'Hourly status'): string
+    public function content(Target $target, array $parts, string $heading = 'Hourly status'): TeamMessageContent
     {
         return $this->messages->status($target, array_values($parts['problems']), $parts['warnings'],
             $parts['errorCount'], $parts['errors'], $parts['moreErrors'], $parts['idle'], $heading,
             (array)($parts['known'] ?? []));
+    }
+
+    /**
+     * The status as its channel's text.
+     *
+     * @param array<string, mixed> $parts parts()
+     */
+    public function text(Target $target, array $parts, string $heading = 'Hourly status'): string
+    {
+        return $this->renderers->render($target->channel, $this->content($target, $parts, $heading));
     }
 
     private function localNow(Target $target, int $now): \DateTimeImmutable

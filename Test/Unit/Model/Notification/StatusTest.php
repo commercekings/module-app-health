@@ -10,6 +10,7 @@ use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Status\DefaultPolicy;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\Renderers;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
@@ -53,7 +54,8 @@ class StatusTest extends TestCase
         $pool = $this->pool(['cron' => 'Cron', 'queues' => 'Queue', 'caches' => 'Caches'],
             ['email_disabled' => 'Email sending']);
         (new Status($teamMessage, $store, new Messages($pool, new Clock(self::NOW)), $pool, $this->config($settings),
-            new Clock(self::NOW), $this->policy ?? new DefaultPolicy($this->config($settings))))->process('0');
+            new Clock(self::NOW), $this->policy ?? new DefaultPolicy($this->config($settings)), Renderers::pool()))
+            ->process('0');
     }
 
     public function testAllChecksOkAndNoErrors(): void
@@ -108,7 +110,7 @@ class StatusTest extends TestCase
         });
         $pool = $this->pool([]);
         (new Status($teamMessage, new MemoryStore(), new Messages($pool, new Clock(self::NOW)), $pool, $this->config(),
-            new Clock(self::NOW), new DefaultPolicy($this->config())))->process('2');
+            new Clock(self::NOW), new DefaultPolicy($this->config()), Renderers::pool()))->process('2');
         $this->assertSame(['2'], $this->sent, 'shop-wide alerts off: the first website\'s recipient');
     }
 

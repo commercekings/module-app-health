@@ -9,6 +9,7 @@ use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\SlackMessages;
 use CommerceKings\AppHealth\Test\Unit\Stub\LogDir;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
@@ -82,7 +83,7 @@ class SensitiveDataTest extends TestCase
             $notices);
         $this->assertStringContainsString('Check: Stop logging it at the source, then rotate or remove the log: card'
             . ' data in logs breaks PCI DSS.', $notices);
-        $text = (new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock))
+        $text = (new SlackMessages(new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock)))
             ->notices(new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC'), 'sensitive_data',
                 $result->notices);
         $this->assertStringStartsWith("*Security: sensitive data in logs · Main Website Store*\n\n"

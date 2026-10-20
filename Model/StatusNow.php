@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model;
 
+use CommerceKings\AppHealth\Api\Data\TeamMessageSection;
 use CommerceKings\AppHealth\Model\Check\External;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
+use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\AppHealth\Model\Notification\Status;
 use CommerceKings\Notification\Api\Data\Delivery;
 use CommerceKings\Notification\Api\Data\DeliveryContent;
@@ -34,7 +36,8 @@ class StatusNow
         private readonly SenderInterface $sender,
         private readonly DateTime $dateTime,
         private readonly Messages $messages,
-        private readonly SiteDomain $siteDomain
+        private readonly SiteDomain $siteDomain,
+        private readonly RendererPool $renderers
     ) {
     }
 
@@ -67,18 +70,21 @@ class StatusNow
         $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC')
             : $now - $this->config->getHourlyStatusMinutes() * 60;
         // the snapshot's own state: what this run read, never committed
-        $text = $this->status->text($target, $this->status->parts((array)($snapshot['checks'] ?? []),
+        $message = $this->status->content($target, $this->status->parts((array)($snapshot['checks'] ?? []),
             $this->state->get(Fingerprints::KEY) ?? [], $this->state->get(Fingerprints::ERRORS_KEY) ?? [], $from),
             'Status now');
         // the servers' containers, as the snapshot's own external check just read them
         $containers = $this->messages->containers($this->state->get(External::ROW) ?? [], $now,
             $this->config->getInt(External::CODE, 'stale_minutes', 15) * 60);
-        $text .= $containers !== '' ? "\n\n" . $containers : '';
-        if (!$snapshot['complete']) {
-            $text .= "\n\n" . ($snapshot['skipped'] !== []
-                ? 'Not checked this time (time budget): ' . implode(', ', $snapshot['skipped']) . '.'
-                : 'A check could not run (see the Magento log).');
+        if ($containers !== null) {
+            $message = $message->withSections($containers);
         }
+        if (!$snapshot['complete']) {
+            $message = $message->withSections(new TeamMessageSection([$snapshot['skipped'] !== []
+                ? 'Not checked this time (time budget): ' . implode(', ', $snapshot['skipped']) . '.'
+                : 'A check could not run (see the Magento log).']));
+        }
+        $text = $this->renderers->render($target->channel, $message);
         try {
             $result = $this->sender->send(Delivery::text($target->storeId, $target->channel, $target->recipient,
                 fn () => new DeliveryContent([], null, null, $text), useCooldown: false, stoppable: false,

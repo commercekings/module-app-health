@@ -4,16 +4,20 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Api\Data\TeamMessageContent;
+use CommerceKings\AppHealth\Api\Data\TeamMessageSection;
+use CommerceKings\AppHealth\Api\Data\TeamMessageTable;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
- * The messages, Slack mrkdwn without emoji: a bold first line that says what and where (what a phone notification
- * shows), a blank line, one fact per line, a blank line and what to do. The summary's sections are bold headings with
- * "• " lines, empty ones left out. Times in the recipient's time zone. Built only from the shop's name, check labels,
- * titles, hints, statuses, data-free details, counts and the log errors' safe labels:
+ * What the messages say, channel-neutral (Api\Data\TeamMessageContent): a title that says what and where, one fact per
+ * line, what to do; the summary's sections with headings and list lines, empty ones left out; the containers as
+ * tables. Times in the recipient's time zone. Built only from the shop's name, check labels, titles, hints, statuses,
+ * data-free details, counts and the log errors' safe labels. A channel's renderer (Model\Message\RendererPool) makes
+ * the text - for Slack:
  *
- *   *Problem: Cron stopped · Main Website Store (all websites)*
+ *   *Problem: Cron stopped · Acme Shop · shop.example.com*
  *
  *   No job has run since 10:39 (65 min).
  *
@@ -33,8 +37,6 @@ class Messages
     private const NOTICES = 10;
     /** Container rows in a status or summary, all servers together. */
     public const CONTAINERS = 20;
-    /** A container's name in a table is cut to this. */
-    private const NAME_WIDTH = 28;
     /** Causes shown per alert. */
     private const CAUSES = 4;
     /** The summary's log errors per level, the latest first. */
@@ -53,7 +55,8 @@ class Messages
      * @param string $change AlertPlan::PROBLEM, REPEAT or RECOVERED
      * @param int|null $failedSince a recovery: when the problem began (the told record), for "Failed for 2 h"
      */
-    public function alert(Target $target, string $code, array $check, string $change, ?int $failedSince = null): string
+    public function alert(Target $target, string $code, array $check, string $change,
+        ?int $failedSince = null): TeamMessageContent
     {
         $label = $this->pool->getLabel($code);
         $status = (string)($check['status'] ?? CheckResult::OK);
@@ -61,8 +64,9 @@ class Messages
             $since = (int)($check['since'] ?? 0);
             $failed = $failedSince !== null && $since > $failedSince
                 ? 'Failed for ' . Format::duration($since - $failedSince) . '; OK' : 'OK';
-            return $this->block('*Resolved: ' . $label . ' · ' . $this->where($target) . '*',
-                $since > 0 ? [$failed . ' again since ' . $this->when($target, $since) . '.'] : []);
+            return new TeamMessageContent('Resolved: ' . $label . ' · ' . $this->where($target),
+                TeamMessageContent::RESOLVED, $since > 0
+                    ? [new TeamMessageSection([$failed . ' again since ' . $this->when($target, $since) . '.'])] : []);
         }
         $title = (string)($check['title'] ?? '') !== '' ? (string)$check['title'] : $label;
         $facts = [];
@@ -80,7 +84,9 @@ class Messages
         if ($change === AlertPlan::REPEAT && (int)($check['since'] ?? 0) > 0) {
             $facts[] = 'Still failing since ' . $this->when($target, (int)$check['since']) . '.';
         }
-        return $this->block('*' . self::WORDS[$status] . ': ' . $title . ' · ' . $this->where($target) . '*', $facts,
+        return new TeamMessageContent(self::WORDS[$status] . ': ' . $title . ' · ' . $this->where($target),
+            $status === CheckResult::FAIL ? TeamMessageContent::PROBLEM : TeamMessageContent::WARNING,
+            [new TeamMessageSection(array_values(array_filter($facts, fn (string $fact) => $fact !== '')))],
             array_slice(array_keys($hints), 0, 2));
     }
 
@@ -90,7 +96,7 @@ class Messages
      *
      * @param string[] $notices
      */
-    public function notices(Target $target, string $code, array $notices): string
+    public function notices(Target $target, string $code, array $notices): TeamMessageContent
     {
         $facts = [];
         $hints = [];
@@ -117,8 +123,9 @@ class Messages
         $title = self::NOTICE_TITLES[$code]
             ?? 'New ' . $noun . ($errors > 1 ? 's' : '') . ' in ' . $this->pool->getLabel($code);
         $several = array_filter($facts, fn (string $fact) => str_contains($fact, "\n")) !== [];
-        return $this->block('*' . $title . ' · ' . $this->where($target) . '*',
-            $facts !== [] ? [implode($several ? "\n\n" : "\n", $facts)] : [],
+        return new TeamMessageContent($title . ' · ' . $this->where($target),
+            $code === 'sensitive_data' ? TeamMessageContent::SECURITY : TeamMessageContent::NOTICE,
+            [new TeamMessageSection(array_values($facts), null, false, false, $several)],
             array_values(array_unique($hints)));
     }
 
@@ -130,10 +137,10 @@ class Messages
      * @param array<int|string, array<mixed>> $tallies the day's hours: code => ['w' => worst rank, 'c' => counts]
      * @param array<string, array<mixed>> $fingerprints the "fingerprints" row
      * @param string[] $security the day's sensitive-data findings, one line each (the global summary)
-     * @param string $containers containers() of the servers' last statuses (the global summary)
+     * @param TeamMessageSection|null $containers containers() of the servers' last statuses (the global summary)
      */
     public function summary(Target $target, array $checks, array $tallies, int $now, array $fingerprints = [],
-        array $security = [], string $containers = ''): string
+        array $security = [], ?TeamMessageSection $containers = null): TeamMessageContent
     {
         [$worst, $counts] = $this->sum($tallies);
         $problems = [];
@@ -157,15 +164,15 @@ class Messages
             }
         }
         $sections = [
-            $this->section('*Needs attention*', array_merge($problems, $hadProblems)),
-            $this->section('*Security*', array_map(fn (string $line) => $this->times($target, $line), $security)),
-            $this->section('*Errors, last 24 h*', $this->logs($target, $counts, $fingerprints, $now)),
-            $this->section('*Email*', $this->email($target, $checks, $counts)),
+            $this->section('Needs attention', array_merge($problems, $hadProblems)),
+            $this->section('Security', array_map(fn (string $line) => $this->times($target, $line), $security)),
+            $this->section('Errors, last 24 h', $this->logs($target, $counts, $fingerprints, $now)),
+            $this->section('Email', $this->email($target, $checks, $counts)),
             $containers,
-            $this->section('*All OK*', $okAllDay !== [] ? [implode(', ', $okAllDay)] : []),
+            $this->section('All OK', $okAllDay !== [] ? [implode(', ', $okAllDay)] : []),
         ];
-        return '*' . $this->where($target) . ' · daily summary · ' . $this->local($target, $now, 'j M') . '*'
-            . implode('', array_map(fn (string $section) => "\n\n" . $section, array_filter($sections)));
+        return new TeamMessageContent($this->where($target) . ' · daily summary · ' . $this->local($target, $now, 'j M'),
+            TeamMessageContent::SUMMARY, array_values(array_filter($sections)));
     }
 
     /**
@@ -181,7 +188,7 @@ class Messages
      * @param string[] $known the labels of checks still not OK that a posted status told before
      */
     public function status(Target $target, array $problems, array $warnings, int $errorCount, array $errors,
-        int $moreErrors, array $idle = [], string $heading = 'Hourly status', array $known = []): string
+        int $moreErrors, array $idle = [], string $heading = 'Hourly status', array $known = []): TeamMessageContent
     {
         $lines = [];
         if ($problems !== []) {
@@ -202,28 +209,29 @@ class Messages
         if ($problems === [] && $warnings === [] && $known === []) {
             array_unshift($lines, 'All checks OK');
         }
-        $text = '*' . $heading . ' · ' . $this->where($target) . "*\n\n" . implode("\n", $lines);
+        $sections = [new TeamMessageSection($lines)];
         if ($errorCount > 0) {
-            $text .= "\n\nNew errors this hour: " . Format::number($errorCount);
-            foreach ($errors as [$label, $count, $new]) {
-                $text .= "\n• " . $label . ' (' . Format::number($count) . '×' . ($new ? ', new' : '') . ')';
+            $list = array_map(fn (array $error) => $error[0] . ' (' . Format::number($error[1]) . '×'
+                . ($error[2] ? ', new' : '') . ')', $errors);
+            if ($moreErrors > 0) {
+                $list[] = '…and ' . $moreErrors . ' more';
             }
-            $text .= $moreErrors > 0 ? "\n• …and " . $moreErrors . ' more' : '';
+            $sections[] = new TeamMessageSection($list, 'New errors this hour: ' . Format::number($errorCount), false,
+                true);
         }
-        return $text;
+        return new TeamMessageContent($heading . ' · ' . $this->where($target), TeamMessageContent::STATUS, $sections);
     }
 
     /**
-     * The servers' containers as a table, one per server (a code block, so the columns line up in Slack):
-     * NAME, CPU, MEM (used / limit), MEM% and RESTARTS of each status line with measurements ("metrics"), the
-     * lines of a server without a fresh status left out. At most CONTAINERS rows in all, then "…and N more"; '' when
-     * there are none.
+     * The servers' containers, a table per server: NAME, CPU, MEM (used / limit), MEM% and RESTARTS of each status
+     * line with measurements ("metrics"), the lines of a server without a fresh status left out. At most CONTAINERS
+     * rows in all, then "…and N more"; null when there are none.
      *
      * @param array<string, array<mixed>> $servers the "external" state row: source => its last good status
      */
-    public function containers(array $servers, int $now, int $staleAfter): string
+    public function containers(array $servers, int $now, int $staleAfter): ?TeamMessageSection
     {
-        $blocks = [];
+        $tables = [];
         $left = self::CONTAINERS;
         $more = 0;
         ksort($servers);
@@ -253,35 +261,13 @@ class Messages
                 ];
             }
             if ($rows !== []) {
-                $blocks[] = '*Containers · ' . $source . "*\n```\n" . self::table(['NAME', 'CPU', 'MEM', 'MEM%',
-                    'RESTARTS'], $rows) . "\n```";
+                $tables[] = new TeamMessageTable('Containers · ' . $source, ['NAME', 'CPU', 'MEM', 'MEM%', 'RESTARTS'],
+                    $rows);
             }
         }
-        if ($more > 0) {
-            $blocks[] = '…and ' . $more . ' more';
-        }
-        return implode("\n", $blocks);
-    }
-
-    /**
-     * Columns padded to their widest cell: the first left, the rest right-aligned.
-     *
-     * @param string[] $header
-     * @param list<string[]> $rows
-     */
-    private static function table(array $header, array $rows): string
-    {
-        $rows = array_merge([$header], array_map(fn (array $row) => array_map(
-            fn (string $cell) => mb_substr($cell, 0, self::NAME_WIDTH), $row), $rows));
-        $widths = [];
-        foreach ($rows as $row) {
-            foreach ($row as $i => $cell) {
-                $widths[$i] = max($widths[$i] ?? 0, mb_strlen($cell));
-            }
-        }
-        return implode("\n", array_map(fn (array $row) => rtrim(implode('  ', array_map(
-            fn (string $cell, int $i) => $i === 0 ? $cell . str_repeat(' ', $widths[$i] - mb_strlen($cell))
-                : str_repeat(' ', $widths[$i] - mb_strlen($cell)) . $cell, $row, array_keys($row)))), $rows));
+        $lines = $more > 0 ? ['…and ' . $more . ' more'] : [];
+        return $tables !== [] || $lines !== [] ? new TeamMessageSection($lines, null, false, false, false, $tables)
+            : null;
     }
 
     /** "512M", "1.5G", "980K", "12B": short, for a table. */
@@ -296,11 +282,11 @@ class Messages
         return $bytes . 'B';
     }
 
-    public function test(Target $target): string
+    public function test(Target $target): TeamMessageContent
     {
-        return $this->block('*Test alert · ' . $this->where($target) . '*', ['This channel gets the shared checks\''
-            . ' alerts (cron, indexers, caches, logs, ...), security findings, the hourly status and the daily'
-            . ' summary.']);
+        return new TeamMessageContent('Test alert · ' . $this->where($target), TeamMessageContent::TEST,
+            [new TeamMessageSection(['This channel gets the shared checks\' alerts (cron, indexers, caches, logs, ...),'
+                . ' security findings, the hourly status and the daily summary.'])]);
     }
 
     /**
@@ -380,29 +366,13 @@ class Messages
     }
 
     /**
-     * The header line, a blank line, the facts one per line, a blank line and what to do.
-     *
-     * @param string[] $facts
-     * @param string[] $hints
-     */
-    private function block(string $header, array $facts, array $hints = []): string
-    {
-        $text = $header;
-        foreach ([$facts, array_map(fn (string $hint) => 'What to do: ' . $hint, array_filter($hints))] as $lines) {
-            $lines = array_filter($lines, fn (string $line) => $line !== '');
-            $text .= $lines !== [] ? "\n\n" . implode("\n", $lines) : '';
-        }
-        return $text;
-    }
-
-    /**
-     * A summary section: its bold heading on its own line, "• " lines below it; '' without lines.
+     * A summary section: its heading, its lines as a list; null without lines.
      *
      * @param string[] $lines
      */
-    private function section(string $heading, array $lines): string
+    private function section(string $heading, array $lines): ?TeamMessageSection
     {
-        return $lines !== [] ? $heading . "\n• " . implode("\n• ", $lines) : '';
+        return $lines !== [] ? new TeamMessageSection(array_values($lines), $heading, true, true) : null;
     }
 
     /** "Email sending" in a list after the first: "email sending" (not a name like "RabbitMQ"). */

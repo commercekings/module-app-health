@@ -6,6 +6,7 @@ namespace CommerceKings\AppHealth\Model\Notification;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\AlertPlan;
 use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\StateStore;
 use CommerceKings\AppHealth\Model\Target;
@@ -29,7 +30,8 @@ class Alert implements NotificationTypeInterface
         private readonly StateStore $store,
         private readonly Messages $messages,
         private readonly Config $config,
-        private readonly DateTime $dateTime
+        private readonly DateTime $dateTime,
+        private readonly RendererPool $renderers
     ) {
     }
 
@@ -59,15 +61,16 @@ class Alert implements NotificationTypeInterface
         foreach ($changes as $code => $change) {
             $began = isset($alerted[$code]['since']) ? (int)$alerted[$code]['since']
                 : (isset($alerted[$code]['at']) ? (int)$alerted[$code]['at'] : null);
-            return [$this->messages->alert($target, (string)$code, $checks[$code] ?? [], $change,
-                $change === AlertPlan::RECOVERED ? $began : null),
+            return [$this->renderers->render($target->channel, $this->messages->alert($target, (string)$code,
+                $checks[$code] ?? [], $change, $change === AlertPlan::RECOVERED ? $began : null)),
                 fn () => $this->store->save([$keys[0] => AlertPlan::told($checks, $alerted,
                     [$code => $change], $now)])];
         }
         $noticed = $rows[$keys[2]] ?? [];
         $gap = $this->config->getNoticeMinutes() * 60;
         foreach (AlertPlan::pendingNotices($rows[$keys[1]] ?? [], $noticed, $now, $gap) as $code => $notices) {
-            return [$this->messages->notices($target, $code, $notices), fn () => $this->store->save([$keys[2]
+            return [$this->renderers->render($target->channel, $this->messages->notices($target, $code, $notices)),
+                fn () => $this->store->save([$keys[2]
                 => AlertPlan::noticed($noticed, (string)$code, max(array_keys($notices)), $now)])];
         }
         return null;

@@ -8,6 +8,7 @@ use CommerceKings\AppHealth\Model\Check\External;
 use CommerceKings\AppHealth\Model\Check\SensitiveData;
 use CommerceKings\AppHealth\Model\Format;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
+use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\AppHealth\Model\Sensitive\Detector;
 use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\StateStore;
@@ -35,7 +36,8 @@ class Summary implements NotificationTypeInterface
         private readonly SummarySchedule $schedule,
         private readonly DateTime $dateTime,
         private readonly Targets $targets,
-        private readonly Detector $detector
+        private readonly Detector $detector,
+        private readonly RendererPool $renderers
     ) {
     }
 
@@ -64,9 +66,9 @@ class Summary implements NotificationTypeInterface
                 ? $this->security($tallies, (array)($rows[SensitiveData::KEY] ?? []), $now) : [];
             // the servers' containers: shared, so in the global summary
             $containers = $target->isShopWide() ? $this->messages->containers((array)($rows[External::ROW] ?? []),
-                $now, $this->config->getInt(External::CODE, 'stale_minutes', 15) * 60) : '';
-            return [$this->messages->summary($target, $checks, $tallies, $now, $rows[Fingerprints::KEY] ?? [],
-                $security, $containers),
+                $now, $this->config->getInt(External::CODE, 'stale_minutes', 15) * 60) : null;
+            return [$this->renderers->render($target->channel, $this->messages->summary($target, $checks, $tallies,
+                $now, $rows[Fingerprints::KEY] ?? [], $security, $containers)),
                 fn () => null];
         });
     }

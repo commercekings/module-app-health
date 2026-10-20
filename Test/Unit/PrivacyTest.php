@@ -13,6 +13,8 @@ use CommerceKings\AppHealth\Model\Messages;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\Renderers;
+use CommerceKings\AppHealth\Test\Unit\Stub\SlackMessages;
 use CommerceKings\AppHealth\Test\Unit\Stub\Db;
 use CommerceKings\AppHealth\Test\Unit\Stub\LogDir;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
@@ -88,8 +90,8 @@ class PrivacyTest extends TestCase
         $results = $run();
         $this->assertSame(['fail', 'fail', 'fail'], array_values(array_map(fn ($r) => $r->status, $results)));
         $target = new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC');
-        $messages = new Messages($this->pool(['system_log' => 'system.log', 'exceptions' => 'exception.log',
-            'email_failing' => 'Sending']), new Clock(self::MESSAGES_NOW));
+        $messages = new SlackMessages(new Messages($this->pool(['system_log' => 'system.log', 'exceptions' => 'exception.log',
+            'email_failing' => 'Sending']), new Clock(self::MESSAGES_NOW)));
         $out = [json_encode($store->rows)];
         $checksRow = [];
         foreach ($results as $code => $result) {
@@ -109,10 +111,10 @@ class PrivacyTest extends TestCase
             return true;
         });
         $store->seed(['checks' => [0 => $checksRow]]);
-        (new \CommerceKings\AppHealth\Model\Notification\Status($teamMessage, $store, $messages, $this->pool([
+        (new \CommerceKings\AppHealth\Model\Notification\Status($teamMessage, $store, $messages->messages, $this->pool([
             'system_log' => 'system.log', 'exceptions' => 'exception.log', 'email_failing' => 'Sending']), $config,
-            new Clock(self::MESSAGES_NOW), new \CommerceKings\AppHealth\Model\Status\DefaultPolicy($config)))
-            ->process('0');
+            new Clock(self::MESSAGES_NOW), new \CommerceKings\AppHealth\Model\Status\DefaultPolicy($config),
+            Renderers::pool()))->process('0');
         return implode("\n", $out);
     }
 

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model;
 
+use CommerceKings\AppHealth\Model\Message\RendererPool;
 use CommerceKings\Notification\Api\Data\Delivery;
 use CommerceKings\Notification\Api\Data\DeliveryContent;
 use CommerceKings\Notification\Api\SenderInterface;
@@ -20,7 +21,8 @@ class TestAlert
         private readonly Targets $targets,
         private readonly Messages $messages,
         private readonly SenderInterface $sender,
-        private readonly SiteDomain $siteDomain
+        private readonly SiteDomain $siteDomain,
+        private readonly RendererPool $renderers
     ) {
     }
 
@@ -38,7 +40,7 @@ class TestAlert
         if ($target === null) {
             throw new LocalizedException(__('Set a channel and a recipient, save the configuration, then try again.'));
         }
-        $text = $this->messages->test($target);
+        $text = $this->renderers->render($target->channel, $this->messages->test($target));
         try {
             $status = $this->sender->send(Delivery::text($target->storeId, $target->channel, $target->recipient,
                 fn () => new DeliveryContent([], null, null, $text), useCooldown: false, stoppable: false,

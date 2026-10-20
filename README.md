@@ -32,7 +32,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   reporting is a problem.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
-[module-notification-slack](https://github.com/commercekings/module-notification-slack), or any installed channel.
+[module-notification-slack](https://github.com/commercekings/module-notification-slack), or any installed channel
+(plain text, unless its module adds a format: [Extending](docs/extending.md)).
 
 ## Quick start
 
@@ -153,7 +154,7 @@ Examples of every message, and why each check fails: [Messages](docs/messages.md
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Shop domain (stored when first switched on; *Use <domain>* after a move); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (No); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
+| Alerts | Enabled (No); Shop domain (stored when first switched on; *Use <domain>* after a move); Channel (a channel, e.g. slack); Recipient (e.g. for slack a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (No); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 

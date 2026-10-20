@@ -13,6 +13,7 @@ use CommerceKings\AppHealth\Model\Check\SensitiveData;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\Renderers;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
@@ -76,7 +77,7 @@ class AlertAndSummaryTest extends TestCase
     private function alert(int $scope): void
     {
         (new Alert($this->teamMessage(new Target($scope, 1, 'slack', 'C' . $scope, 'Shop', 'UTC')), $this->store,
-            $this->messages(), $this->config(), new Clock(self::NOW)))->process((string)$scope);
+            $this->messages(), $this->config(), new Clock(self::NOW), Renderers::pool()))->process((string)$scope);
     }
 
     public function testOneMessagePerProblemEachRecordedOnceAWarningNotAtOnce(): void
@@ -138,7 +139,8 @@ class AlertAndSummaryTest extends TestCase
             2 => new Target(2, 2, 'slack', 'C2', 'US Store', 'UTC')]);
         $target = $scope === 0 ? new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC') : $targets->websites()[$scope];
         (new Summary($this->teamMessage($target, $row), $this->store, $this->messages(), $config,
-            new SummarySchedule($config), new Clock(self::NOW), $targets, $this->detector()))->process((string)$scope);
+            new SummarySchedule($config), new Clock(self::NOW), $targets, $this->detector(), Renderers::pool()))
+            ->process((string)$scope);
     }
 
     public function testTheGlobalSummaryHasTheSharedChecksAndWebsitesWithoutAChannelNamed(): void

@@ -8,6 +8,7 @@ use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Model\TestAlert;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\Renderers;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\Notification\Api\Data\Delivery;
 use CommerceKings\Notification\Api\SenderInterface;
@@ -39,7 +40,7 @@ class TestAlertTest extends TestCase
             return $answer;
         });
         return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender,
-            $domain ?? $this->siteDomain());
+            $domain ?? $this->siteDomain(), Renderers::pool());
     }
 
     public function testACopyOfTheShopSendsNoTestAlert(): void

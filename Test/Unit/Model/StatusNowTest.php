@@ -15,6 +15,7 @@ use CommerceKings\AppHealth\Model\StatusNow;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
+use CommerceKings\AppHealth\Test\Unit\Stub\Renderers;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
@@ -88,13 +89,13 @@ class StatusNowTest extends TestCase
         $config = $this->config();
         $messages = new Messages($pool, new Clock(self::NOW));
         $status = new Status($this->createStub(TeamMessage::class), $this->store, $messages, $pool, $config,
-            new Clock(self::NOW), new DefaultPolicy($config));
+            new Clock(self::NOW), new DefaultPolicy($config), Renderers::pool());
         $domain = $this->createStub(SiteDomain::class);
         $domain->method('matches')->willReturnCallback(fn () => !$this->copy);
         $domain->method('stored')->willReturn('shop.example.com');
         $domain->method('current')->willReturn('staging.example.com');
         return new StatusNow($targets, $runner, $state, $status, $config, $deliveryState, $sender,
-            new Clock(self::NOW), $messages, $domain);
+            new Clock(self::NOW), $messages, $domain, Renderers::pool());
     }
 
     public function testTheChecksAsTheyAreNowArePostedToTheGlobalRecipient(): void

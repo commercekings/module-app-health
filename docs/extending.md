@@ -17,6 +17,7 @@ its messages, a log source's for its cursor, a validator's for `validator="<code
 | A validator for rules | `Api\SensitiveDataValidatorInterface` (`getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
 | Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, *Website channels*: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
+| How a channel's messages look | `Api\TeamMessageRendererInterface` (`render(Api\Data\TeamMessageContent)`: a title, a severity, `Api\Data\TeamMessageSection` items with lines, list lines and `Api\Data\TeamMessageTable` tables, hints) in `Model\Message\RendererPool` "renderers", the item name the channel code: `slack` is `Model\Message\SlackRenderer` (mrkdwn); a channel without one gets plain text (`Model\Message\PlainTextRenderer`: no markup, "- " lists, aligned tables) |
 | Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in the format above (version 1) – no PHP |
 | When the hourly status is posted | `Api\StatusPolicyInterface` (`getIntervalMinutes($scopeId)`, kept within 15 to 180; `shouldPost(Api\Data\StatusReport)`), shipped as `Model\Status\DefaultPolicy`; replace it with a `<preference>`. The status is still delivered every interval (quietly when not posted); urgent alerts never ask the policy |
 
@@ -51,6 +52,19 @@ class SyncCheck implements \CommerceKings\AppHealth\Api\CheckInterface
         return [self::SHOP => $result->withHint((string)__('Is the ERP connector\'s cron job running?'))];
     }
 }
+```
+
+A channel's look, in the channel module's `etc/di.xml` (e.g. a Teams module for its `teams` channel; App health
+needs no change) – a complete example with its renderer: [examples/teams-renderer](examples/teams-renderer):
+
+```xml
+<type name="CommerceKings\AppHealth\Model\Message\RendererPool">
+    <arguments>
+        <argument name="renderers" xsi:type="array">
+            <item name="teams" xsi:type="object">Vendor\NotificationTeams\Model\AppHealthRenderer</item>
+        </argument>
+    </arguments>
+</type>
 ```
 
 A rule set, in your module's `etc/app_health_rules.xml` – a set of its own, a shipped rule changed, a shipped set off:
