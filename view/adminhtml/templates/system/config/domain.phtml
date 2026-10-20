@@ -1,0 +1,23 @@
+<?php
+/** @var \CommerceKings\AppHealth\Block\Adminhtml\System\Config\Domain $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$stored = $block->getStored();
+$current = $block->getCurrent();
+$config = ['CommerceKings_AppHealth/js/test-alert' => ['url' => $block->getAcceptUrl(),
+    'failed' => (string)__('Not saved. Try again.')]];
+?>
+<?php if (!$block->isCopy()): ?>
+    <p><?= $escaper->escapeHtml($stored !== ''
+        ? __('%1 - App health reports on this shop.', $stored)
+        : __('%1 - stored when App health is first saved on.', $current)) ?></p>
+<?php else: ?>
+    <div data-mage-init="<?= $escaper->escapeHtmlAttr(json_encode($config)) ?>">
+        <p class="message message-warning"><?= $escaper->escapeHtml(__('App health is silent: it was set up on %1,'
+            . ' this shop is %2 - a copy (staging, a developer\'s database) sends nothing. If the shop has moved to'
+            . ' %2, use it.', $stored, $current)) ?></p>
+        <button type="button" class="action-default" data-role="send">
+            <span><?= $escaper->escapeHtml(__('Use %1', $current)) ?></span>
+        </button>
+        <p class="note" data-role="result" aria-live="polite"></p>
+    </div>
+<?php endif ?>

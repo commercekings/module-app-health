@@ -13,7 +13,13 @@
                 <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\Enabled</backend_model>
                     <comment>On: the checks run and messages are sent. All App health settings are global (default scope).</comment>
+                </field>
+                <field id="domain" translate="label comment" type="text" sortOrder="15" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Shop domain</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\Domain</frontend_model>
+                    <comment>App health stays silent on a copy of this shop (staging, a developer's database).</comment>
                 </field>
                 <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Channel</label>
