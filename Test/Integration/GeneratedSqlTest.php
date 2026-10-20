@@ -125,7 +125,8 @@ class GeneratedSqlTest extends TestCase
             $this->createStub(\CommerceKings\Notification\Api\QueueInterface::class),
             $this->createStub(\CommerceKings\Notification\Api\SenderInterface::class),
             $this->createStub(\CommerceKings\AppHealth\Model\Targets::class),
-            $this->createStub(\Psr\Log\LoggerInterface::class));
+            $this->createStub(\Psr\Log\LoggerInterface::class),
+            $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class));
         $row = ['reference_id' => 0, 'subject_key' => '', 'delivery_version' => 1];
         $this->db->insertMultiple($this->table('ck_notification_delivery_state'), [
             ['type' => 'app_health_status', 'failed_sends' => 0] + $row,

@@ -44,7 +44,7 @@ class TeamMessage
         private readonly SenderInterface $sender,
         private readonly Targets $targets,
         private readonly LoggerInterface $logger,
-        private readonly ?SiteDomain $siteDomain = null
+        private readonly SiteDomain $siteDomain
     ) {
     }
 
@@ -86,7 +86,7 @@ class TeamMessage
     {
         $websiteId = ctype_digit($reference) ? (int)$reference : 0;
         $row = $this->deliveryState->load($type, $websiteId);
-        if ($this->siteDomain !== null && !$this->siteDomain->matches()) {
+        if (!$this->siteDomain->matches()) {
             // a copy's queue can hold the original's messages (a database copy): dropped, never sent from here
             $this->release($type, $websiteId, $row['queued_at'] ?? null);
             $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d dropped: this looks like a copy'

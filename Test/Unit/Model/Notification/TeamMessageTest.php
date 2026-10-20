@@ -19,6 +19,8 @@ use Psr\Log\LoggerInterface;
 
 class TeamMessageTest extends TestCase
 {
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Domain;
+
     use Db;
 
     private const ROW = ['type' => 'app_health_alert', 'reference_id' => '1', 'subject_key' => '',
@@ -73,7 +75,7 @@ class TeamMessageTest extends TestCase
             });
         }
         return new TeamMessage($this->resource($this->db(['update' => $updates])), $state, $queue, $sender, $targets,
-            $logger, $domain);
+            $logger, $domain ?? $this->siteDomain());
     }
 
     private function compose(): \Closure
@@ -136,7 +138,7 @@ class TeamMessageTest extends TestCase
         $teamMessage = new TeamMessage($this->resource($this->db(['fetchOne' => ['1', false]])),
             $this->createStub(DeliveryStateInterface::class), $this->createStub(QueueInterface::class),
             $this->createStub(SenderInterface::class), $this->createStub(Targets::class),
-            $this->createStub(LoggerInterface::class));
+            $this->createStub(LoggerInterface::class), $this->siteDomain());
         $this->assertTrue($teamMessage->isFailing());
         $this->assertFalse($teamMessage->isFailing());
         $this->assertContains('type LIKE ?', $this->wheres(), 'App health\'s own messages: a prefix of the key');

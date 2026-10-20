@@ -32,7 +32,7 @@ class QueueSummaries
         private readonly DateTime $dateTime,
         private readonly LoggerInterface $logger,
         private readonly DeliveryStateInterface $deliveryState,
-        private readonly ?SiteDomain $siteDomain = null
+        private readonly SiteDomain $siteDomain
     ) {
     }
 
@@ -43,7 +43,7 @@ class QueueSummaries
         $queued = [];
         $shopWide = $this->targets->shopWide();
         if ($shopWide === null || !$this->config->isSummaryEnabled()
-            || ($this->siteDomain !== null && !$this->siteDomain->matches())) { // a copy: silent
+            || !$this->siteDomain->matches()) { // a copy: silent
             return [];
         }
         // the global summary, and one per website with a channel of its own (the others are in the global one)

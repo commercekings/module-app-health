@@ -17,6 +17,8 @@ use Psr\Log\LoggerInterface;
 
 class QueueSummariesTest extends TestCase
 {
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Domain;
+
     use Db;
     use Settings;
 
@@ -42,7 +44,8 @@ class QueueSummariesTest extends TestCase
         $state = $this->createStub(DeliveryStateInterface::class);
         $state->method('load')->willReturnCallback(fn ($type, $id) => $this->rows[$id] ?? null);
         $cron = new QueueSummaries($targets, $config, new SummarySchedule($config), $teamMessage,
-            $this->resource($this->db()), new Clock(self::NOW), $this->createStub(LoggerInterface::class), $state);
+            $this->resource($this->db()), new Clock(self::NOW), $this->createStub(LoggerInterface::class), $state,
+            $this->siteDomain());
         $this->assertSame([0, 3], $cron->execute(), 'website 1 (no channel of its own) is in the global one; in Los'
             . ' Angeles it is 01:00: yesterday 07:30 was over 12 h ago');
         $this->assertSame([['app_health_summary', 0, "(sent_at IS NULL OR sent_at < '2026-10-20 07:30:00')"],
@@ -54,6 +57,19 @@ class QueueSummariesTest extends TestCase
         $this->assertSame([], $queued);
     }
 
+    public function testACopyOfTheShopQueuesNoSummary(): void
+    {
+        $targets = $this->createStub(Targets::class);
+        $targets->method('shopWide')->willReturn(new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC'));
+        $config = $this->config(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
+        $teamMessage = $this->createStub(TeamMessage::class);
+        $teamMessage->method('queue')->willReturnCallback(fn () => $this->fail('queued on a copy'));
+        $cron = new QueueSummaries($targets, $config, new SummarySchedule($config), $teamMessage,
+            $this->resource($this->db()), new Clock(self::NOW), $this->createStub(LoggerInterface::class),
+            $this->createStub(DeliveryStateInterface::class), $this->siteDomain(true));
+        $this->assertSame([], $cron->execute());
+    }
+
     public function testNothingWhileOffOrWithoutTheSummary(): void
     {
         $targets = $this->createStub(Targets::class);
@@ -61,7 +77,8 @@ class QueueSummariesTest extends TestCase
         $config = $this->config(['general/summary' => '0']);
         $cron = new QueueSummaries($targets, $config, new SummarySchedule($config),
             $this->createStub(TeamMessage::class), $this->resource($this->db()), new Clock(self::NOW),
-            $this->createStub(LoggerInterface::class), $this->createStub(DeliveryStateInterface::class));
+            $this->createStub(LoggerInterface::class), $this->createStub(DeliveryStateInterface::class),
+            $this->siteDomain());
         $this->assertSame([], $cron->execute());
     }
 }

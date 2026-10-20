@@ -59,8 +59,8 @@ class Runner
         private readonly LoggerInterface $logger,
         private readonly DeliveryStateInterface $deliveryState,
         private readonly StatusPolicyInterface $statusPolicy,
-        private readonly float $budgetSeconds = self::BUDGET_SECONDS,
-        private readonly ?SiteDomain $siteDomain = null
+        private readonly SiteDomain $siteDomain,
+        private readonly float $budgetSeconds = self::BUDGET_SECONDS
     ) {
     }
 
@@ -76,7 +76,7 @@ class Runner
         $started = microtime(true);
         $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'degraded' => false,
             'ms' => 0.0];
-        if (!$snapshot && $this->siteDomain !== null && !$this->siteDomain->matches()) {
+        if (!$snapshot && !$this->siteDomain->matches()) {
             // a copy of the shop (staging, a developer's database): no message, no heartbeat ping - nothing runs
             $report['silent'] = 'copy of ' . $this->siteDomain->stored();
             return $report;

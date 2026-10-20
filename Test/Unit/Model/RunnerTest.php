@@ -22,6 +22,8 @@ use Psr\Log\LoggerInterface;
 /** The run and the change-only alerts end to end, over the state as JSON rows. */
 class RunnerTest extends TestCase
 {
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Domain;
+
     use Pool;
     use Settings;
 
@@ -38,7 +40,7 @@ class RunnerTest extends TestCase
     private bool $heartbeat = false;
     private bool $queueThrows = false;
     private bool $failing = false;
-    private ?\CommerceKings\AppHealth\Model\SiteDomain $siteDomain = null;
+    private ?\CommerceKings\AppHealth\Model\SiteDomain $siteDomain = null; // null: the original shop
     /** The hourly status's sent_at (UTC), null: never sent; queued: its queue() calls and their conditions. */
     private ?string $statusSentAt = 'recent';
     /** @var string[] */
@@ -98,7 +100,7 @@ class RunnerTest extends TestCase
         return new Runner($this->pool(['cron' => 'Cron', 'caches' => 'Caches'], ['email_disabled' => 'Email']),
             $this->config($this->settings), new RunState($this->store), $this->store, $targets, $teamMessage,
             $heartbeat, $this->clock, $logger, $deliveryState, $this->policy ?? new DefaultPolicy($this->config(
-                $this->settings)), 0.05, $this->siteDomain);
+                $this->settings)), $this->siteDomain ?? $this->siteDomain(), 0.05);
     }
 
     /** @return array<string, mixed> */

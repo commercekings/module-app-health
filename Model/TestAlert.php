@@ -20,7 +20,7 @@ class TestAlert
         private readonly Targets $targets,
         private readonly Messages $messages,
         private readonly SenderInterface $sender,
-        private readonly ?SiteDomain $siteDomain = null
+        private readonly SiteDomain $siteDomain
     ) {
     }
 
@@ -30,7 +30,7 @@ class TestAlert
      */
     public function send(): string
     {
-        if ($this->siteDomain !== null && !$this->siteDomain->matches()) {
+        if (!$this->siteDomain->matches()) {
             throw new LocalizedException(__('App health is silent: this looks like a copy of %1 (now %2). Use the'
                 . ' new domain first if this is the shop.', $this->siteDomain->stored(), $this->siteDomain->current()));
         }

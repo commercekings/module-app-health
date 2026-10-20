@@ -16,6 +16,8 @@ use PHPUnit\Framework\TestCase;
 
 class TestAlertTest extends TestCase
 {
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Domain;
+
     private const MESSAGES_NOW = 1792483200;
 
     use Pool;
@@ -36,7 +38,8 @@ class TestAlertTest extends TestCase
             }
             return $answer;
         });
-        return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender, $domain);
+        return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender,
+            $domain ?? $this->siteDomain());
     }
 
     public function testACopyOfTheShopSendsNoTestAlert(): void
