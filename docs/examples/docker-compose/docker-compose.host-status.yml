@@ -44,6 +44,7 @@ services:
       CK_CONTAINER_RESTARTS: "0"
       CK_SOURCE: shop-1
       CK_STATUS_DIR: /status
+      # the shop's Compose project (docker compose ls); a name without containers fails as compose_<name>
       CK_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-shop}
       CK_DISKS: /
     volumes:

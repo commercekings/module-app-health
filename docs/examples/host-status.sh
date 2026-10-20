@@ -11,7 +11,9 @@
 #                    /opt/magento/shared/var/app-health (Docker: the host folder mounted as var/)
 #   CK_SOURCE        this server's name in the alerts (default: the host name), [A-Za-z0-9._-], at most 40
 #   CK_CONTAINERS    containers that must be running, empty for none (default: mariadb php cron rabbitmq opensearch cache session
-#                    varnish nginx); or CK_COMPOSE_PROJECT: every container of that Compose project (its label)
+#                    varnish nginx); or CK_COMPOSE_PROJECT: every container of that Compose project (its label). A list
+#                    Docker does not give fails as "docker_unavailable" (with the reason), a project without
+#                    containers as "compose_<project>", a listed container that is not there as "not found"
 #   CK_CONTAINER_MEM_WARN / CK_CONTAINER_CPU_WARN  a container's memory % of its limit / CPU % (one core = 100) above
 #                    which it warns (default: 85 / 90); down, restarting or unhealthy fails
 #   CK_CONTAINER_RESTARTS  0: no restart counts (they need docker inspect, which a socket proxy must refuse)
@@ -84,15 +86,45 @@ level() {
 # running ones (one docker stats) - through the Docker CLI, so DOCKER_HOST and a read-only socket proxy work: neither
 # needs more than the list and the stats. Restarts need docker inspect, which a proxy must not allow (it has the
 # containers' environment): CK_CONTAINER_RESTARTS=0 there.
-list=$(docker ps -a --format '{{.Names}}	{{.State}}	{{.Status}}' \
-    ${CK_COMPOSE_PROJECT:+--filter "label=com.docker.compose.project=$CK_COMPOSE_PROJECT"} 2>/dev/null || true)
+# Nothing to watch (CK_CONTAINERS empty, no project): no Docker needed. Else a list that cannot be read is a failure
+# of its own - never an empty, healthy-looking report - and so is a project with no container.
+containers=()
+list=""
 if [[ -n "${CK_COMPOSE_PROJECT:-}" ]]; then
-    containers=$(cut -f1 <<< "$list" | sort)
+    watch=1
 else
-    containers=${CK_CONTAINERS-mariadb php cron rabbitmq opensearch cache session varnish nginx}
+    read -r -a containers <<< "${CK_CONTAINERS-mariadb php cron rabbitmq opensearch cache session varnish nginx}"
+    watch=${#containers[@]}
+fi
+if (( watch )); then
+    ps_errors=$(mktemp)
+    trap 'rm -f "$ps_errors"' EXIT
+    if list=$(docker ps -a --format '{{.Names}}	{{.State}}	{{.Status}}' \
+        ${CK_COMPOSE_PROJECT:+--filter "label=com.docker.compose.project=$CK_COMPOSE_PROJECT"} 2>"$ps_errors"); then
+        if [[ -n "${CK_COMPOSE_PROJECT:-}" ]]; then
+            mapfile -t containers < <(cut -f1 <<< "$list" | grep -v '^$' | sort)
+            if (( ! ${#containers[@]} )); then
+                add "$(code "$CK_COMPOSE_PROJECT" compose_)" "Compose project $CK_COMPOSE_PROJECT" fail "" "" \
+                    "no containers for project $CK_COMPOSE_PROJECT; check the name with docker compose ls"
+            fi
+        fi
+    else
+        exit_code=$?
+        # the reason in our words: Docker's own message may name the endpoint
+        case "$(tr 'A-Z' 'a-z' < "$ps_errors")" in
+            *"permission denied"*) reason="permission denied on the Docker socket" ;;
+            *forbidden* | *" 403"*) reason="refused by the socket proxy" ;;
+            *"cannot connect"* | *"connection refused"* | *"no such host"* | *"no such file"* | *timeout*)
+                reason="cannot reach Docker (the socket or DOCKER_HOST)" ;;
+            *) reason="docker ps failed (exit $exit_code)" ;;
+        esac
+        command -v docker > /dev/null || reason="no docker command"
+        add docker_unavailable "Docker" fail "" "" "cannot list the containers: $reason"
+        containers=()
+    fi
 fi
 running=()
-for name in $containers; do
+for name in "${containers[@]}"; do
     [[ "$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' <<< "$list")" == running ]] && running+=("$name")
 done
 stats='{}'
@@ -108,7 +140,7 @@ if (( ${#running[@]} )); then
             mem: (.MemUsage | pair), net: (.NetIO | pair), blk: (.BlockIO | pair)}}) | from_entries' 2>/dev/null \
         || echo '{}')
 fi
-for name in $containers; do
+for name in "${containers[@]}"; do
     code="$(code "$name" container_)"
     # a Compose project's containers are named "<project>-<service>-<n>": the label leaves the project out (the code,
     # unique, keeps it)

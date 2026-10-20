@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# A Docker CLI for HostStatusScriptTest: FAKE_DOCKER says how it answers - "down", "denied", "forbidden", "empty", or
+# the container list itself (name<TAB>state<TAB>status lines)
+case "$FAKE_DOCKER" in
+    down) echo 'Cannot connect to the Docker daemon at tcp://user:secret@docker-proxy:2375. Is it running?' >&2; exit 1 ;;
+    denied) echo 'permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock' >&2
+        exit 1 ;;
+    forbidden) echo 'Error response from daemon: <html><body><h1>403 Forbidden</h1></body></html>' >&2; exit 1 ;;
+esac
+case "$1" in
+    ps) [[ "$FAKE_DOCKER" == empty ]] || printf '%b\n' "$FAKE_DOCKER" ;;
+    stats) shift 3; for name in "$@"; do
+        printf '{"Name":"%s","CPUPerc":"1.50%%","MemPerc":"10.00%%","MemUsage":"100MiB / 1GiB","NetIO":"1kB / 2kB","BlockIO":"0B / 0B"}\n' "$name"
+    done ;;
+    inspect) echo 0 ;;
+esac

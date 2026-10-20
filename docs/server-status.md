@@ -71,7 +71,12 @@ are pinned.
 | Managed hosting without access to the server | not possible – the checks inside Magento and the heartbeat still work |
 
 **Containers.** Each container is a line of its own with its measurements: down, restarting or unhealthy fails (a
-*Problem* at once, *Resolved* when it is back); memory over 85 % of its limit (`CK_CONTAINER_MEM_WARN`) or CPU over 90 %
+*Problem* at once, *Resolved* when it is back), and so does a listed container that is not there (*not found*). When
+the script cannot list the containers at all – Docker not running, no access to its socket, the socket proxy refusing,
+no `docker` command – one line *Docker* fails with the reason instead (`docker_unavailable`), never an empty,
+healthy-looking report; a `CK_COMPOSE_PROJECT` with no container (a wrong project name, e.g. Compose's default
+`shop` in the example sidecar) fails as *Compose project <name>* (`docker compose ls` shows the names). With
+`CK_CONTAINERS=` empty and no project, the script does not use Docker at all; memory over 85 % of its limit (`CK_CONTAINER_MEM_WARN`) or CPU over 90 %
 (`CK_CONTAINER_CPU_WARN`, one core = 100 %) warns (hourly status and summary). *Send status now* and the daily summary
 show them as a table per server, at most 20 rows (with a Compose project, the names leave out its `<project>-` prefix;
 a container without a memory limit shows the host's memory as its limit – on Docker Desktop the VM's – and MEM% of
