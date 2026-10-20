@@ -84,7 +84,8 @@
                 <field id="hourly_status_minutes" translate="label comment" type="text" sortOrder="64" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Hourly status every (minutes)</label>
                     <comment>Default: 60; 15 to 180.</comment>
-                    <validate>required-entry validate-digits validate-greater-than-zero</validate>
+                    <validate>required-entry validate-digits validate-number-range number-range-15-180</validate>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\HourlyMinutes</backend_model>
                     <depends><field id="enabled">1</field><field id="hourly_status">1</field></depends>
                 </field>
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">

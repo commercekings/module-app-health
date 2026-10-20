@@ -78,6 +78,7 @@ Exceptions,Exceptions
 "Heartbeat URL","Heartbeat URL"
 "Hourly status","Hourly status"
 "Hourly status every (minutes)","Hourly status every (minutes)"
+"Hourly status every: whole minutes from %1 to %2.","Hourly status every: whole minutes from %1 to %2."
 "If the deployment is done: bin/magento maintenance:disable. If it stopped halfway, finish it first.","If the deployment is done: bin/magento maintenance:disable. If it stopped halfway, finish it first."
 "In the default store's time zone; a website channel's summary in the website's.","In the default store's time zone; a website channel's summary in the website's."
 Indexers,Indexers
