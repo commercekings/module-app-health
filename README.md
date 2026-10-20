@@ -33,6 +33,28 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
 [module-notification-slack](https://github.com/commercekings/module-notification-slack), or any installed channel.
 
+## Quick start
+
+1. **Install** both modules: `composer require commercekings/module-app-health:^0.1
+   commercekings/module-notification-slack:^0.1`, then `bin/magento setup:upgrade`.
+2. **Create the Slack app:** in Slack, *Create New App > From a manifest* with
+   [module-notification-slack's manifest](https://github.com/commercekings/module-notification-slack/blob/main/docs/slack-app-manifest.json),
+   *Install to Workspace*, copy the *Bot User OAuth Token* (`xoxb-…`).
+3. **Connect Magento to Slack:** *Stores > Configuration > CommerceKings > Notifications > Slack*: paste the token,
+   enter a channel ID (the channel's details, at the bottom: `C0123456789`), save, *Send test message*.
+4. **Invite the bot** to the alerts channel if it is private: `/invite @Magento` in the channel.
+5. **Switch App health on:** *Stores > Configuration > CommerceKings > App health > Alerts*: Enabled *Yes*, Channel
+   `slack`, Recipient the channel ID; save, then *Send test alert* and *Send status now*.
+6. **Keep the queue consumer running:** `commerceKingsNotificationSend` – Magento's cron starts it when
+   `cron_consumers_runner` is on in `app/etc/env.php`. Without it no alert goes out (the admin warns when the hourly
+   status is overdue).
+7. **Add a heartbeat:** a check in an uptime service (e.g. Healthchecks.io, every 5 minutes, with its Slack
+   integration), its ping URL in *Heartbeat URL* – the one thing that tells you when the whole server is down.
+8. **Optional – the server's status:** containers, disks, memory, backups – [a script on the
+   server](#system-status-from-your-server), every minute.
+9. **On staging, lock it off:** `bin/magento config:set commercekings_app_health/general/enabled 0 --lock-env`. A copy
+   of the production database stays silent anyway ([why](#before-going-live)).
+
 ## What is checked
 
 | Check | Alert when (default) | Sent to |
