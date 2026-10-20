@@ -5,9 +5,12 @@ namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
+use CommerceKings\AppHealth\Api\Data\Cause;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\ResourceConnection;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use CommerceKings\AppHealth\Model\Format;
 
 /**
  * Per website: "Disable Email Communications" (system/smtp/disable) on for any of its store views (fail), whatever the
@@ -20,7 +23,8 @@ class EmailDisabled implements WebsiteCheckInterface
 
     public function __construct(
         private readonly ScopeConfigInterface $scopeConfig,
-        private readonly StoreManagerInterface $storeManager
+        private readonly StoreManagerInterface $storeManager,
+        private readonly ResourceConnection $resource
     ) {
     }
 
@@ -54,12 +58,35 @@ class EmailDisabled implements WebsiteCheckInterface
                 (int)$store->getId());
         }
         $results = [];
+        $where = null;
         foreach ($websiteIds as $websiteId) {
-            $results[$websiteId] = $off[$websiteId] === 0 ? CheckResult::ok()
-                : CheckResult::fail(sprintf('emails are disabled in %d of %d store views (Stores > Configuration >'
-                    . ' Advanced > System > Mail Sending Settings)', $off[$websiteId], $views[$websiteId]), [],
-                    'Emails disabled');
+            if ($off[$websiteId] === 0) {
+                $results[$websiteId] = CheckResult::ok();
+                continue;
+            }
+            $where ??= $this->where();
+            $results[$websiteId] = CheckResult::fail(sprintf('emails are disabled in %d of %d store views',
+                $off[$websiteId], $views[$websiteId]), [], 'Emails disabled')
+                ->withCauses([new Cause('email_disabled_setting', 'Disable Email Communications is set to Yes '
+                    . ($where !== '' ? $where : 'in app/etc/env.php or config.php'), (string)__(
+                        'Stores > Configuration > Advanced > System > Mail Sending Settings: set it to No in that'
+                        . ' scope (or remove it from env.php).'
+                    ))]);
         }
         return $results;
+    }
+
+    /** "in the default scope, website 1 and store view 3", from core_config_data (read only when it is on). */
+    private function where(): string
+    {
+        $db = $this->resource->getConnection();
+        $rows = $db->fetchAll($db->select()->from($this->resource->getTableName('core_config_data'),
+            ['scope', 'scope_id'])->where('path = ?', self::PATH)->where('value = ?', '1')->limit(20));
+        $scopes = array_map(fn ($row) => match ((string)$row['scope']) {
+            'websites' => 'website ' . (int)$row['scope_id'],
+            'stores' => 'store view ' . (int)$row['scope_id'],
+            default => 'the default scope',
+        }, $rows);
+        return $scopes === [] ? '' : 'in ' . Format::list(array_values(array_unique($scopes)));
     }
 }

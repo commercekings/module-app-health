@@ -23,6 +23,8 @@ class Messages
     /** Checks with a section of their own in the summary (their counts there, not in "OK all day"). */
     private const LOGS = ['system_log', 'exceptions'];
     private const EMAIL = ['sales_emails', 'email_failing'];
+    /** Causes shown per alert. */
+    private const CAUSES = 4;
     /** The summary's log entries per level: its title and how many. */
     private const LIMITS = ['CRITICAL' => ['Critical', 5], 'ERROR' => ['Errors', 10], 'WARNING' => ['Warnings', 3]];
     /** Checks whose counts the summary leaves out. */
@@ -53,16 +55,27 @@ class Messages
             : $label . ($status === CheckResult::FAIL ? ' failing' : ' warning');
         $lines = [self::EMOJI[$status] . ' *' . ($change === AlertPlan::REPEAT ? 'Still: ' : '') . $title . ' – '
             . $this->where($target) . '*'];
-        $detail = $this->sentence($this->times($target, (string)($check['detail'] ?? '')));
-        if ($detail !== '') {
-            $lines[] = $detail;
+        $causes = array_filter((array)($check['causes'] ?? []), fn ($cause) => is_array($cause) && isset($cause[1]));
+        if ($causes === []) {
+            $detail = $this->sentence($this->times($target, (string)($check['detail'] ?? '')));
+            if ($detail !== '') {
+                $lines[] = $detail;
+            }
+        }
+        $hints = [];
+        foreach (array_slice($causes, 0, self::CAUSES) as $cause) {
+            $lines[] = '> ' . $this->sentence($this->times($target, (string)$cause[1]));
+            if ((string)($cause[2] ?? '') !== '') {
+                $hints[(string)$cause[2]] = true;
+            }
         }
         if ($change === AlertPlan::REPEAT && (int)($check['since'] ?? 0) > 0) {
-            $lines[] = 'Failing since ' . $this->when($target, (int)$check['since']) . '.';
+            $lines[] = ($causes !== [] ? '> ' : '') . 'Failing since '
+                . $this->when($target, (int)$check['since']) . '.';
         }
-        $hint = $this->pool->getHint($code);
-        if ($hint !== '') {
-            $lines[] = 'Check: ' . $hint;
+        $hints = $hints !== [] ? array_slice(array_keys($hints), 0, 2) : [$this->pool->getHint($code)];
+        foreach (array_filter($hints) as $hint) {
+            $lines[] = ($causes !== [] ? '> ' : '') . 'Check: ' . $hint;
         }
         return implode("\n", $lines);
     }

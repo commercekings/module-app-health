@@ -40,6 +40,21 @@ class MessagesTest extends TestCase
             . 'Check: Look at Cron.', $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
     }
 
+    public function testCausesSayWhyAndWhereToLook(): void
+    {
+        $check = ['status' => 'fail', 'title' => 'Cron jobs stuck', 'since' => self::NOW,
+            'detail' => 'indexer_reindex_all_invalid running for 3 h', 'causes' => [
+                ['cron_job_stuck', 'job indexer_reindex_all_invalid running for 3 h (since {t:' . (self::NOW - 10800)
+                    . '})', 'The process may have crashed: restart cron, then clear the stuck job.'],
+                ['cron_group_waiting', '12 other jobs in its group are waiting', ''],
+            ]];
+        $this->assertSame("🔴 *Cron jobs stuck – Main Website Store (all websites)*\n"
+            . "> Job indexer_reindex_all_invalid running for 3 h (since 07:00).\n"
+            . "> 12 other jobs in its group are waiting.\n"
+            . '> Check: The process may have crashed: restart cron, then clear the stuck job.',
+            $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
+    }
+
     public function testAWarningARepeatAndARecovery(): void
     {
         $warn = ['status' => 'warn', 'title' => 'Cache invalidated', 'detail' => 'config invalidated for 2 h',

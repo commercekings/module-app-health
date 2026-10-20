@@ -77,4 +77,13 @@ class NormalizerTest extends TestCase
         $this->assertSame([3, 'ALERT', 'CRITICAL'], [$this->safe('x', [], null, null, 'ALERT')['rank'],
             $this->safe('x', [], null, null, 'ALERT')['level'], Normalizer::group(3)]);
     }
+
+    public function testMailTransportFailuresAreFlagged(): void
+    {
+        $this->assertTrue($this->safe('Transport error while sending email: Connection refused')['mail']);
+        $this->assertTrue($this->safe('Unable to send mail. Please try again later.')['mail']);
+        $this->assertTrue($this->safe('x', ['Magento\\Framework\\Exception\\LocalizedException',
+            'Symfony\\Component\\Mailer\\Exception\\TransportException'])['mail'], 'a previous exception too');
+        $this->assertFalse($this->safe('Unable to save the order')['mail']);
+    }
 }

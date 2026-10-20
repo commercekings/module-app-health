@@ -106,9 +106,9 @@ class TeamMessage
                 fn () => new DeliveryContent([], null, null, $text), useCooldown: false, stoppable: false,
                 type: $type));
         } catch (MessageSentException $e) {
-            // it is out (or may be): never again
-            $this->logger->error(sprintf('CommerceKings_AppHealth: %s for scope %d sent; a later step failed (%s)',
-                $type, $websiteId, get_class($e->getPrevious() ?? $e)));
+            // it is out, or may be (the provider can't tell): never again - a missed alert beats a duplicate
+            $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d may have been sent (%s);'
+                . ' not sent again', $type, $websiteId, get_class($e->getPrevious() ?? $e)));
             $sent();
             $this->markSent($mine);
             return true;

@@ -24,7 +24,7 @@ trait Db
     private function db(array $results = []): AdapterInterface&Stub
     {
         $select = $this->createStub(Select::class);
-        foreach (['from', 'where', 'group', 'limit', 'join', 'order', 'union', 'columns'] as $method) {
+        foreach (['from', 'where', 'group', 'having', 'limit', 'join', 'order', 'union', 'columns'] as $method) {
             $select->method($method)->willReturnCallback(function (...$args) use ($method, $select) {
                 $this->calls[] = [$method, ...$args];
                 return $select;

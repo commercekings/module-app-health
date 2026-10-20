@@ -12,6 +12,8 @@ namespace CommerceKings\AppHealth\Api\Data;
  * codes or class names only. The detail is one line of at most DETAIL_LENGTH characters, and anything that looks like
  * an email address is replaced.
  *
+ * Causes say why (Cause: what was found and where to look), as far as Magento's data shows it.
+ *
  * The title says what is wrong in a few words ("Cron stopped"), the first line of an alert; without one the alert
  * says "<label> failing". Gauges are numbers as they are now (e.g. unsent emails), shown in the daily summary.
  *
@@ -45,10 +47,14 @@ class CheckResult
     /** @var array<string, int> */
     public readonly array $gauges;
 
+    /** @var Cause[] */
+    public readonly array $causes;
+
     /**
      * @param array<string, int> $counts
      * @param string[] $notices
      * @param array<string, int> $gauges
+     * @param Cause[] $causes
      * @throws \InvalidArgumentException for an unknown status, a count key that is not a name or a negative count
      */
     public function __construct(
@@ -57,7 +63,8 @@ class CheckResult
         array $counts = [],
         array $notices = [],
         string $title = '',
-        array $gauges = []
+        array $gauges = [],
+        array $causes = []
     ) {
         if (!in_array($status, [self::OK, self::WARN, self::FAIL], true)) {
             throw new \InvalidArgumentException(sprintf('Unknown check status "%s".', $status));
@@ -73,6 +80,19 @@ class CheckResult
             self::NOTICE_LENGTH), $notices), fn ($notice) => $notice !== ''));
         $this->title = self::clean($title, 60);
         $this->gauges = $gauges;
+        foreach ($causes as $cause) {
+            if (!$cause instanceof Cause) {
+                throw new \InvalidArgumentException('Causes must be Cause objects.');
+            }
+        }
+        $this->causes = array_values($causes);
+    }
+
+    /** @param Cause[] $causes the same result with these causes */
+    public function withCauses(array $causes): self
+    {
+        return new self($this->status, $this->detail, $this->counts, $this->notices, $this->title, $this->gauges,
+            $causes);
     }
 
     /** @param array<string, int> $counts */
@@ -109,7 +129,7 @@ class CheckResult
     }
 
     /** One line, no email addresses, at most $length characters. */
-    private static function clean(string $text, int $length): string
+    public static function clean(string $text, int $length): string
     {
         $text = trim((string)preg_replace('/\s+/u', ' ', $text));
         $text = (string)preg_replace('/[^\s@]+@[^\s@]+/u', '[address]', $text);

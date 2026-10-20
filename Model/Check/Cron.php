@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
+use CommerceKings\AppHealth\Model\Log\Normalizer;
 use CommerceKings\AppHealth\Model\RunState;
 use Magento\Cron\Model\ConfigInterface as CronConfig;
 use Magento\Framework\App\ResourceConnection;
@@ -14,11 +16,16 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
  * Magento cron from cron_schedule: no other job has run for "stale_minutes" (fail), a job has been running for over
- * "running_minutes" (fail), jobs ended with an error since the last run (warn, job codes and counts), or this check
- * itself did not run for GAP_MINUTES up to GAP_MAX_HOURS (warn: cron was down and is back). Counts: runs and errors.
+ * "running_minutes" (fail), jobs ended with an error since the last run (warn, job codes and counts), MISSED or more
+ * jobs missed in the last hour (warn), or this check itself did not run for GAP_MINUTES up to GAP_MAX_HOURS (warn:
+ * cron was down and is back). Counts: runs and errors.
+ *
+ * Causes: nothing scheduled at all (cron not started) or scheduled but not started; a stuck job and how many jobs of
+ * its group wait; a job failing REPEATED times in 2 hours, with its latest error masked; too many missed jobs.
  *
  * Every query filters on the job codes Magento's cron configuration knows, a status and a scheduled_at window, so it
- * uses cron_schedule's (job_code, status, scheduled_at) index. The messages column (error text) is never read.
+ * uses cron_schedule's (job_code, status, scheduled_at) index. The messages column (error text) is read only for a job
+ * failing repeatedly - its latest row, first line, masked.
  */
 class Cron implements CheckInterface
 {
@@ -28,6 +35,12 @@ class Cron implements CheckInterface
     public const GAP_MINUTES = 15;
     /** A longer gap is a module that was off (or cron down for days, which the summary and heartbeat show). */
     public const GAP_MAX_HOURS = 24;
+    /** Nothing scheduled for this long: cron is not started at all. */
+    public const NOT_STARTED_SECONDS = 600;
+    /** Errors of one job in 2 hours that make it "failing repeatedly". */
+    public const REPEATED = 3;
+    /** Missed jobs in an hour that warn. */
+    public const MISSED = 10;
     /** How far back a finished job is looked for after it was scheduled. */
     private const LATE_START_SECONDS = 7200;
 
@@ -36,7 +49,8 @@ class Cron implements CheckInterface
         private readonly CronConfig $cronConfig,
         private readonly Config $config,
         private readonly RunState $state,
-        private readonly DateTime $dateTime
+        private readonly DateTime $dateTime,
+        private readonly Normalizer $normalizer
     ) {
     }
 
@@ -78,33 +92,145 @@ class Cron implements CheckInterface
         }
         $fail = [];
         $warn = [];
+        $causes = [];
         $stuck = false;
         foreach ($this->runningSince($jobs, $now - $runningMinutes * 60, $now) as $job => $startedAt) {
             $fail[] = sprintf('%s running for %s', $job, Format::duration($now - $startedAt));
             $stuck = true;
+            $causes[] = new Cause('cron_job_stuck', sprintf('job %s running for %s (since %s)', $job,
+                Format::duration($now - $startedAt), Format::at($startedAt)),
+                (string)__('The process may have crashed: restart cron, then clear the stuck job (status "running" in'
+                    . ' cron_schedule).'));
+            $waiting = $this->waitingInGroup($job, $now);
+            if ($waiting > 0) {
+                $causes[] = new Cause('cron_group_waiting', sprintf('%d other %s in its group %s waiting', $waiting,
+                    $waiting === 1 ? 'job' : 'jobs', $waiting === 1 ? 'is' : 'are'));
+            }
         }
         $others = array_values(array_diff($jobs, [self::OWN_JOB]));
         $window = ($staleMinutes + 60) * 60;
         $lastActivity = $others === [] ? $now : $this->lastActivity($others, $now - $window);
-        if ($lastActivity === null) {
-            $fail[] = sprintf('no job has run for over %s', Format::duration($window));
-        } elseif ($lastActivity < $now - $staleMinutes * 60) {
-            $fail[] = sprintf('no job has run since %s (%s)', Format::at($lastActivity),
-                Format::duration($now - $lastActivity));
+        if ($lastActivity === null || $lastActivity < $now - $staleMinutes * 60) {
+            $fail[] = $lastActivity === null ? sprintf('no job has run for over %s', Format::duration($window))
+                : sprintf('no job has run since %s (%s)', Format::at($lastActivity),
+                    Format::duration($now - $lastActivity));
+            $causes[] = $this->scheduledSince($others, $now - self::NOT_STARTED_SECONDS) === 0
+                ? new Cause('cron_not_started', sprintf('nothing has been scheduled for %s: cron is not started',
+                    Format::duration(self::NOT_STARTED_SECONDS)), (string)__('Start the cron container, or install'
+                    . ' Magento\'s crontab (bin/magento cron:install).'))
+                : new Cause('cron_not_running', 'jobs are scheduled but none has started', (string)__('cron:run may'
+                    . ' fail as it starts: run bin/magento cron:run by hand and read its output.'));
         }
         if ($errors !== []) {
             $warn[] = sprintf('%d new cron %s (%s)', array_sum($errors), array_sum($errors) === 1 ? 'error' : 'errors',
                 Format::top($errors));
+            foreach ($this->failingRepeatedly(array_keys($errors), $now) as $job => [$times, $message]) {
+                $causes[] = new Cause('cron_job_failing', sprintf('job %s failed %d times in 2 h%s', $job, $times,
+                    $message !== '' ? ': ' . $message : ''), (string)__('Fix the cause of the job\'s error (in'
+                    . ' cron_schedule.messages and var/log), or disable the job.'));
+            }
+        }
+        $missed = $this->missedLastHour($jobs, $now);
+        if ($missed >= self::MISSED) {
+            $warn[] = sprintf('%d jobs missed in the last hour', $missed);
+            $causes[] = new Cause('cron_missed', sprintf('%d jobs missed in the last hour', $missed),
+                (string)__('Cron runs too rarely or a run takes too long: schedule cron every minute and check how'
+                    . ' long bin/magento cron:run takes.'));
         }
         if ($last > 0 && $now - $last > self::GAP_MINUTES * 60) {
             $warn[] = sprintf('this check did not run for %s (cron was down)', Format::duration($now - $last));
         }
         $detail = implode('; ', array_merge($fail, $warn));
-        return match (true) {
-            $fail !== [] => CheckResult::fail($detail, $counts, $stuck ? 'Cron job stuck' : 'Cron stopped'),
-            $warn !== [] => CheckResult::warn($detail, $counts, $errors !== [] ? 'Cron job errors' : 'Cron was down'),
+        $result = match (true) {
+            $fail !== [] => CheckResult::fail($detail, $counts, $stuck ? 'Cron jobs stuck' : 'Cron stopped'),
+            $warn !== [] => CheckResult::warn($detail, $counts, match (true) {
+                $errors !== [] => 'Cron job errors',
+                $missed >= self::MISSED => 'Cron jobs missed',
+                default => 'Cron was down',
+            }),
             default => CheckResult::ok('', $counts),
         };
+        return $causes === [] ? $result : $result->withCauses($causes);
+    }
+
+    /** Pending jobs of the stuck job's group already due (the last day), the group's codes only. */
+    private function waitingInGroup(string $job, int $now): int
+    {
+        $group = [];
+        foreach ($this->cronConfig->getJobs() as $jobs) {
+            if (isset(((array)$jobs)[$job])) {
+                $group = array_map('strval', array_keys((array)$jobs));
+            }
+        }
+        $group = array_values(array_diff($group, [$job]));
+        if ($group === []) {
+            return 0;
+        }
+        $db = $this->resource->getConnection();
+        return (int)$db->fetchOne($db->select()
+            ->from($this->resource->getTableName('cron_schedule'), ['count' => 'COUNT(*)'])
+            ->where('job_code IN (?)', $group)
+            ->where('status = ?', 'pending')
+            ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $now - 86400))
+            ->where('scheduled_at < ?', gmdate('Y-m-d H:i:s', $now)));
+    }
+
+    /** @param string[] $jobs rows scheduled since $since, any status (cron generates them ahead) */
+    private function scheduledSince(array $jobs, int $since): int
+    {
+        if ($jobs === []) {
+            return 0;
+        }
+        $db = $this->resource->getConnection();
+        return (int)$db->fetchOne($db->select()
+            ->from($this->resource->getTableName('cron_schedule'), ['count' => 'COUNT(*)'])
+            ->where('job_code IN (?)', $jobs)
+            ->where('status IN (?)', ['pending', 'running', 'success', 'missed', 'error'])
+            ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $since)));
+    }
+
+    /**
+     * Jobs among $jobs with REPEATED errors or more in the last 2 hours, at most 2, with their latest error masked
+     * (the messages column, read for these rows only).
+     *
+     * @param string[] $jobs
+     * @return array<string, array{0: int, 1: string}>
+     */
+    private function failingRepeatedly(array $jobs, int $now): array
+    {
+        $db = $this->resource->getConnection();
+        $table = $this->resource->getTableName('cron_schedule');
+        $select = $db->select()->from($table, ['job_code', 'count' => 'COUNT(*)'])
+            ->where('job_code IN (?)', $jobs)
+            ->where('status = ?', 'error')
+            ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $now - 7200))
+            ->group('job_code')
+            ->limit(2);
+        $select->having('COUNT(*) >= ?', self::REPEATED);
+        $times = $db->fetchPairs($select);
+        $failing = [];
+        foreach ($times as $job => $count) {
+            $message = (string)$db->fetchOne($db->select()->from($table, ['messages'])
+                ->where('job_code = ?', $job)
+                ->where('status = ?', 'error')
+                ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $now - 7200))
+                ->order('scheduled_at DESC')
+                ->limit(1));
+            $firstLine = (string)strtok($message, "\n");
+            $failing[(string)$job] = [(int)$count, $firstLine !== '' ? $this->normalizer->mask($firstLine) : ''];
+        }
+        return $failing;
+    }
+
+    /** @param string[] $jobs */
+    private function missedLastHour(array $jobs, int $now): int
+    {
+        $db = $this->resource->getConnection();
+        return (int)$db->fetchOne($db->select()
+            ->from($this->resource->getTableName('cron_schedule'), ['count' => 'COUNT(*)'])
+            ->where('job_code IN (?)', $jobs)
+            ->where('status = ?', 'missed')
+            ->where('scheduled_at >= ?', gmdate('Y-m-d H:i:s', $now - 3600)));
     }
 
     /** @return string[] */

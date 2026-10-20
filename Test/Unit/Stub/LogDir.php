@@ -23,6 +23,8 @@ trait LogDir
 {
     private string $logDir = '';
     private Filesystem $filesystem;
+    /** The reader's clock; the default Clock when unset. */
+    private ?\Magento\Framework\Stdlib\DateTime\DateTime $logClock = null;
 
     private function logFilesystem(): Filesystem
     {
@@ -59,7 +61,8 @@ trait LogDir
         ], $extra));
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getRoot')->willReturn('/var/www/html');
-        return new LogReader($pool, new Normalizer(), $state, $config, $directoryList);
+        return new LogReader($pool, new Normalizer(), $state, $config, $directoryList,
+            $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock());
     }
 
     private function removeLogDir(): void

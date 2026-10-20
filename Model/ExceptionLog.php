@@ -12,8 +12,6 @@ use CommerceKings\AppHealth\Model\Log\LogReader;
 class ExceptionLog
 {
     public const CHECK = 'exceptions';
-    /** Mail transport failures: Magento's MailException, Symfony Mailer and Laminas Mail exceptions. */
-    private const MAIL_CLASS = '/(^|\\\\)MailException$|^Symfony\\\\Component\\\\Mailer\\\\|^Laminas\\\\Mail\\\\/';
 
     public function __construct(
         private readonly LogReader $reader
@@ -33,12 +31,7 @@ class ExceptionLog
         foreach ($read['entries'] as $entry) {
             $first = $entry['classes'][0] ?? 'other';
             $result['classes'][$first] = ($result['classes'][$first] ?? 0) + 1;
-            foreach ($entry['classes'] as $class) {
-                if (preg_match(self::MAIL_CLASS, $class)) {
-                    $result['mail']++;
-                    break;
-                }
-            }
+            $result['mail'] += (int)$entry['mail'];
         }
         return $result;
     }

@@ -22,11 +22,15 @@ class Normalizer
     /** WARNING = 1, ERROR = 2, CRITICAL and above = 3. */
     public const RANKS = ['WARNING' => 1, 'ERROR' => 2, 'CRITICAL' => 3, 'ALERT' => 3, 'EMERGENCY' => 3];
     private const CLASS_NAME = '/^[A-Za-z_][A-Za-z0-9_\\\\]{0,119}$/D';
+    /** Mail transport failures: Magento's MailException, Symfony Mailer and Laminas Mail exceptions. */
+    private const MAIL_CLASS = '/(^|\\\\)MailException$|^Symfony\\\\Component\\\\Mailer\\\\|^Laminas\\\\Mail\\\\/';
+    /** ... and Magento's own messages for them (system.log: the mail transport and the sales email senders). */
+    private const MAIL_MESSAGE = '/Transport error while sending email|Unable to send mail|Transport error: Unable/i';
 
     /**
      * @return array{rank: int, level: string, channel: string, classes: string[], location: ?string,
-     *     fingerprint: string, label: string, message: ?string, time: ?int}|null null below WARNING or for an unknown
-     *     level
+     *     fingerprint: string, label: string, message: ?string, time: ?int, mail: bool}|null null below WARNING or
+     *     for an unknown level; mail: a mail transport failure
      */
     public function safe(LogEntry $entry, string $root, bool $withMessage): ?array
     {
@@ -50,6 +54,8 @@ class Normalizer
             'label' => $class !== '' ? $class : $this->label($normalized),
             'message' => $withMessage ? $this->mask($entry->message) : null,
             'time' => $entry->time,
+            'mail' => preg_match(self::MAIL_MESSAGE, $entry->message) === 1
+                || array_filter($classes, fn ($class) => preg_match(self::MAIL_CLASS, $class)) !== [],
         ];
     }
 

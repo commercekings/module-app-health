@@ -101,6 +101,7 @@ class Runner
                 $unchanged = $last !== null && ($last['status'] ?? null) === $result->status;
                 $checks[$scope][$code] = ['status' => $result->status, 'detail' => $result->detail,
                     'title' => $result->title, 'gauges' => $result->gauges,
+                    'causes' => array_map(fn ($cause) => $cause->toArray(), $result->causes),
                     'since' => $unchanged ? (int)$last['since'] : $now, 'checked_at' => $now, 'ms' => $ms];
                 if ($result->notices !== []) {
                     $notices[$scope][$code] = $result->notices;

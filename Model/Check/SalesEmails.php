@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model\Check;
 
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Select;
 use Magento\Framework\DB\Sql\Expression;
@@ -30,7 +32,8 @@ class SalesEmails implements WebsiteCheckInterface
         private readonly ResourceConnection $resource,
         private readonly StoreManagerInterface $storeManager,
         private readonly Config $config,
-        private readonly DateTime $dateTime
+        private readonly DateTime $dateTime,
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
     }
 
@@ -58,12 +61,16 @@ class SalesEmails implements WebsiteCheckInterface
             $websiteOf[(int)$store->getId()] = (int)$store->getWebsiteId();
         }
         $unsent = array_fill_keys($websiteIds, []);
+        $oldest = [];
         foreach ($this->unsent($minutes) as $row) {
             $websiteId = $websiteOf[(int)$row['store_id']] ?? null;
             if ($websiteId !== null && isset($unsent[$websiteId])) {
                 $unsent[$websiteId][$row['entity']] = ($unsent[$websiteId][$row['entity']] ?? 0) + (int)$row['count'];
+                $time = (int)strtotime($row['oldest'] . ' UTC');
+                $oldest[$websiteId] = min($oldest[$websiteId] ?? $time, $time);
             }
         }
+        $async = $this->scopeConfig->isSetFlag('sales_email/general/async_sending');
         $results = [];
         foreach ($unsent as $websiteId => $counts) {
             $total = array_sum($counts);
@@ -71,12 +78,17 @@ class SalesEmails implements WebsiteCheckInterface
                 ? new CheckResult(CheckResult::OK, '', [], [], '', ['unsent' => $total])
                 : new CheckResult(CheckResult::FAIL, sprintf('%d sales emails not sent after %s (%s)', $total,
                     Format::duration($minutes * 60), Format::top($counts)), [], [], 'Sales emails not sent',
-                    ['unsent' => $total]);
+                    ['unsent' => $total], [new Cause('sales_emails_unsent', sprintf('%d unsent (%s), the oldest'
+                    . ' from %s', $total, Format::top($counts), Format::at($oldest[$websiteId] ?? 0)), $async
+                    ? (string)__('Asynchronous sending is on: is the sales_send_order_emails cron running? Then the'
+                        . ' mail server (see Sending).')
+                    : (string)__('They were refused when the order was placed: the mail server or provider (see'
+                        . ' Sending, and var/log/system.log).'))]);
         }
         return $results;
     }
 
-    /** @return array<int, array<string, mixed>> entity, store_id, count */
+    /** @return array<int, array<string, mixed>> entity, store_id, count, oldest */
     private function unsent(int $minutes): array
     {
         $db = $this->resource->getConnection();
@@ -85,7 +97,7 @@ class SalesEmails implements WebsiteCheckInterface
         $to = gmdate('Y-m-d H:i:s', $now - $minutes * 60);
         $parts = [];
         foreach (self::TABLES as $entity => $table) {
-            $rows = $db->select()->from($this->resource->getTableName($table), ['store_id'])
+            $rows = $db->select()->from($this->resource->getTableName($table), ['store_id', 'created_at'])
                 ->where('created_at >= ?', $from)->where('created_at < ?', $to)
                 // COALESCE keeps the send_email and email_sent indexes out: an email_sent range has no time bound
                 // (old unsent rows); async sending counts failed attempts up from a negative number, null = never tried
@@ -93,7 +105,8 @@ class SalesEmails implements WebsiteCheckInterface
                 ->where('COALESCE(email_sent, 0) <= 0')
                 ->limit(self::CAP);
             $parts[] = $db->select()->from(['t' => $rows], ['entity' => new Expression($db->quote($entity)),
-                'store_id', 'count' => new Expression('COUNT(*)')])->group('store_id');
+                'store_id', 'count' => new Expression('COUNT(*)'), 'oldest' => new Expression('MIN(created_at)')])
+                ->group('store_id');
         }
         $union = $db->select();
         $union->union($parts, Select::SQL_UNION_ALL);

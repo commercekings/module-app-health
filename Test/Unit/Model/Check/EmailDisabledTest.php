@@ -12,6 +12,8 @@ use PHPUnit\Framework\TestCase;
 
 class EmailDisabledTest extends TestCase
 {
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Db;
+
     /**
      * Store views 1 and 2 on website 1, 3 on website 2.
      *
@@ -34,7 +36,9 @@ class EmailDisabledTest extends TestCase
         }
         $manager = $this->createStub(StoreManagerInterface::class);
         $manager->method('getStores')->willReturn($stores);
-        return (new EmailDisabled($config, $manager))->runForWebsites($websiteIds);
+        $db = $this->db(['fetchAll' => [[['scope' => 'stores', 'scope_id' => '2'], ['scope' => 'websites',
+            'scope_id' => '1']]]]);
+        return (new EmailDisabled($config, $manager, $this->resource($db)))->runForWebsites($websiteIds);
     }
 
     public function testEachWebsiteForItsOwnStoreViews(): void
@@ -43,7 +47,10 @@ class EmailDisabledTest extends TestCase
         $results = $this->check([2]);
         $this->assertSame([1, 2], array_keys($results));
         $this->assertSame(CheckResult::FAIL, $results[1]->status);
-        $this->assertStringStartsWith('emails are disabled in 1 of 2 store views', $results[1]->detail);
+        $this->assertSame('emails are disabled in 1 of 2 store views', $results[1]->detail);
+        $this->assertSame('email_disabled_setting', $results[1]->causes[0]->code);
+        $this->assertSame('Disable Email Communications is set to Yes in store view 2 and website 1',
+            $results[1]->causes[0]->detail, 'which scopes, from core_config_data');
         $this->assertSame(CheckResult::OK, $results[2]->status, 'another website\'s setting is not this one\'s');
         $this->assertSame([2], array_keys($this->check([3], [2])), 'only the websites asked for');
     }

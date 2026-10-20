@@ -103,4 +103,25 @@ class ExceptionLogTest extends TestCase
         $this->assertSame(['Vendor\\Payment\\DeclinedException' => 1, 'other' => 1], $entries['classes']);
         $this->assertStringNotContainsString('jane', json_encode($this->store->rows));
     }
+
+    public function testALogCutBackInPlaceDoesNotCountItsOldLinesAgain(): void
+    {
+        $this->logClock = new \CommerceKings\AppHealth\Test\Unit\Stub\Clock(1792483260); // 08:01
+        $this->log = new ExceptionLog($this->logReader($this->state,
+            $this->config(['exceptions/max_read_kb' => '64'])));
+        $this->appendLog(str_repeat(self::entry('A\\Old', 'x'), 3));
+        $this->read();
+        $this->appendLog(self::entry('B\\New', 'y'));
+        $this->assertSame(1, $this->read()['entries']);
+        // copytruncate-style: cut back in place, the same inode, still holding old lines - plus one new
+        $file = $this->logDir . '/exception.log';
+        $handle = fopen($file, 'r+');
+        ftruncate($handle, 0);
+        fclose($handle);
+        $this->logClock->now += 300;
+        $this->appendLog(str_replace('2026-10-20T08:01:02', '2026-10-20T06:00:00', str_repeat(self::entry('A\\Old',
+            'x'), 2)) . str_replace('08:01:02', '08:05:30', self::entry('C\\Newer', 'z')));
+        $entries = $this->read();
+        $this->assertSame(['C\\Newer' => 1], $entries['classes'], 'the 06:00 lines are old, not a spike');
+    }
 }

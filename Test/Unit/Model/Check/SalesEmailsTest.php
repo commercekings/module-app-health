@@ -31,21 +31,29 @@ class SalesEmailsTest extends TestCase
         }
         $manager = $this->createStub(StoreManagerInterface::class);
         $manager->method('getStores')->willReturn($stores);
+        $scopeConfig = $this->createStub(\Magento\Framework\App\Config\ScopeConfigInterface::class);
+        $scopeConfig->method('isSetFlag')->willReturn(true);
         return (new SalesEmails($this->resource($this->db(['fetchAll' => [$rows]])), $manager,
             $this->config(['sales_emails/unsent_count' => '3', 'sales_emails/unsent_minutes' => '30']),
-            new Clock(self::NOW)))->runForWebsites([1, 2]);
+            new Clock(self::NOW), $scopeConfig))->runForWebsites([1, 2]);
     }
 
     public function testUnsentEmailsPerWebsite(): void
     {
+        $at = fn (int $ago) => gmdate('Y-m-d H:i:s', self::NOW - $ago);
         $results = $this->check([
-            ['entity' => 'order', 'store_id' => '1', 'count' => '2'],
-            ['entity' => 'order', 'store_id' => '2', 'count' => '1'],
-            ['entity' => 'invoice', 'store_id' => '2', 'count' => '1'],
-            ['entity' => 'order', 'store_id' => '3', 'count' => '2'],
+            ['entity' => 'order', 'store_id' => '1', 'count' => '2', 'oldest' => $at(3600)],
+            ['entity' => 'order', 'store_id' => '2', 'count' => '1', 'oldest' => $at(5400)],
+            ['entity' => 'invoice', 'store_id' => '2', 'count' => '1', 'oldest' => $at(2000)],
+            ['entity' => 'order', 'store_id' => '3', 'count' => '2', 'oldest' => $at(9000)],
         ]);
         $this->assertSame(CheckResult::FAIL, $results[1]->status);
         $this->assertSame('4 sales emails not sent after 30 min (order x3, invoice x1)', $results[1]->detail);
+        $this->assertSame('4 unsent (order x3, invoice x1), the oldest from {t:' . (self::NOW - 5400) . '}',
+            $results[1]->causes[0]->detail);
+        $this->assertStringContainsString('sales_send_order_emails cron', $results[1]->causes[0]->hint,
+            'asynchronous sending');
+        $this->assertSame(['unsent' => 4], $results[1]->gauges);
         $this->assertSame(CheckResult::OK, $results[2]->status, 'under the limit on website 2');
     }
 

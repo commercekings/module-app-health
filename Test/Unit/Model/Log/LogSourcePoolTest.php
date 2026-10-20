@@ -85,7 +85,7 @@ class LogSourcePoolTest extends TestCase
         $this->assertMatchesRegularExpression('/^🆕 🟠 Sync of order \*\*\* for \*\*\* failed ×1 · \{t:\d+\}'
             . ' · app\/code\/Erp\/Sync\/Model\/Push.php:31 · #[0-9a-f]{8}$/u', $result->notices[0]);
         $this->assertStringNotContainsString('jane', json_encode($result));
-        $this->assertSame(['line' => 2], $state->get('cursor:log:erp_feed'), 'its cursor is kept for it');
+        $this->assertSame(2, $state->get('cursor:log:erp_feed')['line'], 'its cursor is kept for it');
     }
 
     public function testInvalidItemsAreRefused(): void
