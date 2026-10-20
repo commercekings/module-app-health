@@ -58,24 +58,39 @@ class TeamMessage
     {
         $db = $this->resource->getConnection();
         $this->deliveryState->ensure($type, $websiteId);
+        // a claim not finished (odd version) past its lease: queued again, so a worker comes and takes it over
         $where = $this->deliveryState->keyCondition($type, $websiteId) + [
-            '(queued_at IS NULL OR queued_at < NOW() - INTERVAL ' . self::STUCK_MINUTES . ' MINUTE)',
+            '(queued_at IS NULL OR queued_at < NOW() - INTERVAL ' . self::STUCK_MINUTES . ' MINUTE'
+                . ' OR (delivery_version % 2 = 1 AND updated_at < NOW() - INTERVAL ' . self::LEASE_MINUTES
+                . ' MINUTE))',
             '(skip_until IS NULL OR skip_until <= NOW())',
         ];
         if ($condition !== '') {
             $where[] = $condition;
         }
-        if (!$db->update($this->deliveryState->getTableName(), ['queued_at' => new Expression('NOW()')], $where)) {
+        if (!$db->update($this->deliveryState->getTableName(), ['queued_at' => new Expression('NOW()')]
+            + self::keepClaimTime(), $where)) {
             return false;
         }
         try {
             $this->queue->publish($type, (string)$websiteId);
         } catch (\Throwable $error) {
-            $db->update($this->deliveryState->getTableName(), ['queued_at' => null],
+            $db->update($this->deliveryState->getTableName(), ['queued_at' => null] + self::keepClaimTime(),
                 $this->deliveryState->keyCondition($type, $websiteId));
             throw $error;
         }
         return true;
+    }
+
+    /**
+     * An odd row's updated_at is its claim's time (the lease): a mark set or cleared must not move it (the column is
+     * ON UPDATE CURRENT_TIMESTAMP, unless the statement sets it).
+     *
+     * @return array<string, Expression>
+     */
+    private static function keepClaimTime(): array
+    {
+        return ['updated_at' => new Expression('IF(delivery_version % 2 = 1, updated_at, NOW())')];
     }
 
     /**
@@ -101,12 +116,16 @@ class TeamMessage
         $version = (int)($row['delivery_version'] ?? 0);
         if ($version % 2 === 1) {
             // claimed and not finished: another worker is sending it - or stopped, maybe after the provider took it
-            return $this->takeOver($type, $websiteId, $version, $key, $compose);
+            if (!$this->takeOver($type, $websiteId, $version, $key)) {
+                return false;
+            }
+            $version++; // even again, ours: what is due now goes out as usual
         }
         $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
         $composed = $target !== null ? $compose($target, $row) : null;
         if ($composed === null) {
-            $this->release($type, $websiteId, $queuedAt, $target === null);
+            // nothing to send (any more), or nowhere to: its failures are no reason to hold the heartbeat
+            $this->release($type, $websiteId, $queuedAt, true);
             return false;
         }
         [$text, $sent] = $composed;
@@ -170,14 +189,14 @@ class TeamMessage
     }
 
     /**
-     * A claim not finished: within LEASE_MINUTES another worker is sending it - nothing to do; after, it stopped
-     * (maybe after the provider took the message): one worker takes it over in one statement and records what is
-     * due as told, without posting - a missed alert beats a duplicate.
+     * A claim not finished: within LEASE_MINUTES (its updated_at) another worker is sending it - nothing to do;
+     * after, it stopped, maybe after the provider took the message: one worker takes it over in one statement and
+     * delivers what is due now - maybe a second time, but never a newer message recorded as told without a post.
      *
      * @param array<int|string, mixed> $key
-     * @param \Closure(Target, array<string, mixed>): ?array{0: string, 1: \Closure(): void, 2?: bool} $compose
+     * @return bool whether this worker took it over (the version is $version + 1, even)
      */
-    private function takeOver(string $type, int $websiteId, int $version, array $key, \Closure $compose): bool
+    private function takeOver(string $type, int $websiteId, int $version, array $key): bool
     {
         $taken = $this->resource->getConnection()->update($this->deliveryState->getTableName(),
             ['delivery_version' => $version + 1], $key + ['delivery_version = ?' => $version,
@@ -185,19 +204,9 @@ class TeamMessage
         if (!$taken) {
             return false;
         }
-        $row = $this->deliveryState->load($type, $websiteId);
-        $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
-        $composed = $target !== null ? $compose($target, $row) : null;
-        $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d may have been sent (a delivery'
-            . ' claimed over %d minutes ago never finished); recorded, not sent again', $type, $websiteId,
+        $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d: a delivery claimed over %d minutes'
+            . ' ago never finished (it may have been sent); sending what is due now', $type, $websiteId,
             self::LEASE_MINUTES));
-        $mine = $key + ['delivery_version = ?' => $version + 1];
-        if ($composed === null) {
-            $this->resource->getConnection()->update($this->deliveryState->getTableName(), ['queued_at' => null],
-                $mine);
-            return false;
-        }
-        $this->recordSent($composed[1], $mine, []);
         return true;
     }
 
@@ -272,7 +281,7 @@ class TeamMessage
     {
         if ($queuedAt !== null || $forget) {
             $this->resource->getConnection()->update($this->deliveryState->getTableName(), ['queued_at' => null]
-                + ($forget ? ['failed_sends' => 0, 'skip_until' => null] : []),
+                + ($forget ? ['failed_sends' => 0, 'skip_until' => null] : []) + self::keepClaimTime(),
                 $this->deliveryState->keyCondition($type, $websiteId)
                 + ($queuedAt !== null ? ['queued_at = ?' => $queuedAt] : []));
         }

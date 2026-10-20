@@ -187,16 +187,30 @@ class GeneratedSqlTest extends TestCase
         $row = $deliveryState->load('app_health_alert', 0);
         $this->assertSame([6, null], [(int)$row['delivery_version'], $row['queued_at']], 'the claim ended');
 
-        // a worker that claimed and stopped (maybe after Slack took it): within the lease nothing; after, told
-        $this->db->update($table, ['delivery_version' => 7, 'queued_at' => gmdate('Y-m-d H:i:s', $this->now),
-            'updated_at' => gmdate('Y-m-d H:i:s', $this->now)], $key);
+        // a worker that claimed and stopped: within its lease nothing, and nothing requeues it
+        $this->db->update($table, ['delivery_version' => 7, 'queued_at' => gmdate('Y-m-d H:i:s', $this->now)], $key);
         $this->assertFalse($teamMessage->deliver('app_health_alert', '0', $compose), 'another worker may be sending');
-        $this->db->update($table, ['updated_at' => gmdate('Y-m-d H:i:s', $this->now - 1200)], $key);
-        $this->assertTrue($teamMessage->deliver('app_health_alert', '0', $compose));
-        $this->assertSame([1, 2], [$posts, $told], 'maybe sent: recorded as told, not posted again');
+        $this->assertFalse($teamMessage->queue('app_health_alert', 0), 'in flight, within its lease');
+        // the claim made 20 min ago (the only time set by hand: a lease can't be waited out in a test), its mark
+        // 70 min ago: queue() takes it over - and keeps the claim's time, so the take-over can't be put off for ever
+        $this->db->update($table, ['updated_at' => gmdate('Y-m-d H:i:s', $this->now - 1200),
+            'queued_at' => gmdate('Y-m-d H:i:s', $this->now - 4200)], $key);
+        $this->assertTrue($teamMessage->queue('app_health_alert', 0), 'stuck: queued again');
         $row = $deliveryState->load('app_health_alert', 0);
-        $this->assertSame([8, null], [(int)$row['delivery_version'], $row['queued_at']]);
+        $this->assertSame(gmdate('Y-m-d H:i:s', $this->now - 1200), $row['updated_at'], 'the claim\'s time kept');
+        $this->assertTrue($teamMessage->deliver('app_health_alert', '0', $compose));
+        $this->assertSame([2, 2], [$posts, $told], 'taken over: what is due now is sent (maybe a second time - never'
+            . ' a newer message told without being posted)');
+        $row = $deliveryState->load('app_health_alert', 0);
+        $this->assertSame([10, null], [(int)$row['delivery_version'], $row['queued_at']]);
         $this->assertNotNull($row['sent_at']);
+
+        // a claim older than its lease, its mark fresh: queue() lets a worker take it over without the hour's wait
+        $this->db->update($table, ['delivery_version' => 11, 'queued_at' => gmdate('Y-m-d H:i:s', $this->now - 60),
+            'updated_at' => gmdate('Y-m-d H:i:s', $this->now - 1200)], $key);
+        $this->assertTrue($teamMessage->queue('app_health_alert', 0));
+        $this->assertTrue($teamMessage->deliver('app_health_alert', '0', $compose));
+        $this->assertSame(3, $posts);
     }
 
     public function testEmailFailingSeesASendSinceInOneUnion(): void

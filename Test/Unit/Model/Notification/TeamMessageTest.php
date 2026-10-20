@@ -117,9 +117,28 @@ class TeamMessageTest extends TestCase
         $this->assertFalse($this->teamMessage(self::ROW, SenderInterface::SENT, null, [], null, $copy)
             ->deliver('app_health_alert', '1', $this->compose()));
         $this->assertSame([[], 0], [$this->sent, $this->recorded], 'nothing sent from a copy, nothing recorded');
-        $this->assertSame([['queued_at' => null]], $this->updateData(), 'its mark cleared');
+        $this->assertSame([['queued_at' => null, 'updated_at' => 'IF(delivery_version % 2 = 1, updated_at, NOW())']],
+            $this->updateData(), 'its mark cleared');
         $this->assertStringContainsString('dropped: this looks like a copy of shop.example.com',
             implode("\n", $this->logs));
+    }
+
+    public function testQueueKeepsAClaimsTimeAndTakesOverOneOlderThanItsLease(): void
+    {
+        $this->teamMessage(null)->queue('app_health_alert', 1);
+        [, $data, $where] = $this->updates[0];
+        $this->assertSame('IF(delivery_version % 2 = 1, updated_at, NOW())', (string)$data['updated_at'],
+            'an odd row\'s updated_at is its claim\'s time: a requeue must not put its take-over off');
+        $this->assertContains('(queued_at IS NULL OR queued_at < NOW() - INTERVAL 60 MINUTE OR (delivery_version % 2'
+            . ' = 1 AND updated_at < NOW() - INTERVAL 10 MINUTE))', $where, 'a claim past its lease: a worker comes');
+    }
+
+    public function testNothingLeftToSendForgetsTheFailures(): void
+    {
+        $this->teamMessage(['failed_sends' => '3'] + self::ROW)->deliver('app_health_alert', '1', fn () => null);
+        $this->assertSame([['queued_at' => null, 'failed_sends' => 0, 'skip_until' => null,
+            'updated_at' => 'IF(delivery_version % 2 = 1, updated_at, NOW())']], $this->updateData(),
+            'its news gone (resolved before the channel was fixed): no reason to hold the heartbeat');
     }
 
     public function testQueueMarksFreeStateInOneStatementThenPublishes(): void
@@ -128,7 +147,8 @@ class TeamMessageTest extends TestCase
         $this->assertSame(['app_health_alert|1'], $this->published);
         [, $data, $where] = $this->updates[0];
         $this->assertSame('NOW()', (string)$data['queued_at']);
-        $this->assertContains('(queued_at IS NULL OR queued_at < NOW() - INTERVAL 60 MINUTE)', $where);
+        $this->assertContains('(queued_at IS NULL OR queued_at < NOW() - INTERVAL 60 MINUTE OR (delivery_version % 2'
+            . ' = 1 AND updated_at < NOW() - INTERVAL 10 MINUTE))', $where);
         $this->assertContains('(skip_until IS NULL OR skip_until <= NOW())', $where, 'a retry waits its turn');
     }
 
@@ -199,17 +219,16 @@ class TeamMessageTest extends TestCase
         $this->assertContains('updated_at < NOW() - INTERVAL 10 MINUTE', $this->updates[0][2], 'within its lease');
     }
 
-    public function testAClaimNeverFinishedIsMaybeSentRecordedNotPostedAgain(): void
+    public function testAClaimNeverFinishedIsTakenOverAndWhatIsDueSent(): void
     {
         $this->assertTrue($this->teamMessage(['delivery_version' => 5] + self::ROW)
             ->deliver('app_health_alert', '1', $this->compose()));
-        $this->assertSame([[], 1], [$this->sent, $this->recorded], 'a worker stopped after claiming (maybe after'
-            . ' the provider took it): recorded as told, not posted again - a missed alert beats a duplicate');
         $this->assertSame(['delivery_version' => 6], $this->updateData()[0], 'taken over in one statement');
-        $this->assertSame('NOW()', $this->updateData()[1]['sent_at']);
-        $this->assertSame(6, $this->updates[1][2]['delivery_version = ?']);
-        $this->assertStringContainsString('warning: CommerceKings_AppHealth: app_health_alert for scope 1 may have'
-            . ' been sent (a delivery claimed', implode("\n", $this->logs));
+        $this->assertContains('updated_at < NOW() - INTERVAL 10 MINUTE', $this->updates[0][2], 'after its lease');
+        $this->assertSame([1, 1], [count($this->sent), $this->recorded], 'what is due now, sent and recorded -'
+            . ' maybe a second time (the stopped worker may have posted it), never a newer message told unposted');
+        $this->assertStringContainsString('warning: CommerceKings_AppHealth: app_health_alert for scope 1: a'
+            . ' delivery claimed over 10 minutes ago never finished', implode("\n", $this->logs));
     }
 
     public function testEveryOutcomeEndsTheClaim(): void
@@ -239,8 +258,9 @@ class TeamMessageTest extends TestCase
         $this->teamMessage(self::ROW, target: new Target(-1, 0, '', '', '', ''))
             ->deliver('app_health_alert', '1', $this->compose());
         $this->assertSame([], $this->sent);
-        $this->assertSame([['queued_at' => null], ['queued_at' => null, 'failed_sends' => 0, 'skip_until' => null]],
-            $this->updateData(), 'no target any more: its failures forgotten (they no longer hold the heartbeat)');
+        $this->assertSame(array_fill(0, 2, ['queued_at' => null, 'failed_sends' => 0, 'skip_until' => null,
+            'updated_at' => 'IF(delivery_version % 2 = 1, updated_at, NOW())']), $this->updateData(),
+            'nothing to send, or no target any more: its failures forgotten (they no longer hold the heartbeat)');
         $this->assertSame('2026-10-20 08:00:00', $this->updates[0][2]['queued_at = ?'], 'only the mark it read');
     }
 
