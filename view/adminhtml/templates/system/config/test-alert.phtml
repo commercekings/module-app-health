@@ -2,7 +2,7 @@
 /** @var \CommerceKings\AppHealth\Block\Adminhtml\System\Config\TestAlert $block */
 /** @var \Magento\Framework\Escaper $escaper */
 $config = ['CommerceKings_AppHealth/js/test-alert' => ['url' => $block->getSendUrl(),
-    'website' => $block->getWebsiteId()]];
+    'failed' => (string)__('The test alert could not be sent. Try again.')]];
 ?>
 <div data-mage-init="<?= $escaper->escapeHtmlAttr(json_encode($config)) ?>">
     <button type="button" class="action-default" data-role="send">

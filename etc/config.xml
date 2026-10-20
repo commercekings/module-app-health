@@ -5,6 +5,7 @@
             <general>
                 <enabled>0</enabled>
                 <channel>slack</channel>
+                <shared_to_websites>0</shared_to_websites>
                 <summary>1</summary>
                 <summary_time>08,00,00</summary_time>
                 <repeat_hours>6</repeat_hours>

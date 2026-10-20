@@ -2,39 +2,52 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
     <system>
-        <section id="commercekings_app_health" translate="label" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="0">
+        <section id="commercekings_app_health" translate="label" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
             <label>App health</label>
             <tab>commercekings</tab>
             <resource>CommerceKings_AppHealth::config</resource>
-            <group id="general" translate="label comment" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+            <group id="general" translate="label comment" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Alerts</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Checks Magento every 5 minutes and tells the team on a change: a problem, then "recovered". The checks for all websites alert once, to the default scope's recipient; each website's own checks and its daily summary go to the website's recipient. Sent through Notification's queue (consumer commerceKingsNotificationSend).</comment>
-                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                <comment>Checks Magento every 5 minutes and tells you on a change: a problem, then "Resolved". An hourly status proves that alerts can go out.</comment>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>Default scope: the alerts of the checks for all websites (cron, indexers, caches, maintenance mode, exceptions, queues, sending). Website scope: that website's own alerts (email settings, sales emails) and its daily summary.</comment>
+                    <comment>On: the checks run and messages are sent. All App health settings are global (default scope).</comment>
                 </field>
-                <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                <field id="channel" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Channel</label>
-                    <comment>A Notification channel code: "slack" with commercekings/module-notification-slack, or any installed channel.</comment>
+                    <comment>A Notification channel, e.g. "slack" (with module-notification-slack).</comment>
                     <validate>required-entry</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
-                <field id="recipient" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                <field id="recipient" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Recipient</label>
-                    <comment>The address on the channel, e.g. a Slack channel ID (in Slack: the channel's details, at the bottom; C0123456789). Default scope: gets the alerts for all websites, once. Website scope: gets that website's alerts and summary; a website without its own uses this one.</comment>
+                    <comment>Where the global messages go, e.g. a Slack channel ID (C0123456789, at the bottom of the channel's details).</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
-                <field id="summary" translate="label comment" type="select" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                <field id="website_channels" translate="label comment" sortOrder="35" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Website channels</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\WebsiteChannels</frontend_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\WebsiteChannels</backend_model>
+                    <comment>A website's own messages (its email settings, unsent sales emails, its daily summary) to its own channel. Without a row: the global channel.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="shared_to_websites" translate="label comment" type="select" sortOrder="36" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Also post shared problems to website channels</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>The shared checks' alerts (cron, logs, queues, ...) also to each website channel. Security findings stay global. Default: No.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="summary" translate="label comment" type="select" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Daily summary</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>Per website, to its recipient: the checks for all websites and its own, over the last 24 hours.</comment>
+                    <comment>One global summary, and one per website channel with that website's own items.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
-                <field id="summary_time" translate="label comment" type="time" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0">
+                <field id="summary_time" translate="label comment" type="time" sortOrder="50" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Daily summary at</label>
-                    <comment>In the website's time zone (General > Locale Options).</comment>
+                    <comment>In the default store's time zone; a website channel's summary in the website's.</comment>
                     <depends><field id="enabled">1</field><field id="summary">1</field></depends>
                 </field>
                 <field id="repeat_hours" translate="label comment" type="text" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -45,20 +58,20 @@
                 </field>
                 <field id="recover_runs" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Recovered after (OK runs in a row)</label>
-                    <comment>For the checks that count in a time window (system.log, exception.log, Queues, Sending): a problem is sent as resolved only after this many OK runs in a row (5 minutes apart), so one that flaps doesn't send "resolved" and the problem again. The other checks are resolved at their first OK run. Default: 2.</comment>
+                    <comment>Window checks (logs, queues, sending) resolve after this many OK runs in a row. Default: 2.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="notice_minutes" translate="label comment" type="text" sortOrder="62" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>New log errors at most every (minutes)</label>
-                    <comment>At most one message of a check's new critical log errors or sensitive-data findings per this many minutes; what comes in between goes in the next one. The first is sent at once. Default: 30; 0: no limit.</comment>
+                    <comment>New critical log errors and security findings: at most one message per check this often; the rest goes in the next. Default: 30.</comment>
                     <validate>required-entry validate-digits</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="hourly_status" translate="label comment" type="select" sortOrder="63" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Hourly status</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>A short status of all websites to the default recipient every hour, through the same queue as the alerts: posted when a check fails or warns or there were new log errors, and once a day as "All checks OK" (at the summary time); otherwise delivered quietly (recorded, not posted). With a heartbeat URL, the heartbeat stops when the status can't be delivered (the queue or its consumer down). Default: Yes.</comment>
+                    <comment>A status every hour through the alerts' queue: posted when something is not OK, and once a day as "All checks OK". More: README &gt; When you hear about what.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
                 <field id="hourly_status_minutes" translate="label comment" type="text" sortOrder="64" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -70,17 +83,17 @@
                 <field id="include_log_message" translate="label comment" type="select" sortOrder="65" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Add the masked log message</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <comment>On by default. Log errors in alerts show the message's first 160 characters, with secrets after key words (password, token, pin, ...), names after "customer" and the like, emails, phone numbers, numbers of 4 digits or more, IP addresses, tokens, URLs and quoted values as ***; other free text (a capitalized name, SQL) is NOT masked. Off: only the label everywhere (the exception class, or the message's first 3 words with every variable part and name-like word as ***), and cron job errors are not read.</comment>
+                    <comment>Show a masked one-line message with log errors. Emails, phones, numbers, tokens and secrets are hidden; names and free text may show.</comment>
                 </field>
                 <field id="heartbeat_url" translate="label comment" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Heartbeat URL</label>
                     <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
-                    <comment>Pinged after every run (every 5 minutes) while the last hourly status went out, e.g. a Healthchecks.io, Better Stack or UptimeRobot heartbeat: when the pings stop - the server, PHP, the database or cron down, or alerts can't be sent - that service alerts you. Stored encrypted. Empty: off.</comment>
+                    <comment>An uptime service's heartbeat URL (e.g. Healthchecks.io), pinged every 5 minutes while alerts can go out. Stored encrypted. More: README &gt; Before going live.</comment>
                 </field>
-                <field id="test" translate="label comment" type="button" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="0">
+                <field id="test" translate="label comment" type="button" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Test</label>
                     <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\TestAlert</frontend_model>
-                    <comment>Sends one message now to the saved channel and recipient of this scope. Save the configuration first.</comment>
+                    <comment>Sends one message now to the saved global channel and recipient. Save first.</comment>
                 </field>
             </group>
             <group id="cron" translate="label comment" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -105,7 +118,7 @@
                 </field>
                 <field id="quiet_minutes" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>A failing job counts as fixed after (minutes)</label>
-                    <comment>Without a successful run of it since its last error. Default: 60.</comment>
+                    <comment>A failing job stays failing until it runs OK, or this long without an error. Default: 60.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -158,7 +171,7 @@
             <group id="system_log" translate="label comment" sortOrder="55" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>System log (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Magento's merged log: an error never seen before (NEW, with where it happened), CRITICAL entries, and a spike of errors. Only new lines are read; only safe labels, counts and fingerprints are sent.</comment>
+                <comment>New errors in var/log/system.log (and extra files): critical ones at once, errors in the hourly status, spikes. More: README &gt; What is checked.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -177,7 +190,7 @@
                 </field>
                 <field id="max_read_kb" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Read at most (KB per run and file)</label>
-                    <comment>Of a larger backlog the newest part is read, counted as "at least", and the size not read is reported. Default: 1024.</comment>
+                    <comment>Of a larger backlog only the newest part is read (counts then "at least"). Default: 1024.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -190,14 +203,14 @@
                 <field id="extra_files" translate="label comment" type="textarea" sortOrder="90" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Extra log files</label>
                     <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFiles</backend_model>
-                    <comment>More files in var/log in the same format, one per line (e.g. payment.log), at most 5; debug.log is never read.</comment>
+                    <comment>More var/log files in the same format, one per line (e.g. payment.log), at most 5; never debug.log.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
             </group>
             <group id="sensitive_data" translate="label comment" sortOrder="58" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Sensitive data in logs (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Card numbers, secrets and personal data written into the logs, by rule sets (PCI, Credentials, Personal data, and those of other modules' etc/app_health_rules.xml). A finding is a high alert at once - the rule and where, never the value.</comment>
+                <comment>Card numbers, secrets and personal data written into logs: a security alert at once, to the global channel only, never the value. More: README &gt; Sensitive data in logs.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -213,14 +226,14 @@
                     <label>Custom rules</label>
                     <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\CustomRules</frontend_model>
                     <backend_model>CommerceKings\AppHealth\Model\Config\Backend\SensitiveRules</backend_model>
-                    <comment>Regex rules of your own (PCRE with delimiters, at most 300 characters, checked on save), in a shipped rule set or a new one; "At least" counts matches per entry (e.g. 5 for bulk data).</comment>
+                    <comment>Regex rules of your own, in a shipped rule set or a new one; checked on save. More: README &gt; Sensitive data in logs.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
             </group>
             <group id="exceptions" translate="label comment" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Exceptions (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>A spike of new entries in var/log/exception.log, with the top 3 exception classes, and an exception never seen before (NEW). Only new lines are read; only class names, counts and fingerprints are sent.</comment>
+                <comment>New entries in var/log/exception.log: a new exception at once, and spikes with the top classes.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -239,7 +252,7 @@
                 </field>
                 <field id="max_read_kb" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Read at most (KB per run)</label>
-                    <comment>Of a larger backlog the newest part is read, counted as "at least", and the size not read is reported. Default: 1024.</comment>
+                    <comment>Of a larger backlog only the newest part is read (counts then "at least"). Default: 1024.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -253,7 +266,7 @@
             <group id="queues" translate="label comment" sortOrder="70" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Queues (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker on every run.</comment>
+                <comment>Message queue backlogs (RabbitMQ or MySQL queue), counts only. Off by default: it connects to the broker every run.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -274,7 +287,7 @@
             <group id="email_failing" translate="label comment" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Sending (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Mail transport errors among the new exception.log entries, and CommerceKings notifications whose last send failed.</comment>
+                <comment>Mail transport errors in the logs, and failing CommerceKings notifications.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -287,7 +300,7 @@
                 </field>
                 <field id="quiet_minutes" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Mail counts as working again after (minutes)</label>
-                    <comment>After a mail transport error it stays failing until a mail is seen going out (a sales email sent, a CommerceKings notification sent), or this long without a new error. Default: 60.</comment>
+                    <comment>After a mail error it stays failing until a mail goes out, or this long without an error. Default: 60.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -295,7 +308,7 @@
             <group id="email_disabled" translate="label comment" sortOrder="90" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Email sending (per website)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Disable Email Communications (Stores > Configuration > Advanced > System > Mail Sending Settings) set to Yes for any of the website's store views. To the website's recipient.</comment>
+                <comment>Disable Email Communications set to Yes for a website's store views. To the website's channel (else the global one).</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -304,7 +317,7 @@
             <group id="sales_emails" translate="label comment" sortOrder="100" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Sales emails (per website)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>Orders, invoices, shipments and credit memos to be emailed but not sent, created in the last 24 hours (a bounded range of each table's created_at index). To the website's recipient.</comment>
+                <comment>Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). To the website's channel (else the global one).</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -325,14 +338,14 @@
             <group id="external" translate="label comment" sortOrder="110" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Server status (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
-                <comment>What your servers write to var/app-health/status-&lt;server&gt;.json (containers, disk, memory, services, backups, certificates): their "fail" lines are problems, their "warn" lines warnings. Silent until a server reports; set up in the README, "System status from your server".</comment>
+                <comment>What your servers report (containers, disk, services, ...): failing lines, and servers that stop reporting. More: README &gt; System status from your server.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Enabled</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
                 <field id="stale_minutes" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>No status for (minutes)</label>
-                    <comment>A server that reported before and has not for this long is a problem: its script or the server stopped. Default: 15 (the script reports every 5).</comment>
+                    <comment>A server that reported before and is silent this long is a problem. Default: 15.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

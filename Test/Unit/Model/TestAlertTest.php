@@ -26,7 +26,7 @@ class TestAlertTest extends TestCase
     private function testAlert(?Target $target, \Throwable|string $answer = SenderInterface::SENT): TestAlert
     {
         $targets = $this->createStub(Targets::class);
-        $targets->method('resolve')->willReturn($target);
+        $targets->method('global')->willReturn($target);
         $sender = $this->createStub(SenderInterface::class);
         $sender->method('send')->willReturnCallback(function (Delivery $delivery) use ($answer) {
             $this->sent[] = $delivery;
@@ -40,10 +40,10 @@ class TestAlertTest extends TestCase
 
     public function testSentAtOnceAsAServiceMessage(): void
     {
-        $this->assertSame('C0123', $this->testAlert(new Target(0, 1, 'slack', 'C0123', 'Shop', 'UTC'))->send(0));
+        $this->assertSame('C0123', $this->testAlert(new Target(0, 1, 'slack', 'C0123', 'Shop', 'UTC'))->send());
         $this->assertSame([false, false, 'app_health_test'], [$this->sent[0]->useCooldown, $this->sent[0]->stoppable,
             $this->sent[0]->type]);
-        $this->assertStringStartsWith("*Test alert · Shop (all websites)*\n\nThis channel gets",
+        $this->assertStringStartsWith("*Test alert · Shop*\n\nThis channel gets",
             ($this->sent[0]->content)()->text);
     }
 
@@ -59,7 +59,7 @@ class TestAlertTest extends TestCase
         ];
         foreach ($cases as [$caseTarget, $answer, $message]) {
             try {
-                $this->testAlert($caseTarget, $answer)->send(1);
+                $this->testAlert($caseTarget, $answer)->send();
                 $this->fail('sent');
             } catch (LocalizedException $e) {
                 $this->assertStringStartsWith($message, $e->getMessage());

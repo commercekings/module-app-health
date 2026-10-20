@@ -11,7 +11,7 @@ use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Exception\LocalizedException;
 
-/** POST ckapphealth/test/send (website): the "Send test alert" button; JSON {success, message}. */
+/** POST ckapphealth/test/send: the "Send test alert" button (the global recipient); JSON {success, message}. */
 class Send extends Action implements HttpPostActionInterface
 {
     public const ADMIN_RESOURCE = 'CommerceKings_AppHealth::config';
@@ -26,10 +26,8 @@ class Send extends Action implements HttpPostActionInterface
 
     public function execute(): Json
     {
-        // the configuration page's scope: a website, else the default scope (0, the shop-wide checks' recipient)
-        $websiteId = max(0, (int)$this->getRequest()->getParam('website'));
         try {
-            $recipient = $this->testAlert->send($websiteId);
+            $recipient = $this->testAlert->send();
             $result = ['success' => true, 'message' => (string)__('Test alert sent to %1.', $recipient)];
         } catch (LocalizedException $e) {
             $result = ['success' => false, 'message' => $e->getMessage()];

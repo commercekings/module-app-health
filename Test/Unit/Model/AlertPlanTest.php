@@ -74,6 +74,16 @@ class AlertPlanTest extends TestCase
             1800)));
     }
 
+    public function testAWebsiteChannelGetsItsOwnChecksAndTheSharedOnesWhenAsked(): void
+    {
+        $row = [0 => ['cron' => ['status' => 'fail'], 'sensitive_data' => ['status' => 'ok']],
+            2 => ['email_disabled' => ['status' => 'fail']]];
+        $this->assertSame(['email_disabled'], array_keys(AlertPlan::scopeChecks($row, 2, false)));
+        $this->assertSame(['email_disabled', 'cron'], array_keys(AlertPlan::scopeChecks($row, 2, true)),
+            'the shared ones too - never the security findings');
+        $this->assertSame(['cron', 'sensitive_data'], array_keys(AlertPlan::scopeChecks($row, 0, true)));
+    }
+
     public function testAWarningIsNotNewsAWorseProblemIs(): void
     {
         $told = ['caches' => ['status' => 'fail', 'at' => self::NOW - 60]];

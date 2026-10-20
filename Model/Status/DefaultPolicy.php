@@ -29,7 +29,7 @@ class DefaultPolicy implements StatusPolicyInterface
         if (!$report->isAllOk()) {
             return true;
         }
-        $minute = $this->config->getSummaryMinute($report->scopeId);
+        $minute = $this->config->getSummaryMinute();
         $slot = $report->now->setTime(intdiv($minute, 60), $minute % 60);
         if ($slot > $report->now) {
             $slot = $slot->modify('-1 day'); // before today's time: yesterday's is the latest

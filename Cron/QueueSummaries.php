@@ -7,6 +7,7 @@ use CommerceKings\AppHealth\Model\Notification\Summary;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\SummarySchedule;
+use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\Notification\Api\DeliveryStateInterface;
 use Magento\Framework\App\ResourceConnection;
@@ -14,9 +15,10 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 use Psr\Log\LoggerInterface;
 
 /**
- * Cron "commercekings_app_health_summary", every 15 minutes: queues each website's daily summary once its summary
- * time has passed, unless it was sent since (the condition is repeated in the queue mark's statement). Outside the
- * summary's window no query at all; inside it, one read per website once the summary is out.
+ * Cron "commercekings_app_health_summary", every 15 minutes: queues the global daily summary (scope 0) and that of
+ * each website with a channel of its own, once the summary time has passed in its time zone, unless it was sent since
+ * (the condition is repeated in the queue mark's statement). Outside the window no query at all; inside it, one read
+ * per summary once it is out.
  */
 class QueueSummaries
 {
@@ -37,10 +39,14 @@ class QueueSummaries
     {
         $now = $this->dateTime->gmtTimestamp();
         $queued = [];
-        foreach ($this->targets->websites() as $websiteId => $target) {
-            if (!$this->config->isSummaryEnabled($websiteId)) {
-                continue;
-            }
+        $shopWide = $this->targets->shopWide();
+        if ($shopWide === null || !$this->config->isSummaryEnabled()) {
+            return [];
+        }
+        // the global summary, and one per website with a channel of its own (the others are in the global one)
+        $targets = [0 => $shopWide]
+            + array_filter($this->targets->websites(), fn (Target $target) => $target->ownChannel);
+        foreach ($targets as $websiteId => $target) {
             $slot = $this->schedule->latestSlot($target, $now);
             if (!$this->schedule->isDue($slot, null, $now)) {
                 continue;

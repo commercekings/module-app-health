@@ -21,16 +21,16 @@ use Psr\Log\LoggerInterface;
  *
  * The results go to the "checks" row by scope and code (with the time since the status last changed and the run
  * time), their worst status and counts to the hour's tally, their notices to "notices:<scope>". Then each scope with
- * news (AlertPlan: a change, or a notice not told yet) gets one queued alert - the shop-wide checks' to the default
- * scope's recipient, a website's own to the website's - and, once per *Hourly status every*, the hourly status to the
- * default scope's recipient (without shop-wide alerts: the first website's with alerts on). Each run reads its
- * delivery state (one query); while it is due, every run queues it (queue() skips one queued or waiting to retry).
+ * news (AlertPlan: a change, or a notice not told yet) gets one queued alert - the shared checks' to the global
+ * recipient, a website's own to its *Website channels* recipient (else the global one) - and, once per *Hourly status
+ * every*, the hourly status to the global recipient. Each run reads the status's delivery state (one query); while it
+ * is due, every run queues it (queue() skips one queued or waiting to retry).
  *
  * A finished run pings the heartbeat - also when a check threw or the budget left one out ("degraded" in the report):
  * cron runs and the run got to its end - unless an alert could not be queued, or (with the hourly status on) the
  * hourly status has been due for STATUS_GRACE_MINUTES (the "status" row) and is still not out: alerts can't reach
- * the team, and the outside service is the one to tell them. Nothing runs while alerts are off everywhere and no
- * heartbeat is set.
+ * the team, and the outside service is the one to tell them. Nothing runs while app health is off and no heartbeat
+ * is set.
  */
 class Runner
 {
@@ -136,8 +136,8 @@ class Runner
         }
         $this->state->set('checks', $checks);
         $this->state->set($hour, $tally);
-        // the hourly status: to the default recipient, else the first website's with alerts on
-        $statusScope = $this->config->isHourlyStatusEnabled() ? array_key_first($targets) : null;
+        // the hourly status: to the global recipient
+        $statusScope = $this->config->isHourlyStatusEnabled() && $shopWide !== null ? 0 : null;
         $statusMinutes = Status::intervalMinutes($this->statusPolicy, (int)$statusScope);
         $statusDue = false;
         $statusLate = false;
@@ -196,8 +196,9 @@ class Runner
             $alerted = $this->state->get('alerted:' . $scope) ?? [];
             $pending = AlertPlan::pendingNotices($this->state->get(AlertPlan::NOTICES . $scope) ?? [],
                 $this->state->get(AlertPlan::NOTICED . $scope) ?? [], $now, $this->config->getNoticeMinutes() * 60);
-            if (AlertPlan::changes($checks[$scope] ?? [], $alerted, $now, $repeat, $this->config->getRecoverRuns())
-                === [] && $pending === []) {
+            $withShared = $this->config->isSharedToWebsites() && $targets[$scope]->ownChannel;
+            if (AlertPlan::changes(AlertPlan::scopeChecks($checks, $scope, $withShared), $alerted, $now, $repeat,
+                $this->config->getRecoverRuns()) === [] && $pending === []) {
                 continue;
             }
             try {

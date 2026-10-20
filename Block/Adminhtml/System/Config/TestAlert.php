@@ -6,7 +6,7 @@ namespace CommerceKings\AppHealth\Block\Adminhtml\System\Config;
 use Magento\Config\Block\System\Config\Form\Field;
 use Magento\Framework\Data\Form\Element\AbstractElement;
 
-/** The "Send test alert" button: posts the scope's website to ckapphealth/test/send and shows the answer. */
+/** The "Send test alert" button: posts to ckapphealth/test/send and shows the answer. */
 class TestAlert extends Field
 {
     /** @var string */
@@ -28,8 +28,4 @@ class TestAlert extends Field
         return $this->getUrl('ckapphealth/test/send');
     }
 
-    public function getWebsiteId(): int
-    {
-        return (int)$this->getRequest()->getParam('website');
-    }
 }

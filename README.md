@@ -16,8 +16,9 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   Critical log errors and sensitive data at once, log errors in the hourly status, log warnings in the daily summary.
 - **Proof that alerts can go out.** An hourly status through the same queue: posted when something is not OK, once a
   day as "All checks OK", delivered quietly otherwise – when it stops going out, so does the heartbeat.
-- **The right channel.** Checks for the whole shop go to one channel; each website's own (its email settings, its
-  unsent order emails, its daily summary) to its own.
+- **One global control, the right channel.** Every setting is global (the default scope): one channel for the shared
+  checks, security and the hourly status; optionally a channel per website for its own messages (its email settings,
+  its unsent order emails, its daily summary).
 - **A daily summary.** Cron runs and errors, exceptions by class, and what had problems – at the time you choose.
 - **Light.** Admin, cron and Notification's queue only – nothing on the storefront or in checkout. Indexed, bounded
   queries; only the new bytes of the exception log; a 5-second budget per run.
@@ -36,18 +37,18 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 
 | Check | Alert when (default) | Sent to |
 |---|---|---|
-| Cron | no job has run for 5 min; a job running for over 60 min; a job ending with an error (warning, until it succeeds again); cron was down (warning, when it is back) | all websites |
-| Indexers | an indexer invalid or stuck working for over 60 min | all websites |
-| Caches | a cache type disabled; invalidated for over 60 min (warning) | all websites |
-| Maintenance mode | on for over 15 min | all websites |
-| system.log | a CRITICAL entry never seen before, with its file:line (again after 6 h); ERROR entries in the hourly status; 20 or more errors in 5 min | all websites |
-| exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | all websites |
-| Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | all websites |
-| Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | all websites |
-| Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | all websites |
-| Email sending | *Disable Email Communications* on for any of the website's store views | the website |
-| Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website |
-| Server status | a line a server reported as `fail` (a container down, a disk 90% full…), `warn` lines as a warning; no report from a server for 15 min. Silent until a server reports ([how](#system-status-from-your-server)) | all websites |
+| Cron | no job has run for 5 min; a job running for over 60 min; a job ending with an error (warning, until it succeeds again); cron was down (warning, when it is back) | global |
+| Indexers | an indexer invalid or stuck working for over 60 min | global |
+| Caches | a cache type disabled; invalidated for over 60 min (warning) | global |
+| Maintenance mode | on for over 15 min | global |
+| system.log | a CRITICAL entry never seen before, with its file:line (again after 6 h); ERROR entries in the hourly status; 20 or more errors in 5 min | global |
+| exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | global |
+| Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | global |
+| Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | global |
+| Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | global |
+| Email sending | *Disable Email Communications* on for any of the website's store views | the website's channel |
+| Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website's channel |
+| Server status | a line a server reported as `fail` (a container down, a disk 90% full…), `warn` lines as a warning; no report from a server for 15 min. Silent until a server reports ([how](#system-status-from-your-server)) | global |
 
 ### Why it fails
 
@@ -66,7 +67,7 @@ Each alert says why, as far as Magento's own data shows it, and what to do (`Wha
 | Server status | each line not OK: the server, what, its value and the script's detail (masked); "No status from host-1 since 14:02" |
 
 ```
-*Problem: Cron jobs stuck · Main Website Store (all websites)*
+*Problem: Cron jobs stuck · Main Website Store*
 
 Job indexer_reindex_all_invalid running for 3 h (since 08:12).
 12 other jobs in its group are waiting.
@@ -83,16 +84,16 @@ The logs are read every 5 minutes; what you hear, and when:
 | What | When | Where |
 |---|---|---|
 | A check going to *Problem* (cron, indexers, caches, ...) | at once; again every 6 h while it fails; *Resolved* at the first OK run – for system.log, exception.log, Queues and Sending after 2 OK runs in a row | its recipient |
-| A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | default recipient, each website's |
-| Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | default recipient |
-| A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | default recipient |
-| ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | default recipient |
-| WARNING log entries | the daily summary | each website's recipient |
-| The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with problems, warnings or new errors – and "All checks OK" once a day, at the first status from *Daily summary at* | default recipient – for all websites |
-| The daily summary | once a day at *Daily summary at* | each website's recipient |
+| A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | global (a website's own: its summary) |
+| Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | global |
+| A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
+| ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
+| WARNING log entries | the daily summary | global |
+| The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with problems, warnings or new errors – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
+| The daily summary | once a day at *Daily summary at*: a global one (the shared checks, and websites without a channel of their own, named) and one per website channel (its own items, in its time zone) | global, each website channel |
 
 ```
-*Hourly status · Main Website Store (all websites)*
+*Hourly status · Main Website Store*
 
 1 problem: Cron
 Warnings: Queue (commercekings.notification.send: 120 messages)
@@ -102,19 +103,31 @@ New errors this hour: 14
 • NoSuchEntityException (5×)
 ```
 
-The hourly status covers **all websites**: their problems and warnings go to the default scope's recipient (with
-shop-wide alerts off, to the first website with alerts on). An hour with nothing to say is delivered quietly – recorded
-as sent through the queue and its consumer, without calling the channel – so the heartbeat still proves that the queue
-works, but not the channel itself: the daily "All checks OK" post and the alerts do.
+The hourly status covers **all websites**: their problems and warnings go to the global recipient. An hour with
+nothing to say is delivered quietly – recorded as sent through the queue and its consumer, without calling the channel
+– so the heartbeat still proves that the queue works, but not the channel itself: the daily "All checks OK" post and
+the alerts do.
 
-**All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
-go to the website's recipient (the default one unless the website sets its own).
+### Where messages go
+
+Every setting is global (*Stores > Configuration > CommerceKings > App health*, default scope):
+
+| Messages | Go to |
+|---|---|
+| The shared checks (cron, indexers, caches, maintenance, logs, queues, sending, server status), the hourly status, *Send test alert* | the global channel and recipient |
+| Security findings (sensitive data in logs) | the global channel – always, never a website channel |
+| A website's own checks (*Email sending*, *Sales emails*) | its *Website channels* row – else the global channel, the website named ("Email sending (EU Store)") |
+| The daily summary | a global one; and one per *Website channels* row with only that website's items |
+| The shared problems, also to website channels | only with *Also post shared problems to website channels* (default No); security findings never |
+
+A website channel row is checked on save: a website once, a channel and a recipient each, the recipient as the channel's
+normalizer takes it.
 
 One message per problem, in plain Slack text without emoji: a bold first line that says what and where (what a phone
 notification shows; *Problem*, *Warning*, *Resolved*, *New error*, *Security*), then one fact per line and what to do:
 
 ```
-*Problem: Cron stopped · Main Website Store (all websites)*
+*Problem: Cron stopped · Main Website Store*
 
 No job has run since 10:39 (65 min).
 
@@ -124,13 +137,13 @@ What to do: Is the cron container (or crontab) running? bin/magento cron:run by 
 A failing check told again after the repeat interval ends with "Still failing since 19 Oct 09:00.".
 
 ```
-*Resolved: Cron · Main Website Store (all websites)*
+*Resolved: Cron · Main Website Store*
 
 OK again since 11:52.
 ```
 
 ```
-*New error in system.log · Main Website Store (all websites)*
+*New error in system.log · Main Website Store*
 
 Critical: PaymentException (3×, 14:02)
 Where: app/code/Vendor/Pay/Model/Gateway.php:120
@@ -185,16 +198,15 @@ delivery state rows of the types `app_health_*` in `ck_notification_delivery_sta
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Recovered after (2 OK runs in a row); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Recovered after (2 OK runs in a row); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
-Enabled, Channel, Recipient and the summary are per website: in the **default scope** they are the shop-wide checks'
-alerts; a **website** inherits them unless it sets its own. Send a test alert from each scope after saving.
+All settings are global (default scope); a website gets its own channel through *Website channels* only.
 
 ## Before going live
 
-- Set the recipient in the default scope (and per website if each has its own channel), then *Send test alert*.
+- Set the channel and recipient (and *Website channels* where a website has its own), save, then *Send test alert*.
 - Keep `commerceKingsNotificationSend` running – the same consumer as every CommerceKings notification.
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
   or cron is down, no check runs. Create a heartbeat check in an uptime service (e.g. Healthchecks.io, Better Stack or
@@ -335,7 +347,7 @@ Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth`
 | Sensitive-data rules, no PHP | `etc/app_health_rules.xml` in any module (schema `etc/app_health_rules.xsd`), merged by rule set and rule code: add a set or a rule, override a shipped one, or turn it off (`enabled="false"`) |
 | A validator for rules | `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
-| Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, per website: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
+| Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, *Website channels*: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
 | Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in the format above (version 1) – no PHP |
 | When the hourly status is posted | `Api\StatusPolicyInterface` (`getIntervalMinutes($scopeId)`, kept within 15 to 180; `shouldPost(Api\Data\StatusReport)`), shipped as `Model\Status\DefaultPolicy`; replace it with a `<preference>`. The status is still delivered every interval (quietly when not posted); urgent alerts never ask the policy |
 
@@ -399,7 +411,7 @@ breach). Every new log entry – every level, every log source – is scanned be
 a high alert at once, with the rule, how often, the last time and where – never the value:
 
 ```
-*Security: sensitive data in logs · Main Website Store (all websites)*
+*Security: sensitive data in logs · Main Website Store*
 
 PCI: payment card number in system.log (3×, last 14:02)
 Where: app/code/Vendor/Pay/Model/Gateway.php:120

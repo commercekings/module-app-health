@@ -10,6 +10,7 @@ use CommerceKings\AppHealth\Model\Notification\Summary;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\SummarySchedule;
 use CommerceKings\AppHealth\Model\Target;
+use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\MemoryStore;
 use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
@@ -79,7 +80,7 @@ class AlertAndSummaryTest extends TestCase
     {
         $this->alert(0);
         $this->assertCount(1, $this->sent, 'the indexers\' warning waits for the hourly status');
-        $this->assertStringStartsWith('*Problem: Cron stopped · Shop (all websites)*', $this->sent[0]);
+        $this->assertStringStartsWith('*Problem: Cron stopped · Shop*', $this->sent[0]);
         $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $this->store->row('alerted:0'));
         $this->sent = [];
         $this->alert(0);
@@ -94,7 +95,7 @@ class AlertAndSummaryTest extends TestCase
                 'Error: b (2×, 07:10)']], self::NOW)]);
         $this->alert(0);
         $this->assertCount(1, $this->sent);
-        $this->assertStringContainsString("*New errors in system.log · Shop (all websites)*\n\n"
+        $this->assertStringContainsString("*New errors in system.log · Shop*\n\n"
             . "Error: a (07:00)\nWhere: a.php:1\n\nError: b (2×, 07:10)\n\nWhat to do: ",
             $this->sent[0]);
         $this->assertSame(['system_log' => ['id' => 2, 'at' => self::NOW]],
@@ -125,22 +126,33 @@ class AlertAndSummaryTest extends TestCase
         $this->assertSame([], $this->sent, 'website 1 is fine');
     }
 
-    private function summary(array $settings, array $row = []): void
+    private function summary(array $settings, array $row = [], int $scope = 0): void
     {
         $config = $this->config($settings);
-        (new Summary($this->teamMessage(new Target(2, 2, 'slack', 'C2', 'Shop', 'UTC'), $row), $this->store,
-            $this->messages(), $config, new SummarySchedule($config), new Clock(self::NOW)))->process('2');
+        $targets = $this->createStub(Targets::class);
+        $targets->method('websites')->willReturn([1 => new Target(1, 1, 'slack', 'C0', 'EU Store', 'UTC', false),
+            2 => new Target(2, 2, 'slack', 'C2', 'US Store', 'UTC')]);
+        $target = $scope === 0 ? new Target(0, 1, 'slack', 'C0', 'Shop', 'UTC') : $targets->websites()[$scope];
+        (new Summary($this->teamMessage($target, $row), $this->store, $this->messages(), $config,
+            new SummarySchedule($config), new Clock(self::NOW), $targets))->process((string)$scope);
     }
 
-    public function testTheSummaryCoversTheShopWideChecksAndTheWebsitesOwnForTheLastDay(): void
+    public function testTheGlobalSummaryHasTheSharedChecksAndWebsitesWithoutAChannelNamed(): void
     {
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
         $this->assertCount(1, $this->sent);
         $this->assertStringStartsWith("*Shop · daily summary · 20 Oct*\n\n*Needs attention*\n"
-            . "• Cron: no job has run since 07:48 (12 min)\n• Indexers: x invalid for 2 h\n"
-            . "• Email sending: emails are disabled\n\n", $this->sent[0]);
-        $this->assertStringEndsWith("\n\n*All OK*\n• Caches", $this->sent[0],
+            . "• Cron: no job has run since 07:48 (12 min)\n• Indexers: x invalid for 2 h\n\n", $this->sent[0],
+            'website 2 has a channel of its own: not here');
+        $this->assertStringEndsWith("\n\n*All OK*\n• Caches, email sending (EU Store)", $this->sent[0],
             'the tally of 25 hours ago is left out');
+    }
+
+    public function testAWebsiteChannelsSummaryHasOnlyItsOwnChecks(): void
+    {
+        $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00'], [], 2);
+        $this->assertSame(["*US Store · daily summary · 20 Oct*\n\n*Needs attention*\n"
+            . '• Email sending: emails are disabled'], $this->sent);
     }
 
     public function testTheSummaryOnlyWhenDueAndOn(): void

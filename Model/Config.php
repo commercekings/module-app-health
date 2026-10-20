@@ -6,9 +6,8 @@ namespace CommerceKings\AppHealth\Model;
 use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use CommerceKings\AppHealth\Model\Log\FileLogSource;
 use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Store\Model\ScopeInterface;
 
-/** Admin: Stores > Configuration > CommerceKings > App health. */
+/** Admin: Stores > Configuration > CommerceKings > App health - global: every setting at the default scope. */
 class Config
 {
     public const SECTION = 'commercekings_app_health';
@@ -19,37 +18,62 @@ class Config
     ) {
     }
 
+    /** App health on (the default scope: all of its settings are global). */
+    public function isEnabled(): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::GENERAL . 'enabled');
+    }
+
+    /** The global channel, Notification's channel code, e.g. "slack". */
+    public function getChannel(): string
+    {
+        return trim((string)$this->scopeConfig->getValue(self::GENERAL . 'channel'));
+    }
+
+    /** The global recipient on that channel, e.g. a Slack channel ID; '' when none is set. */
+    public function getRecipient(): string
+    {
+        return trim((string)$this->scopeConfig->getValue(self::GENERAL . 'recipient'));
+    }
+
     /**
-     * Alerts on: in the default scope (website 0) for the shop-wide checks, in a website's scope for its own checks
-     * and its daily summary (a website inherits the default).
+     * *Website channels*: a website's own channel and recipient for its own messages (its email settings, its unsent
+     * sales emails, its daily summary); a website without a row uses the global ones.
+     *
+     * @return array<int, array{channel: string, recipient: string}> by website id
      */
-    public function isEnabled(int $websiteId): bool
+    public function getWebsiteChannels(): array
     {
-        return $this->scopeConfig->isSetFlag(self::GENERAL . 'enabled', ...$this->scope($websiteId));
+        $value = $this->scopeConfig->getValue(self::GENERAL . 'website_channels');
+        $rows = is_string($value) && $value !== '' ? json_decode($value, true) : $value;
+        $channels = [];
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $websiteId = (int)($row['website_id'] ?? 0);
+            $channel = trim((string)($row['channel'] ?? ''));
+            $recipient = trim((string)($row['recipient'] ?? ''));
+            if ($websiteId > 0 && $channel !== '' && $recipient !== '') {
+                $channels[$websiteId] ??= ['channel' => $channel, 'recipient' => $recipient];
+            }
+        }
+        return $channels;
     }
 
-    /** Notification's channel code, e.g. "slack"; website 0 = the default scope. */
-    public function getChannel(int $websiteId): string
+    /** *Also post shared problems to website channels* (off by default). */
+    public function isSharedToWebsites(): bool
     {
-        return trim((string)$this->scopeConfig->getValue(self::GENERAL . 'channel', ...$this->scope($websiteId)));
+        return $this->scopeConfig->isSetFlag(self::GENERAL . 'shared_to_websites');
     }
 
-    /** The address on the channel, e.g. a Slack channel ID; '' when none is set. Website 0 = the default scope. */
-    public function getRecipient(int $websiteId): string
+    public function isSummaryEnabled(): bool
     {
-        return trim((string)$this->scopeConfig->getValue(self::GENERAL . 'recipient', ...$this->scope($websiteId)));
+        return $this->scopeConfig->isSetFlag(self::GENERAL . 'summary');
     }
 
-    public function isSummaryEnabled(int $websiteId): bool
+    /** Minutes after midnight (each summary in its own time zone); a Magento time field is stored as "08,00,00". */
+    public function getSummaryMinute(): int
     {
-        return $this->scopeConfig->isSetFlag(self::GENERAL . 'summary', ScopeInterface::SCOPE_WEBSITE, $websiteId);
-    }
-
-    /** Minutes after midnight in the website's time zone; a Magento time field is stored as "08,00,00". */
-    public function getSummaryMinute(int $websiteId): int
-    {
-        $parts = array_map('intval', explode(',', (string)$this->scopeConfig->getValue(self::GENERAL . 'summary_time',
-            ScopeInterface::SCOPE_WEBSITE, $websiteId)) + [0, 0]);
+        $parts = array_map('intval', explode(',', (string)$this->scopeConfig->getValue(self::GENERAL . 'summary_time'))
+            + [0, 0]);
         return min(23, max(0, $parts[0])) * 60 + min(59, max(0, $parts[1] ?? 0));
     }
 
@@ -117,13 +141,6 @@ class Config
     {
         $value = $this->scopeConfig->getValue(self::SECTION . '/' . $code . '/enabled');
         return $value === null || $value === '' || (bool)(int)$value;
-    }
-
-    /** @return array{0: string, 1?: int} getValue()'s scope arguments; website 0 = the default scope */
-    private function scope(int $websiteId): array
-    {
-        return $websiteId > 0 ? [ScopeInterface::SCOPE_WEBSITE, $websiteId]
-            : [ScopeConfigInterface::SCOPE_TYPE_DEFAULT];
     }
 
     /** A check's whole-number setting, at least $min; $default when it is not set. */

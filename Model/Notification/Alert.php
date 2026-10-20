@@ -49,7 +49,8 @@ class Alert implements NotificationTypeInterface
         $scope = $target->websiteId;
         $keys = ['alerted:' . $scope, AlertPlan::NOTICES . $scope, AlertPlan::NOTICED . $scope];
         $rows = $this->store->load(array_merge(['checks'], $keys));
-        $checks = (array)($rows['checks'][$scope] ?? []);
+        $checks = AlertPlan::scopeChecks((array)($rows['checks'] ?? []), $scope,
+            $this->config->isSharedToWebsites() && $target->ownChannel);
         $alerted = $rows[$keys[0]] ?? [];
         $changes = AlertPlan::changes($checks, $alerted, $now, $this->config->getRepeatHours() * 3600,
             $this->config->getRecoverRuns());

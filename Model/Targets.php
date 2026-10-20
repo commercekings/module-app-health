@@ -12,9 +12,11 @@ use Magento\Store\Model\StoreManagerInterface;
 use Magento\Store\Model\Website;
 
 /**
- * Who gets which alert: the shop-wide checks go once to the default scope's channel and recipient (website 0); each
- * website's own checks and its daily summary go to the website's (inherited from the default unless it sets its
- * own). Only where app health is on and a channel and recipient are set.
+ * Who gets which message - every setting is global (the default scope). The global channel and recipient (scope 0)
+ * get the shared checks (cron, logs, queues, ...), security findings, the hourly status and the global daily summary;
+ * a website's own messages (its email settings, its unsent sales emails, its daily summary; scope = its id) go to its
+ * *Website channels* row, else to the global channel (its lines then name the website). Nothing while app health is
+ * off or without a global channel and recipient.
  */
 class Targets
 {
@@ -26,19 +28,26 @@ class Targets
     ) {
     }
 
-    /** The shop-wide checks' target, or null while they are off. */
+    /** The global target (scope 0), or null while app health is off. */
     public function shopWide(): ?Target
     {
-        return $this->config->isEnabled(0) ? $this->resolve(0) : null;
+        return $this->config->isEnabled() ? $this->global() : null;
     }
 
-    /** @return array<int, Target> the websites with alerts on, by id */
+    /** @return array<int, Target> every website's target, by id - while app health is on */
     public function websites(): array
     {
+        if ($this->shopWide() === null) {
+            return [];
+        }
+        $own = $this->config->getWebsiteChannels();
         $targets = [];
         foreach ($this->storeManager->getWebsites() as $website) {
             $websiteId = (int)$website->getId();
-            $target = $websiteId > 0 && $this->config->isEnabled($websiteId) ? $this->resolve($websiteId) : null;
+            $channel = $own[$websiteId] ?? ['channel' => $this->config->getChannel(),
+                'recipient' => $this->config->getRecipient()];
+            $target = $websiteId > 0 ? $this->target($websiteId, $channel['channel'], $channel['recipient'],
+                isset($own[$websiteId])) : null;
             if ($target !== null) {
                 $targets[$websiteId] = $target;
             }
@@ -47,17 +56,20 @@ class Targets
         return $targets;
     }
 
-    /** Website 0: the shop-wide target; else the website's - while alerts are on there. */
+    /** Scope 0: the global target; else the website's - while app health is on. */
     public function forWebsite(int $websiteId): ?Target
     {
         return $websiteId === 0 ? $this->shopWide() : ($this->websites()[$websiteId] ?? null);
     }
 
-    /** The scope's channel and recipient whether alerts are on or not (the test alert); null without them. */
-    public function resolve(int $websiteId): ?Target
+    /** The global channel and recipient whether app health is on or not (the test alert); null without them. */
+    public function global(): ?Target
     {
-        $channel = $this->config->getChannel($websiteId);
-        $recipient = $this->config->getRecipient($websiteId);
+        return $this->target(0, $this->config->getChannel(), $this->config->getRecipient(), true);
+    }
+
+    private function target(int $websiteId, string $channel, string $recipient, bool $ownChannel): ?Target
+    {
         if ($channel === '' || $recipient === '') {
             return null;
         }
@@ -73,7 +85,7 @@ class Targets
         }
         $storeId = (int)$store->getId();
         return new Target($websiteId, $storeId, $channel, $recipient, $this->storeName($store),
-            (string)$this->timezone->getConfigTimezone(ScopeInterface::SCOPE_STORE, (string)$storeId));
+            (string)$this->timezone->getConfigTimezone(ScopeInterface::SCOPE_STORE, (string)$storeId), $ownChannel);
     }
 
     /**

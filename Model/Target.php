@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 /**
- * Where alerts go: the shop-wide checks' (website 0, the default scope's settings, sent from the default store view)
- * or one website's (its settings, sent from its default store view).
+ * Where a message goes: the global one's (scope 0, sent from the default store view; the shop's name and time zone)
+ * or one website's (its *Website channels* row, else the global channel - ownChannel false; sent from its default
+ * store view; its name and time zone).
  */
 class Target
 {
@@ -15,7 +16,8 @@ class Target
         public readonly string $channel,
         public readonly string $recipient,
         public readonly string $name,
-        public readonly string $timezone
+        public readonly string $timezone,
+        public readonly bool $ownChannel = true
     ) {
     }
 

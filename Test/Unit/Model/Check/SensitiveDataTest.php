@@ -85,7 +85,7 @@ class SensitiveDataTest extends TestCase
         $text = (new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock))
             ->notices(new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC'), 'sensitive_data',
                 $result->notices);
-        $this->assertStringStartsWith("*Security: sensitive data in logs · Main Website Store (all websites)*\n\n"
+        $this->assertStringStartsWith("*Security: sensitive data in logs · Main Website Store*\n\n"
             . "PCI: payment card number in system.log (2×, last 08:01)\n"
             . 'Where: app/code/Vendor/Payment/Model/Gateway.php:120'
             . "\n\nCredentials: password in exception.log", $text);

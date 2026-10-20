@@ -4,8 +4,9 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 /**
- * When a website's daily summary is due: from its summary time in the website's time zone until LATE_HOURS after
- * it, once - a run that missed the window (cron down all day) skips that day.
+ * When a daily summary is due: from the summary time in its target's time zone (the global one: the default store
+ * view's; a website's: its own) until LATE_HOURS after it, once - a run that missed the window (cron down all day)
+ * skips that day.
  */
 class SummarySchedule
 {
@@ -24,7 +25,7 @@ class SummarySchedule
         } catch (\Exception) {
             $zone = new \DateTimeZone('UTC');
         }
-        $minute = $this->config->getSummaryMinute($target->websiteId);
+        $minute = $this->config->getSummaryMinute();
         $local = (new \DateTimeImmutable('@' . $now))->setTimezone($zone);
         $slot = $local->setTime(intdiv($minute, 60), $minute % 60);
         if ($slot->getTimestamp() > $now) {

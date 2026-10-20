@@ -158,6 +158,15 @@ class RunnerTest extends TestCase
         $this->assertSame(2, $this->store->row('checks')[0]['cron']['runs']);
     }
 
+    public function testSharedProblemsGoToWebsiteChannelsOnlyWhenAsked(): void
+    {
+        $this->results['cron'] = CheckResult::fail('no job has run');
+        $this->assertSame([0], $this->run5()['queued'], 'off by default: the global channel only');
+        $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => $this->clock->now]]]);
+        $this->settings = ['general/shared_to_websites' => '1'];
+        $this->assertSame([1], $this->run5()['queued'], 'on: website 1, a channel of its own, gets it too');
+    }
+
     public function testTheTimeSinceTheStatusChangedIsKept(): void
     {
         $start = $this->clock->now;
@@ -257,16 +266,6 @@ class RunnerTest extends TestCase
         $this->statusLoaded = [];
         $this->run5();
         $this->assertSame([3, []], [count($this->statusQueued), $this->statusLoaded], 'off: not even read');
-    }
-
-    public function testWithoutShopWideAlertsTheStatusGoesToTheFirstWebsite(): void
-    {
-        $this->shopWide = false;
-        $this->websites = [2, 3];
-        $this->statusSentAt = null;
-        $this->run5();
-        $this->assertSame(['2 (sent_at IS NULL OR sent_at < NOW() - INTERVAL 58 MINUTE)'], $this->statusQueued);
-        $this->assertSame([2], $this->statusLoaded);
     }
 
     public function testTheHeartbeatStopsOnlyWhenTheStatusIsLateBeyondTheGrace(): void

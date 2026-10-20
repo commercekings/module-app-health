@@ -58,6 +58,19 @@ class ConfigFilesTest extends TestCase
             'another module replaces it with one <preference>');
     }
 
+    public function testEverySettingIsGlobalWithShortHints(): void
+    {
+        $system = $this->xml('adminhtml/system.xml');
+        $this->assertSame([], $system->xpath('//*[@showInWebsite="1" or @showInStore="1"]'),
+            'default scope only: App health is one global control');
+        foreach ($system->xpath('//section[@id="commercekings_app_health"]//comment') as $comment) {
+            $this->assertLessThanOrEqual(200, mb_strlen(trim((string)$comment)), (string)$comment);
+        }
+        $this->assertNotEmpty($system->xpath('//group[@id="general"]/field[@id="website_channels"]/backend_model'));
+        $this->assertSame('0', (string)$this->xml('config.xml')->default->commercekings_app_health->general
+            ->shared_to_websites, 'shared problems to website channels: off by default');
+    }
+
     public function testNothingOnTheStorefront(): void
     {
         $root = dirname(__DIR__, 2);

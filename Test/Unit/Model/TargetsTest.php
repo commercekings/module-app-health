@@ -54,20 +54,22 @@ class TargetsTest extends TestCase
     private const ON = ['commercekings_app_health/general/enabled' => '1',
         'commercekings_app_health/general/channel' => 'slack', 'commercekings_app_health/general/recipient' => 'C00'];
 
-    public function testTheShopWideChecksGoToTheDefaultScopeAndWebsitesInheritIt(): void
+    public function testGlobalSettingsAndAWebsiteChannelOfItsOwn(): void
     {
-        $targets = $this->targets(['default' => self::ON,
-            'websites/2' => ['commercekings_app_health/general/recipient' => 'C02'],
+        $targets = $this->targets(['default' => self::ON + ['commercekings_app_health/general/website_channels'
+            => json_encode(['_1' => ['website_id' => '2', 'channel' => 'slack', 'recipient' => 'C02']])],
+            'websites/2' => ['commercekings_app_health/general/recipient' => 'C-ignored'],
             'stores/2' => ['general/store_information/name' => 'Moj Planer']]);
         $shopWide = $targets->shopWide();
         $this->assertSame([0, 1, 'C00', 'Main Website Store', 'Europe/Belgrade'], [$shopWide->websiteId,
             $shopWide->storeId, $shopWide->recipient, $shopWide->name, $shopWide->timezone]);
         $websites = $targets->websites();
         $this->assertSame([1, 2], array_keys($websites));
-        $this->assertSame(['C00', 'Main Website Store'], [$websites[1]->recipient, $websites[1]->name]);
-        $this->assertSame(['C02', 'Moj Planer', 2],
-            [$websites[2]->recipient, $websites[2]->name, $websites[2]->storeId],
-            'its own recipient; the Store Information name first');
+        $this->assertSame(['C00', 'Main Website Store', false], [$websites[1]->recipient, $websites[1]->name,
+            $websites[1]->ownChannel], 'no row: the global channel');
+        $this->assertSame(['C02', 'Moj Planer', 2, true],
+            [$websites[2]->recipient, $websites[2]->name, $websites[2]->storeId, $websites[2]->ownChannel],
+            'its row; a website-scope setting is not read; the Store Information name first');
         $this->assertSame('C02', $targets->forWebsite(2)->recipient);
         $this->assertSame(0, $targets->forWebsite(0)->websiteId);
     }
@@ -75,12 +77,11 @@ class TargetsTest extends TestCase
     public function testOffOrWithoutARecipientIsNoTarget(): void
     {
         $targets = $this->targets(['default' => ['commercekings_app_health/general/enabled' => '0'] + self::ON,
-            'websites/1' => ['commercekings_app_health/general/enabled' => '1'],
-            'websites/2' => ['commercekings_app_health/general/enabled' => '1',
-                'commercekings_app_health/general/recipient' => '']]);
-        $this->assertNull($targets->shopWide());
-        $this->assertSame([1], array_keys($targets->websites()));
-        $this->assertNull($targets->forWebsite(2));
-        $this->assertNotNull($targets->resolve(0), 'the test alert works while alerts are off');
+            'websites/1' => ['commercekings_app_health/general/enabled' => '1']]);
+        $this->assertNull($targets->shopWide(), 'global: a website can\'t turn it on');
+        $this->assertSame([], $targets->websites());
+        $this->assertNotNull($targets->global(), 'the test alert works while app health is off');
+        $this->assertNull($this->targets(['default' => ['commercekings_app_health/general/recipient' => ''] + self::ON])
+            ->shopWide());
     }
 }

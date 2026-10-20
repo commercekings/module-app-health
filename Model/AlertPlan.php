@@ -22,6 +22,9 @@ class AlertPlan
     /** Checks that count in a time window: "recovered" only after Config::getRecoverRuns() OK runs in a row. */
     public const WINDOW_CHECKS = ['exceptions', 'system_log', 'queues', 'email_failing'];
 
+    /** Checks whose news goes to the global channel only (security findings), never to a website channel. */
+    public const GLOBAL_ONLY = ['sensitive_data'];
+
     public const PROBLEM = 'problem';
     public const RECOVERED = 'recovered';
     public const REPEAT = 'repeat';
@@ -123,6 +126,20 @@ class AlertPlan
             }
         }
         return $pending;
+    }
+
+    /**
+     * The checks a scope's alerts are about: its own (scope 0: the shared ones); a website with a channel of its own
+     * also the shared ones but GLOBAL_ONLY when *Also post shared problems to website channels* is on.
+     *
+     * @param array<int|string, array<string, array<mixed>>> $checksRow the "checks" row
+     * @return array<string, array<mixed>>
+     */
+    public static function scopeChecks(array $checksRow, int $scope, bool $withShared): array
+    {
+        $own = (array)($checksRow[$scope] ?? []);
+        return $scope === 0 || !$withShared ? $own
+            : $own + array_diff_key((array)($checksRow[0] ?? []), array_flip(self::GLOBAL_ONLY));
     }
 
     /**

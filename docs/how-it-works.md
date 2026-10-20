@@ -6,7 +6,7 @@ Health checks and team alerts in `commercekings/module-app-health`. Start with t
 
 ```
  CRON (every 5 min)     Runner: the checks within a 5 s budget, the "checks" row, alerts queued on news, heartbeat
- CRON (every 15 min)    QueueSummaries: each website's daily summary once its time has passed
+ CRON (every 15 min)    QueueSummaries: the global daily summary and each website channel's, once its time has passed
  QUEUE (Notification)   Alert, Summary: compose on fresh state, send once, record what the team was told
  ADMIN                  App health settings, "Send test alert"
  SERVER (every minute)  host-status.sh (not Magento): var/app-health/status-<server>.json, read by the 5-min run
@@ -19,12 +19,13 @@ Nothing runs on the storefront: no plugins, observers, layout or frontend routes
 1. Nothing happens while alerts are off everywhere and no heartbeat is set (a few configuration reads).
 2. `Model\RunState` reads the module's state once (about 10 rows of Magento's `flag` table, one query).
 3. The enabled checks run in `Model\CheckPool`'s order. Shop-wide checks (`Api\CheckInterface`) run once; checks per
-   website (`Api\WebsiteCheckInterface`) run once for all websites with alerts on. A check that would start after
+   website (`Api\WebsiteCheckInterface`) run once for all websites. A check that would start after
    `Runner::BUDGET_SECONDS` (5 s) is skipped and keeps its last result; one that throws becomes a warning ("could not
    run") and only its exception class is logged.
-4. Each result goes to the `checks` row by scope (0 = shop-wide, else the website id) and code, with the time its
-   status last changed and its run time in ms; its worst status and counts to the hour's `tally:<YmdH>` row. One write.
-5. For each scope with alerts on, `Model\AlertPlan` compares the results with what that team was last told
+4. Each result goes to the `checks` row by scope (0 = the shared checks, else the website id) and code, with the time
+   its status last changed and its run time in ms; its worst status and counts to the hour's `tally:<YmdH>` row. One
+   write.
+5. For each scope (0, and every website), `Model\AlertPlan` compares the results with what that team was last told
    (`alerted:<scope>`): a status other than the one told is news (a problem, or "recovered"), and so is a fail told
    longer ago than *Repeat a failing check after*. A check never told counts as told ok. News queues one
    `app_health_alert` for the scope.
@@ -51,27 +52,35 @@ the scope):
   again after the wait. A recipient the channel rejects is logged as a setting to fix. A message that may have gone out
   (`MessageSentException`) is never sent again.
 
-**Pace:** a check going to FAIL is sent at once, and its "resolved" at its first OK run – for the checks that count
-in a time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing) only after *Recovered
-after* OK runs in a row (the `runs` in the checks row). A WARN is not sent at once: the hourly status and the daily
-summary list it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions,
-sensitive data – at most once per *New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10 shown). ERROR
-log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`, and the
-hourly status lists them. WARNING entries only count, for the daily summary.
+**Pace:** a check going to FAIL is sent at once, and its "resolved" at its first OK run – for the checks that count in a
+time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing) only after *Recovered after* OK
+runs in a row (the `runs` in the checks row). A WARN is not sent at once: the hourly status and the daily summary list
+it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions, sensitive data – at most
+once per *New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10
+shown). ERROR log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`,
+and the hourly status lists them. WARNING entries only count, for the daily summary.
 
-**The hourly status** (`Model\Notification\Status`, reference = its scope: 0, the default scope's recipient, or with
-shop-wide alerts off the first website with alerts on): every run reads its delivery state (one query); once its
-interval (`Api\StatusPolicyInterface::getIntervalMinutes()`, kept within 15 to 180 minutes) has passed since the last
-delivery, every run queues it until it is delivered. Its text: "All checks OK" or the checks failing in every scope,
-the warnings, then "New errors this hour" since the last status. The consumer builds an `Api\Data\StatusReport` and
-asks the policy (`Model\Status\DefaultPolicy`: posted with problems, warnings or errors, and "All checks OK" once a
-day from the summary time): posted, or delivered quietly – claimed and recorded as sent (`sent_at`) without calling the
-provider. With the hourly status on, the heartbeat is pinged unless the status has been due for
-`Runner::STATUS_GRACE_MINUTES` and is still not delivered (the `status` row keeps since when it is due). A quiet
+**The hourly status** (`Model\Notification\Status`, reference 0, to the global recipient): every run reads its delivery
+state (one query); once its interval (`Api\StatusPolicyInterface::getIntervalMinutes()`, kept within 15 to 180 minutes)
+has passed since the last delivery, every run queues it until it is delivered. Its text: "All checks OK" or the checks
+failing in every scope, the warnings, then "New errors this hour" since the last status. The consumer builds an
+`Api\Data\StatusReport` and asks the policy (`Model\Status\DefaultPolicy`: posted with problems, warnings or errors, and
+"All checks OK" once a day from the summary time): posted, or delivered quietly – claimed and recorded as sent
+(`sent_at`) without calling the provider. With the hourly status on, the heartbeat is pinged unless the status has been
+due for `Runner::STATUS_GRACE_MINUTES` and is still not delivered (the `status` row keeps since when it is due). A quiet
 delivery proves the queue and its consumer, not the channel: the posted statuses and the alerts do.
 
-The daily summary covers the last 24 hourly tallies of the shop-wide checks and the website's own: checks not ok now,
-counts, checks that had problems and checks ok all day. It is sent from its time until 12 hours later, once a day.
+**Routing** (`Model\Targets`; every setting global, at the default scope): scope 0 – the shared checks, security
+findings, the hourly status, the global summary – goes to the global channel and recipient; a website's own checks
+(scope = its id) to its *Website channels* row, else to the global channel (`Target::$ownChannel` false; its lines name
+the website). With *Also post shared problems to website channels*, a website with a channel of its own also gets the
+shared checks' alerts (`AlertPlan::scopeChecks()`; never `GLOBAL_ONLY`: security findings).
+
+The daily summary covers the last 24 hourly tallies: the global one (scope 0) the shared checks and the own checks of
+each website without a channel of its own, named ("Email sending (EU Store)", the code "email_disabled@EU Store"); a
+website channel's only that website's checks. Each: checks not ok now, counts, checks that had problems and checks ok
+all day. It is sent from its time (the default store view's time zone; a website channel's in the website's) until 12
+hours later, once a day.
 
 ## The checks
 
@@ -89,15 +98,16 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `external` | `var/app-health/status-*.json` (written by a script on the server); creates the folder and `status.json.dist` when missing | at most 20 files of 32 KB, each validated only when its hash changed; no query |
 | `sales_emails` | orders (not cancelled or closed), invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |
 
-Times are UTC, like Magento's database session; the summary time is in the website's time zone.
+Times are UTC, like Magento's database session; the summary time is in each summary's own time zone.
 
 ## Logs
 
-The `system_log` and `exceptions` checks read their log sources through `Model\Log\LogReader`: each source of the
-check (`Model\Log\LogSourcePool`) is read once per run from its stored cursor (`cursor:log:<code>`), at most the check's
-*Read at most* (1 MB), parsed by the source's parser, and every entry passed through `Model\Log\Normalizer`, which
-alone decides what leaves the server: level, channel, exception class names (checked), where it happened (relative
-to the Magento root, plus the line), a fingerprint and a safe label – and the masked message (on by default, *Add the masked log message*).
+The `system_log` and `exceptions` checks read their log sources through `Model\Log\LogReader`: each source of the check
+(`Model\Log\LogSourcePool`) is read once per run from its stored cursor (`cursor:log:<code>`), at most the check's *Read
+at most* (1 MB), parsed by the source's parser, and every entry passed through `Model\Log\Normalizer`, which alone
+decides what leaves the server: level, channel, exception class names (checked), where it happened (relative to the
+Magento root, plus the line), a fingerprint and a safe label – and the masked message (on by default, *Add the masked
+log message*).
 
 - **Fingerprint:** a hash of the channel, the level group (warning, error, critical), the exception class and the
   normalized message (URLs, emails, quoted values, hex, numbers and paths after their first segment as placeholders),

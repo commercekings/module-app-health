@@ -126,7 +126,7 @@ class Messages
         $hadProblems = [];
         $okAllDay = [];
         foreach ($checks as $code => $check) {
-            $label = $this->pool->getLabel((string)$code);
+            $label = $this->label((string)$code);
             $status = (string)($check['status'] ?? CheckResult::OK);
             if ($status !== CheckResult::OK) {
                 $detail = $this->times($target, (string)($check['detail'] ?? ''));
@@ -134,7 +134,8 @@ class Messages
                     : ($status === CheckResult::FAIL ? 'failing' : 'warning'));
             } elseif (($worst[$code] ?? 0) > 0) {
                 $hadProblems[] = $label . ': ' . ($worst[$code] > 1 ? 'failed' : 'warned') . ' earlier, OK now';
-            } elseif (!in_array($code, array_merge(self::LOGS, ['sales_emails', 'sensitive_data']), true)) {
+            } elseif (!in_array($this->base((string)$code), array_merge(self::LOGS, ['sales_emails', 'sensitive_data']),
+                true)) {
                 $okAllDay[] = $okAllDay === [] ? $label : $this->lower($label);
             }
         }
@@ -182,10 +183,9 @@ class Messages
 
     public function test(Target $target): string
     {
-        $gets = $target->isShopWide()
-            ? 'This channel gets the alerts of the checks for all websites (cron, indexers, caches, logs, ...).'
-            : 'This channel gets this website\'s alerts (its email settings, its sales emails) and its daily summary.';
-        return $this->block('*Test alert · ' . $this->where($target) . '*', [$gets]);
+        return $this->block('*Test alert · ' . $this->where($target) . '*', ['This channel gets the shared checks\''
+            . ' alerts (cron, indexers, caches, logs, ...), security findings, the hourly status and the daily'
+            . ' summary.']);
     }
 
     /**
@@ -239,11 +239,20 @@ class Messages
     private function email(Target $target, array $checks, array $counts): array
     {
         $lines = [];
-        if (isset($checks['sales_emails'])) {
-            $gauges = (array)($checks['sales_emails']['gauges'] ?? []);
+        $sales = array_filter($checks, fn ($code) => $this->base((string)$code) === 'sales_emails',
+            ARRAY_FILTER_USE_KEY);
+        foreach ($sales as $code => $check) {
+            $gauges = (array)($check['gauges'] ?? []);
             $unsent = (int)($gauges['unsent'] ?? 0);
-            $lines[] = $unsent === 0 ? 'All order emails sent' : Format::many($unsent, 'order emails') . ' not sent'
-                . ((int)($gauges['oldest'] ?? 0) > 0 ? ', oldest ' . $this->when($target, (int)$gauges['oldest']) : '');
+            $site = $this->site((string)$code);
+            if ($unsent > 0) {
+                $lines[] = ($site !== '' ? $site . ': ' : '') . Format::many($unsent, 'order emails') . ' not sent'
+                    . ((int)($gauges['oldest'] ?? 0) > 0 ? ', oldest ' . $this->when($target, (int)$gauges['oldest'])
+                    : '');
+            }
+        }
+        if ($sales !== [] && $lines === []) {
+            $lines[] = 'All order emails sent';
         }
         if (isset($checks['email_failing'])) {
             $errors = (int)($counts['email_failing']['mail errors'] ?? 0);
@@ -307,10 +316,27 @@ class Messages
         return [$worst, $counts];
     }
 
-    /** "Main Website Store (all websites)" for the shop-wide checks. */
+    /** The shop's name (the global messages) or the website's (a website's own). */
     private function where(Target $target): string
     {
-        return $target->name . ($target->isShopWide() ? ' (all websites)' : '');
+        return $target->name;
+    }
+
+    /** A check's label; "code@<website>" (a website's check in the global summary): "Email sending (EU Store)". */
+    private function label(string $code): string
+    {
+        $site = $this->site($code);
+        return $this->pool->getLabel($this->base($code)) . ($site !== '' ? ' (' . $site . ')' : '');
+    }
+
+    private function base(string $code): string
+    {
+        return explode('@', $code, 2)[0];
+    }
+
+    private function site(string $code): string
+    {
+        return explode('@', $code, 2)[1] ?? '';
     }
 
     /** "no job has run since {t:...}" with the time in the recipient's zone. */
