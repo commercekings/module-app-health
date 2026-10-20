@@ -21,6 +21,8 @@ class StateStore
     public const TABLE = 'flag';
     public const PREFIX = 'commercekings_app_health_';
     public const TALLY_HOURS = 26;
+    /** How long a write waits for another one (the run's, a consumer's) to finish. */
+    public const LOCK_SECONDS = 10;
     /** A key's start => the flag row (after PREFIX) it is kept in. */
     private const GROUPS = ['cursor:' => 'cursors', 'alerted:' => 'told', 'noticed:' => 'told', 'notices:' => 'notices',
         'tally:' => 'tallies', 'status' => 'status'];
@@ -74,6 +76,13 @@ class StateStore
             $byGroup[$this->group((string)$key)][(string)$key] = $value;
         }
         $db = $this->db();
+        // one writer at a time: flag.flag_code has no unique key, so two first writes of a row would insert it twice
+        // (FOR UPDATE locks no row that is not there yet); per database, a lock name is the server's
+        $lock = new Expression('SHA1(CONCAT(DATABASE(), ' . $db->quote('.' . $this->table()) . '))');
+        if ((int)$db->fetchOne('SELECT GET_LOCK(' . $lock . ', ' . self::LOCK_SECONDS . ')') !== 1) {
+            throw new \RuntimeException('App health state: another write held its lock for ' . self::LOCK_SECONDS
+                . ' seconds');
+        }
         $db->beginTransaction();
         try {
             $current = $this->rows(array_keys($byGroup), true);
@@ -110,6 +119,8 @@ class StateStore
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
+        } finally {
+            $db->fetchOne('SELECT RELEASE_LOCK(' . $lock . ')');
         }
     }
 

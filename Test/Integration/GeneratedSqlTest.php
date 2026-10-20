@@ -218,9 +218,14 @@ class GeneratedSqlTest extends TestCase
         $this->db->insert($this->table('flag'), ['flag_code' => 'someone_else', 'flag_data' => '{"x":1}']);
         $store = new StateStore($this->resource);
         $this->assertSame([], $store->loadAll());
+        $lock = 'SHA1(CONCAT(DATABASE(), ' . $this->db->quote('.' . $this->table('flag')) . '))';
+        $this->db->fetchOne('SELECT GET_LOCK(' . $lock . ', 1)'); // re-entrant on the same connection
+        $this->db->fetchOne('SELECT RELEASE_LOCK(' . $lock . ')');
         $store->save(['checks' => [0 => ['cron' => ['status' => 'ok']]], 'cursor:cron' => ['last' => 1],
             'cursor:log:system' => ['offset' => 5], 'alerted:0' => ['cron' => ['status' => 'fail', 'at' => 2]],
             'tally:2026102008' => [0 => []], 'tally:2026102009' => [0 => []], 'external' => ['a' => ['ok' => 1]]]);
+        $this->assertSame('1', (string)$this->db->fetchOne('SELECT IS_FREE_LOCK(' . $lock . ')'),
+            'one writer at a time, the lock released after each write');
         $codes = $this->db->fetchCol($this->db->select()->from($this->table('flag'), ['flag_code'])
             ->order('flag_code'));
         $this->assertSame(['commercekings_app_health_checks', 'commercekings_app_health_cursors',
