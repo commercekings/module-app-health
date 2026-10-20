@@ -25,7 +25,8 @@ class Normalizer
 
     /**
      * @return array{rank: int, level: string, channel: string, classes: string[], location: ?string,
-     *     fingerprint: string, label: string, message: ?string}|null null below WARNING or for an unknown level
+     *     fingerprint: string, label: string, message: ?string, time: ?int}|null null below WARNING or for an unknown
+     *     level
      */
     public function safe(LogEntry $entry, string $root, bool $withMessage): ?array
     {
@@ -48,6 +49,7 @@ class Normalizer
                 . $normalized)), 0, 8),
             'label' => $class !== '' ? $class : $this->label($normalized),
             'message' => $withMessage ? $this->mask($entry->message) : null,
+            'time' => $entry->time,
         ];
     }
 

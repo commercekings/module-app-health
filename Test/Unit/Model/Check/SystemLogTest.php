@@ -58,7 +58,8 @@ class SystemLogTest extends TestCase
             array_intersect_key($first->counts, ['critical' => 1, 'errors' => 1, 'warnings' => 1]));
         $this->assertSame(CheckResult::OK, $first->status);
         $this->assertCount(1, $first->notices, 'one error, twice');
-        $this->assertMatchesRegularExpression('/^NEW ERROR main: Unable to send order \*\*\* x2 #[0-9a-f]{8}$/',
+        $this->assertMatchesRegularExpression('/^🆕 🟠 Unable to send order \*\*\* ×2 · \{t:\d+\}'
+            . ' · #[0-9a-f]{8}$/u',
             $first->notices[0]);
         $again = $this->run5(self::line('ERROR', 'Unable to send order 5'));
         $this->assertSame([], $again->notices, 'seen before');
@@ -77,7 +78,7 @@ class SystemLogTest extends TestCase
         $this->clock->now += 6 * 3600;
         $again = $this->run5(self::line('CRITICAL', 'Payment gateway down'));
         $this->assertCount(1, $again->notices);
-        $this->assertStringStartsWith('CRITICAL main: Payment gateway down x1', $again->notices[0], 'not "NEW"');
+        $this->assertStringStartsWith('🔴 Payment gateway down ×1', $again->notices[0], 'not "NEW"');
     }
 
     public function testTheFingerprintMemoryIsBounded(): void

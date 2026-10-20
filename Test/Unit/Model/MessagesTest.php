@@ -76,21 +76,49 @@ class MessagesTest extends TestCase
         ];
         $tallies = [
             ['cron' => ['w' => 2, 'c' => ['runs' => 1000]], 'caches' => ['w' => 1, 'c' => []],
-                'system_log' => ['w' => 0, 'c' => ['critical' => 0, 'errors' => 9, 'warnings' => 40,
-                    'fp:aaaaaaaa' => 9]],
+                'system_log' => ['w' => 0, 'c' => ['critical' => 1, 'errors' => 9, 'warnings' => 40,
+                    'fp:aaaaaaaa' => 9, 'fp:cccccccc' => 1, 'fp:dddddddd' => 40]],
                 'exceptions' => ['w' => 0, 'c' => ['exceptions' => 5, 'fp:bbbbbbbb' => 5]]],
-            ['system_log' => ['w' => 0, 'c' => ['errors' => 5, 'warnings' => 12, 'fp:aaaaaaaa' => 5]],
-                'email_failing' => ['w' => 0, 'c' => ['mail errors' => 0]]],
+            ['system_log' => ['w' => 0, 'c' => ['errors' => 5, 'warnings' => 12, 'fp:aaaaaaaa' => 5,
+                'fp:dddddddd' => 12]], 'email_failing' => ['w' => 0, 'c' => ['mail errors' => 0]]],
         ];
-        $fingerprints = ['aaaaaaaa' => ['label' => 'Vendor\\Payment\\PaymentException', 'first' => self::NOW - 3600],
-            'bbbbbbbb' => ['label' => 'Magento\\Framework\\Exception\\NoSuchEntityException', 'first' => 1]];
+        $fingerprints = [
+            'aaaaaaaa' => ['label' => 'Unable to send order ***', 'level' => 'ERROR', 'message' => 'Unable to send'
+                . ' order *** to ***', 'location' => 'app/code/A/B.php:84', 'first' => self::NOW - 3600,
+                'last' => self::NOW - 600],
+            'bbbbbbbb' => ['label' => 'Magento\\Framework\\Exception\\NoSuchEntityException', 'level' => 'CRITICAL',
+                'message' => 'No such entity with ***', 'first' => 1, 'last' => self::NOW - 7200],
+            'cccccccc' => ['label' => 'Payment gateway down', 'level' => 'CRITICAL', 'first' => 1,
+                'last' => self::NOW - 60, 'location' => '…/pay/Client.php:88'],
+            'dddddddd' => ['label' => 'Slow response ***', 'level' => 'WARNING', 'first' => 1, 'last' => self::NOW],
+        ];
         $this->assertSame("*Daily summary – Main Website Store – 20 Oct*\n\n"
             . "*Problems (2)*\n🔴 Cron: no job has run since 09:00 (60 min)\n✅ Caches: warned earlier, ok now\n\n"
-            . "*Logs (24 h)*\nsystem.log: 0 critical, 14 errors, 52 warnings\n"
-            . "Top errors: PaymentException ×14 (new), NoSuchEntityException ×5\nexception.log: 5\n\n"
+            . "*Logs (24 h)*\nsystem.log: 1 critical, 14 errors, 52 warnings\nexception.log: 5\n"
+            . "🔴 *Critical*\n"
+            . "Payment gateway down ×1 · 09:59 · …/pay/Client.php:88 · #cccccccc\n"
+            . "NoSuchEntityException: No such entity with *** ×5 · 08:00 · #bbbbbbbb\n"
+            . "🟠 *Errors*\n🆕 Unable to send order *** to *** ×14 · 09:50 · app/code/A/B.php:84 · #aaaaaaaa\n"
+            . "🟡 *Warnings*\nSlow response *** ×52 · 10:00 · #dddddddd\n\n"
             . "*Email*\nSales emails unsent: 0 · Mail errors: 0\n\n"
             . "*OK all day*\nIndexers · Sending · Email sending",
             $this->messages->summary($this->target(1), $checks, $tallies, self::NOW, $fingerprints));
+    }
+
+    public function testEachLevelIsCappedThenCounted(): void
+    {
+        $fingerprints = [];
+        $counts = ['warnings' => 5];
+        for ($i = 0; $i < 5; $i++) {
+            $fp = sprintf('%08d', $i);
+            $fingerprints[$fp] = ['label' => 'w' . $i, 'level' => 'WARNING', 'first' => 1, 'last' => self::NOW - $i];
+            $counts['fp:' . $fp] = 1;
+        }
+        $text = $this->messages->summary($this->target(1), ['system_log' => ['status' => 'ok']],
+            [['system_log' => ['w' => 0, 'c' => $counts]]], self::NOW, $fingerprints);
+        $this->assertStringContainsString("🟡 *Warnings*\nw0 ×1 · 10:00 · #00000000\nw1 ×1", $text,
+            'the latest first');
+        $this->assertStringContainsString("w2 ×1 · 09:59 · #00000002\n…and 2 more", $text);
     }
 
     public function testEmptySectionsAreLeftOut(): void

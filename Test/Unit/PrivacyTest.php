@@ -110,8 +110,8 @@ class PrivacyTest extends TestCase
         }
         $this->assertStringContainsString('Vendor\\\\Payment\\\\Exception\\\\CardDeclined', $everything);
         $this->assertStringContainsString('app/code/Vendor/Pay/Model/Gateway.php:120', $everything, 'where, relative');
-        $this->assertStringContainsString('NEW ERROR main: Customer *** could not pay', $everything, 'names masked');
-        $this->assertStringContainsString('NEW CRITICAL payment: Payment gateway down for *** in ***', $everything);
+        $this->assertStringContainsString('🆕 🟠 Customer *** could not pay', $everything, 'names masked');
+        $this->assertStringContainsString('🆕 🔴 Payment gateway down for *** in ***', $everything);
         $this->assertStringContainsString('1 new mail transport error', $everything);
     }
 
@@ -121,7 +121,7 @@ class PrivacyTest extends TestCase
         foreach (self::PRIVATE as $private) {
             $this->assertStringNotContainsString($private, $everything, $private);
         }
-        $this->assertStringContainsString('- "Customer Jane Doe could not pay: Jane Doe <***>, ***', $everything,
+        $this->assertStringContainsString('🆕 🟠 Customer Jane Doe could not pay: Jane Doe <***>, ***', $everything,
             'the message, masked: names remain (README)');
     }
 }

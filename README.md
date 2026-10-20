@@ -55,7 +55,7 @@ OK again since 11:52.
 
 ```
 🔴 *New errors: system.log – Main Website Store (all websites)*
-NEW ERROR main: Unable to send the order *** x3 at app/code/Vendor/Mail/Model/Sender.php:84 #a1b2c3d4
+🆕 🔴 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
 Check: var/log/system.log: look for the fingerprint's error around that time.
 ```
 
@@ -66,9 +66,15 @@ Check: var/log/system.log: look for the fingerprint's error around that time.
 🔴 Cron: no job has run since 10:39 (65 min)
 
 *Logs (24 h)*
-system.log: 0 critical, 14 errors, 52 warnings
-Top errors: PaymentException ×9 (new), NoSuchEntityException ×5
+system.log: 1 critical, 14 errors, 52 warnings
 exception.log: 14
+🔴 *Critical*
+🆕 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+🟠 *Errors*
+Unable to send the order *** ×9 · 13:40 · app/code/Vendor/Mail/Model/Sender.php:84 · #5e6f7a8b
+NoSuchEntityException: No such entity with *** ×5 · 11:02 · #0c1d2e3f
+🟡 *Warnings*
+Slow response from *** ×52 · 14:10 · #9a8b7c6d
 
 *Email*
 Sales emails unsent: 0 · Mail errors: 0
@@ -93,7 +99,7 @@ when `cron_consumers_runner` is on), or a Slack outage delays the alerts instead
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Add the masked log message (No); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Daily summary (Yes) at 08:00; Repeat a failing check after (6 hours); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
@@ -124,13 +130,16 @@ Details and examples: [how it works](docs/how-it-works.md).
 
 ## What is masked
 
-- **Always:** a log line never leaves the server. Alerts carry the safe label, file:line (relative to the Magento root)
-  and an 8-character fingerprint. The label is the exception class, else the message's first 8 words with URLs,
-  emails, quoted values, hex strings, numbers and paths after their first segment as `***` – and any capitalized
-  word after the first (often a name).
-- **With *Add the masked log message*:** the message's first 160 characters too, with emails, phone numbers, numbers of
-  4 digits or more, tokens, URLs and quoted values as `***`. **Not masked there:** names and other free text (e.g.
-  "Customer jane doe not found"). Leave it off if your logs may contain them.
+A log line never leaves the server as it is. An error is shown by file:line (relative to the Magento root), an
+8-character fingerprint and:
+
+- **The masked message (default):** its first 160 characters, one line, with **emails, phone numbers, numbers of 4
+  digits or more, tokens, URLs and quoted values** as `***` (an exception's class first). **Not masked:** names and
+  other free text, e.g. "Customer jane doe not found" or SQL. The masked message is also kept in the module's table
+  for the summary (the latest per error, at most 500 errors).
+- **The label only** (*Add the masked log message* = No): the exception class, else the message's first 8 words with
+  URLs, emails, quoted values, hex strings, numbers and paths after their first segment as `***` – and any capitalized
+  word after the first (often a name). Use it when your logs may contain names.
 
 ## Limitations
 

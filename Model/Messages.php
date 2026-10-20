@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
@@ -22,6 +23,8 @@ class Messages
     /** Checks with a section of their own in the summary (their counts there, not in "OK all day"). */
     private const LOGS = ['system_log', 'exceptions'];
     private const EMAIL = ['sales_emails', 'email_failing'];
+    /** The summary's log entries per level: its title and how many. */
+    private const LIMITS = ['CRITICAL' => ['Critical', 5], 'ERROR' => ['Errors', 10], 'WARNING' => ['Warnings', 3]];
     /** Checks whose counts the summary leaves out. */
     private const QUIET = ['cron'];
 
@@ -65,14 +68,16 @@ class Messages
     }
 
     /**
-     * One check's new notices (e.g. new errors in its logs).
+     * One check's new notices (e.g. new errors in its logs), times in the recipient's zone.
      *
      * @param string[] $notices
      */
     public function notices(Target $target, string $code, array $notices): string
     {
         $lines = ['🔴 *New errors: ' . $this->pool->getLabel($code) . ' – ' . $this->where($target) . '*'];
-        array_push($lines, ...array_values($notices));
+        foreach ($notices as $notice) {
+            $lines[] = $this->times($target, $notice);
+        }
         $hint = $this->pool->getHint($code);
         if ($hint !== '') {
             $lines[] = 'Check: ' . $hint;
@@ -111,7 +116,7 @@ class Messages
         if ($problems !== []) {
             $sections[] = '*Problems (' . count($problems) . ")*\n" . implode("\n", $problems);
         }
-        $logs = $this->logs($checks, $counts, $fingerprints, $now);
+        $logs = $this->logs($target, $checks, $counts, $fingerprints, $now);
         if ($logs !== []) {
             $sections[] = "*Logs (24 h)*\n" . implode("\n", $logs);
         }
@@ -151,12 +156,15 @@ class Messages
     }
 
     /**
+     * The logs' counts, then their entries of the day: Critical, Errors, Warnings (at most LIMITS each, the latest
+     * first), one line per fingerprint (Fingerprints::line()).
+     *
      * @param array<string, array<mixed>> $checks
      * @param array<string, array<string, int>> $counts by check code
      * @param array<string, array<mixed>> $fingerprints
      * @return string[]
      */
-    private function logs(array $checks, array $counts, array $fingerprints, int $now): array
+    private function logs(Target $target, array $checks, array $counts, array $fingerprints, int $now): array
     {
         $lines = [];
         $byFingerprint = [];
@@ -165,7 +173,7 @@ class Messages
                 continue;
             }
             $c = $counts[$code] ?? [];
-            $lines[$code] = $this->pool->getLabel($code) . ': ' . ($code === 'system_log'
+            $lines[] = $this->pool->getLabel($code) . ': ' . ($code === 'system_log'
                 ? sprintf('%s critical, %s errors, %s warnings', Format::number((int)($c['critical'] ?? 0)),
                     Format::number((int)($c['errors'] ?? 0)), Format::number((int)($c['warnings'] ?? 0)))
                 : Format::number((int)($c['exceptions'] ?? 0)));
@@ -175,26 +183,29 @@ class Messages
                 }
             }
         }
-        arsort($byFingerprint);
-        $top = [];
-        foreach (array_slice($byFingerprint, 0, 5, true) as $fp => $count) {
-            $known = $fingerprints[$fp] ?? [];
-            $label = (string)($known['label'] ?? '#' . $fp);
-            $short = str_contains($label, '\\') ? substr((string)strrchr($label, '\\'), 1) : $label;
-            $top[] = $short . ' ×' . Format::number($count)
-                . ((int)($known['first'] ?? 0) > $now - 86400 ? ' (new)' : '');
+        $groups = [];
+        foreach ($byFingerprint as $fp => $count) {
+            $known = $fingerprints[$fp] ?? null;
+            if (is_array($known) && $count > 0) {
+                $groups[(string)($known['level'] ?? 'ERROR')][$fp] = $known + ['count24' => $count];
+            }
         }
-        $result = [];
-        if (isset($lines['system_log'])) {
-            $result[] = $lines['system_log'];
+        foreach (self::LIMITS as $level => [$title, $limit]) {
+            $entries = $groups[$level] ?? [];
+            if ($entries === []) {
+                continue;
+            }
+            uasort($entries, fn ($a, $b) => (int)($b['last'] ?? 0) <=> (int)($a['last'] ?? 0));
+            $lines[] = Fingerprints::EMOJI[$level] . ' *' . $title . '*';
+            foreach (array_slice($entries, 0, $limit, true) as $fp => $known) {
+                $lines[] = $this->times($target, Fingerprints::line((string)$fp, $known, (int)$known['count24'],
+                    (int)($known['first'] ?? 0) > $now - 86400, false));
+            }
+            if (count($entries) > $limit) {
+                $lines[] = '…and ' . (count($entries) - $limit) . ' more';
+            }
         }
-        if ($top !== []) {
-            $result[] = 'Top errors: ' . implode(', ', $top);
-        }
-        if (isset($lines['exceptions'])) {
-            $result[] = $lines['exceptions'];
-        }
-        return $result;
+        return $lines;
     }
 
     /**

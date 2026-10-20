@@ -17,15 +17,16 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
  * source for "system_log"): new entries by level, notices for an error never seen before ("NEW ERROR", with where it
  * happened and its fingerprint) and for CRITICAL and above (again after the repeat interval), and "error_count" or
  * more errors (ERROR and above) within "window_minutes" (fail, the top 3 by fingerprint). Counts: critical, errors,
- * warnings and each error's fingerprint (the summary's top errors).
+ * warnings and each entry's fingerprint (the summary lists them).
  */
 class SystemLog implements CheckInterface
 {
     public const CODE = 'system_log';
     /** Notices per run; the rest are counted in one more line. */
     public const NOTICES = 5;
-    /** Fingerprint counts kept per run. */
+    /** Fingerprint counts kept per run: errors, warnings. */
     private const FINGERPRINTS = 20;
+    private const WARNINGS = 10;
 
     public function __construct(
         private readonly LogReader $reader,
@@ -57,18 +58,23 @@ class SystemLog implements CheckInterface
         $read = $this->reader->entries(self::CODE);
         $levels = ['critical' => 0, 'errors' => 0, 'warnings' => 0];
         $byFingerprint = [];
+        $warnings = [];
         $labels = [];
         foreach ($read['entries'] as $entry) {
             $levels[[1 => 'warnings', 2 => 'errors', 3 => 'critical'][(int)$entry['rank']]]++;
+            $fp = (string)$entry['fingerprint'];
             if ((int)$entry['rank'] >= 2) {
-                $byFingerprint[$entry['fingerprint']] = ($byFingerprint[$entry['fingerprint']] ?? 0) + 1;
-                $labels[$entry['fingerprint']] = $entry['label'];
+                $byFingerprint[$fp] = ($byFingerprint[$fp] ?? 0) + 1;
+                $labels[$fp] = $entry['label'];
+            } else {
+                $warnings[$fp] = ($warnings[$fp] ?? 0) + 1;
             }
         }
         arsort($byFingerprint);
+        arsort($warnings);
         $byFingerprint = array_slice($byFingerprint, 0, self::FINGERPRINTS, true);
         $counts = $levels;
-        foreach ($byFingerprint as $fp => $count) {
+        foreach ($byFingerprint + array_slice($warnings, 0, self::WARNINGS, true) as $fp => $count) {
             $counts['fp:' . $fp] = $count;
         }
         $notices = $this->notices($this->fingerprints->record($read['entries'], $now, true));
