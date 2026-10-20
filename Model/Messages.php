@@ -8,14 +8,17 @@ use CommerceKings\AppHealth\Model\Log\Fingerprints;
 use Magento\Framework\Stdlib\DateTime\DateTime;
 
 /**
- * The messages, plain text with Slack's *bold*: one problem per alert, its first line what and where (what a phone
- * notification shows), a status emoji (🔴 fail, 🟡 warning, ✅ ok or recovered), times in the recipient's time
- * zone, empty sections left out. Built only from the shop's name, check labels, titles, hints, statuses, data-free
- * details, counts and the fingerprints' safe labels:
+ * The messages, plain text with Slack's *bold* and "> " quotes: one problem per alert, its first line what and where
+ * (what a phone notification shows), a status emoji (🔴 fail, 🟡 warning, ✅ ok or recovered), then a blank line, one
+ * fact per quote line, a blank line and where to look. Times in the recipient's time zone, empty sections left out.
+ * Built only from the shop's name, check labels, titles, hints, statuses, data-free details, counts and the
+ * fingerprints' safe labels:
  *
  *   🔴 *Cron stopped – Main Website Store (all websites)*
- *   No job has run since 10:39 (65 min).
- *   Check: Is the cron container (or crontab) running? ...
+ *
+ *   > No job has run since 10:39 (65 min).
+ *
+ *   > Check: Is the cron container (or crontab) running? ...
  */
 class Messages
 {
@@ -50,36 +53,30 @@ class Messages
         $status = (string)($check['status'] ?? CheckResult::OK);
         if ($change === AlertPlan::RECOVERED || $status === CheckResult::OK) {
             $since = (int)($check['since'] ?? 0);
-            return '✅ *Recovered: ' . $label . ' – ' . $this->where($target) . '*'
-                . ($since > 0 ? "\nOK again since " . $this->when($target, $since) . '.' : '');
+            return $this->block('✅ *Recovered: ' . $label . ' – ' . $this->where($target) . '*',
+                $since > 0 ? ['OK again since ' . $this->when($target, $since) . '.'] : []);
         }
         $title = (string)($check['title'] ?? '') !== '' ? (string)$check['title']
             : $label . ($status === CheckResult::FAIL ? ' failing' : ' warning');
-        $lines = [self::EMOJI[$status] . ' *' . ($change === AlertPlan::REPEAT ? 'Still: ' : '') . $title . ' – '
-            . $this->where($target) . '*'];
+        $header = self::EMOJI[$status] . ' *' . ($change === AlertPlan::REPEAT ? 'Still: ' : '') . $title . ' – '
+            . $this->where($target) . '*';
+        $facts = [];
         $causes = array_filter((array)($check['causes'] ?? []), fn ($cause) => is_array($cause) && isset($cause[1]));
         if ($causes === []) {
-            $detail = $this->sentence($this->times($target, (string)($check['detail'] ?? '')));
-            if ($detail !== '') {
-                $lines[] = $detail;
-            }
+            $facts[] = $this->sentence($this->times($target, (string)($check['detail'] ?? '')));
         }
         $hints = [];
         foreach (array_slice($causes, 0, self::CAUSES) as $cause) {
-            $lines[] = '> ' . $this->sentence($this->times($target, (string)$cause[1]));
+            $facts[] = $this->sentence($this->times($target, (string)$cause[1]));
             if ((string)($cause[2] ?? '') !== '') {
                 $hints[(string)$cause[2]] = true;
             }
         }
         if ($change === AlertPlan::REPEAT && (int)($check['since'] ?? 0) > 0) {
-            $lines[] = ($causes !== [] ? '> ' : '') . 'Failing since '
-                . $this->when($target, (int)$check['since']) . '.';
+            $facts[] = 'Failing since ' . $this->when($target, (int)$check['since']) . '.';
         }
-        $hints = $hints !== [] ? array_slice(array_keys($hints), 0, 2) : [$this->pool->getHint($code)];
-        foreach (array_filter($hints) as $hint) {
-            $lines[] = ($causes !== [] ? '> ' : '') . 'Check: ' . $hint;
-        }
-        return implode("\n", $lines);
+        return $this->block($header, $facts,
+            $hints !== [] ? array_slice(array_keys($hints), 0, 2) : [$this->pool->getHint($code)]);
     }
 
     /**
@@ -89,18 +86,19 @@ class Messages
      */
     public function notices(Target $target, string $code, array $notices): string
     {
-        $lines = [(self::NOTICE_TITLES[$code] ?? '🔴 *New errors: ' . $this->pool->getLabel($code)) . ' – '
-            . $this->where($target) . '*'];
-        $hinted = false;
+        $header = (self::NOTICE_TITLES[$code] ?? '🔴 *New errors: ' . $this->pool->getLabel($code)) . ' – '
+            . $this->where($target) . '*';
+        $facts = [];
+        $hints = [];
         foreach ($notices as $notice) {
-            $lines[] = $this->times($target, $notice);
-            $hinted = $hinted || preg_match('/^(> )?Check: /', $notice) === 1;
+            $line = $this->times($target, (string)preg_replace('/^> /', '', $notice));
+            if (str_starts_with($line, 'Check: ')) {
+                $hints[] = substr($line, 7);
+            } else {
+                $facts[] = $line;
+            }
         }
-        $hint = $hinted ? '' : $this->pool->getHint($code);
-        if ($hint !== '') {
-            $lines[] = 'Check: ' . $hint;
-        }
-        return implode("\n", $lines);
+        return $this->block($header, $facts, $hints !== [] ? $hints : [$this->pool->getHint($code)]);
     }
 
     /**
@@ -132,12 +130,9 @@ class Messages
         }
         $problems = array_merge($problems, $hadProblems);
         if ($problems !== []) {
-            $sections[] = '*Problems (' . count($problems) . ")*\n" . implode("\n", $problems);
+            $sections[] = $this->section('*Problems (' . count($problems) . ')*', $problems);
         }
-        $logs = $this->logs($target, $checks, $counts, $fingerprints, $now);
-        if ($logs !== []) {
-            $sections[] = "*Logs (24 h)*\n" . implode("\n", $logs);
-        }
+        $sections = array_merge($sections, $this->logs($target, $checks, $counts, $fingerprints, $now));
         $email = [];
         if (isset($checks['sales_emails'])) {
             $unsent = (int)($checks['sales_emails']['gauges']['unsent'] ?? 0);
@@ -147,20 +142,20 @@ class Messages
             $email[] = 'Mail errors: ' . Format::number((int)($counts['email_failing']['mail errors'] ?? 0));
         }
         if ($email !== []) {
-            $sections[] = "*Email*\n" . implode(' · ', $email);
+            $sections[] = $this->section('*Email*', $email);
         }
         $other = [];
         foreach ($checks as $code => $check) {
             $shown = $this->nonZero($counts[$code] ?? []);
             if ($shown !== [] && !in_array($code, array_merge(self::LOGS, self::EMAIL, self::QUIET), true)) {
-                $other[] = $this->pool->getLabel((string)$code) . ': ' . Format::counts($shown);
+                $other[] = $this->pool->getLabel((string)$code) . ': ' . Format::counts($shown, ' · ');
             }
         }
         if ($other !== []) {
-            $sections[] = "*Other (24 h)*\n" . implode("\n", $other);
+            $sections[] = $this->section('*Other (24 h)*', $other);
         }
         if ($okAllDay !== []) {
-            $sections[] = "*OK all day*\n" . implode(' · ', $okAllDay);
+            $sections[] = $this->section('*OK all day*', [implode(' · ', $okAllDay)]);
         }
         return '*Daily summary – ' . $target->name . ' – ' . $this->local($target, $now, 'j M') . '*'
             . ($sections !== [] ? "\n\n" . implode("\n\n", $sections) : '');
@@ -168,23 +163,25 @@ class Messages
 
     public function test(Target $target): string
     {
-        return '✅ *Test alert – ' . $this->where($target) . "*\n" . ($target->isShopWide()
+        $gets = $target->isShopWide()
             ? 'This channel gets the alerts of the checks for all websites (cron, indexers, caches, logs, ...).'
-            : 'This channel gets this website\'s alerts (its email settings, its sales emails) and its daily summary.');
+            : 'This channel gets this website\'s alerts (its email settings, its sales emails) and its daily summary.';
+        return $this->block('✅ *Test alert – ' . $this->where($target) . '*', [$gets]);
     }
 
     /**
-     * The logs' counts, then their entries of the day: Critical, Errors, Warnings (at most LIMITS each, the latest
-     * first), one line per fingerprint (Fingerprints::line()).
+     * The logs' sections: their counts, then their entries of the day under Critical, Errors, Warnings (at most LIMITS
+     * each, the latest first), one line per fingerprint (Fingerprints::line()).
      *
      * @param array<string, array<mixed>> $checks
      * @param array<string, array<string, int>> $counts by check code
      * @param array<string, array<mixed>> $fingerprints
-     * @return string[]
+     * @return string[] the sections
      */
     private function logs(Target $target, array $checks, array $counts, array $fingerprints, int $now): array
     {
         $lines = [];
+        $sections = [];
         $byFingerprint = [];
         foreach (self::LOGS as $code) {
             if (!isset($checks[$code])) {
@@ -192,7 +189,7 @@ class Messages
             }
             $c = $counts[$code] ?? [];
             $lines[] = $this->pool->getLabel($code) . ': ' . ($code === 'system_log'
-                ? sprintf('%s critical, %s, %s', Format::number((int)($c['critical'] ?? 0)),
+                ? sprintf('%s critical · %s · %s', Format::number((int)($c['critical'] ?? 0)),
                     Format::many((int)($c['errors'] ?? 0), 'errors'),
                     Format::many((int)($c['warnings'] ?? 0), 'warnings'))
                 : Format::number((int)($c['exceptions'] ?? 0)));
@@ -201,6 +198,9 @@ class Messages
                     $byFingerprint[substr((string)$key, 3)] = ($byFingerprint[substr((string)$key, 3)] ?? 0) + $count;
                 }
             }
+        }
+        if ($lines !== []) {
+            $sections[] = $this->section('*Logs (24 h)*', $lines);
         }
         $groups = [];
         foreach ($byFingerprint as $fp => $count) {
@@ -215,7 +215,7 @@ class Messages
                 continue;
             }
             uasort($entries, fn ($a, $b) => (int)($b['last'] ?? 0) <=> (int)($a['last'] ?? 0));
-            $lines[] = Fingerprints::EMOJI[$level] . ' *' . $title . '*';
+            $lines = [];
             foreach (array_slice($entries, 0, $limit, true) as $fp => $known) {
                 $lines[] = $this->times($target, Fingerprints::line((string)$fp, $known, (int)$known['count24'],
                     (int)($known['first'] ?? 0) > $now - 86400, false));
@@ -223,8 +223,9 @@ class Messages
             if (count($entries) > $limit) {
                 $lines[] = '…and ' . (count($entries) - $limit) . ' more';
             }
+            $sections[] = $this->section(Fingerprints::EMOJI[$level] . ' *' . $title . '*', $lines);
         }
-        return $lines;
+        return $sections;
     }
 
     /**
@@ -244,6 +245,38 @@ class Messages
             }
         }
         return [$worst, $counts];
+    }
+
+    /**
+     * The header line, a blank line, the facts as quote lines, a blank line and where to look ("> Check: ...").
+     *
+     * @param string[] $facts
+     * @param string[] $hints
+     */
+    private function block(string $header, array $facts, array $hints = []): string
+    {
+        $text = $header;
+        foreach ([$facts, array_map(fn (string $hint) => 'Check: ' . $hint, array_filter($hints))] as $lines) {
+            $lines = array_filter($lines, fn (string $line) => $line !== '');
+            $text .= $lines !== [] ? "\n\n" . $this->quote($lines) : '';
+        }
+        return $text;
+    }
+
+    /**
+     * A summary section: its bold heading on its own line, its lines quoted below it.
+     *
+     * @param string[] $lines
+     */
+    private function section(string $heading, array $lines): string
+    {
+        return $heading . "\n" . $this->quote($lines);
+    }
+
+    /** @param string[] $lines */
+    private function quote(array $lines): string
+    {
+        return '> ' . implode("\n> ", $lines);
     }
 
     /** "Main Website Store (all websites)" for the shop-wide checks. */

@@ -55,11 +55,11 @@ class Format
     }
 
     /**
-     * "1,437 runs, 2 errors (sitemap_generate x2)" from CheckResult counts.
+     * "1,437 runs, 2 errors (sitemap_generate x2)" from CheckResult counts ($glue between the totals).
      *
      * @param array<string, int> $counts
      */
-    public static function counts(array $counts): string
+    public static function counts(array $counts, string $glue = ', '): string
     {
         $totals = [];
         $items = [];
@@ -78,7 +78,7 @@ class Format
             $parts[] = self::many($count, (string)$total)
                 . (!empty($items[$total]) ? ' (' . self::top($items[$total]) . ')' : '');
         }
-        return implode(', ', $parts);
+        return implode($glue, $parts);
     }
 
     /** "a, b and c" */

@@ -57,8 +57,10 @@ Each alert says why, as far as Magento's own data shows it, and where to look (`
 
 ```
 🔴 *Cron jobs stuck – Main Website Store (all websites)*
+
 > Job indexer_reindex_all_invalid running for 3 h (since 08:12).
 > 12 other jobs in its group are waiting.
+
 > Check: The process may have crashed: restart cron, then clear the stuck job (status "running" in cron_schedule).
 ```
 
@@ -67,47 +69,56 @@ A check of another module gives its own causes the same way (`Api\Data\Cause` on
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
 
-One message per problem; its first line is what a phone notification shows:
+One message per problem; its first line is what a phone notification shows, then one fact per line and where to look:
 
 ```
 🔴 *Cron stopped – Main Website Store (all websites)*
-No job has run since 10:39 (65 min).
-Check: Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.
+
+> No job has run since 10:39 (65 min).
+
+> Check: Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.
 ```
 
 ```
 ✅ *Recovered: Cron – Main Website Store (all websites)*
-OK again since 11:52.
+
+> OK again since 11:52.
 ```
 
 ```
 🔴 *New errors: system.log – Main Website Store (all websites)*
-🆕 🔴 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
-Check: var/log/system.log: look for the fingerprint's error around that time.
+
+> 🆕 🔴 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+
+> Check: var/log/system.log: look for the fingerprint's error around that time.
 ```
 
 ```
 *Daily summary – Main Website Store – 20 Oct*
 
 *Problems (1)*
-🔴 Cron: no job has run since 10:39 (65 min)
+> 🔴 Cron: no job has run since 10:39 (65 min)
 
 *Logs (24 h)*
-system.log: 1 critical, 14 errors, 52 warnings
-exception.log: 14
+> system.log: 1 critical · 14 errors · 52 warnings
+> exception.log: 14
+
 🔴 *Critical*
-🆕 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+> 🆕 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+
 🟠 *Errors*
-Unable to send the order *** ×9 · 13:40 · app/code/Vendor/Mail/Model/Sender.php:84 · #5e6f7a8b
-NoSuchEntityException: No such entity with *** ×5 · 11:02 · #0c1d2e3f
+> Unable to send the order *** ×9 · 13:40 · app/code/Vendor/Mail/Model/Sender.php:84 · #5e6f7a8b
+> NoSuchEntityException: No such entity with *** ×5 · 11:02 · #0c1d2e3f
+
 🟡 *Warnings*
-Slow response from *** ×52 · 14:10 · #9a8b7c6d
+> Slow response from *** ×52 · 14:10 · #9a8b7c6d
 
 *Email*
-Sales emails unsent: 0 · Mail errors: 0
+> Sales emails unsent: 0
+> Mail errors: 0
 
 *OK all day*
-Indexers · Caches · Maintenance · Queue · Sending · Email sending
+> Indexers · Caches · Maintenance · Queue · Sending · Email sending
 ```
 
 ## Installation
@@ -163,7 +174,9 @@ a high alert at once, with the rule, how often, the last time and where – neve
 
 ```
 🚨 *Sensitive data in logs – Main Website Store (all websites)*
+
 > 🚨 Possible PCI: payment card number in system.log (×3, last 14:02) at app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+
 > Check: Stop logging it at the source, then rotate or remove the log: card data in logs breaks PCI DSS.
 ```
 

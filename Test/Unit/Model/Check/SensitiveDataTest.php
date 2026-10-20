@@ -85,7 +85,7 @@ class SensitiveDataTest extends TestCase
         $text = (new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock))
             ->notices(new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC'), 'sensitive_data',
                 $result->notices);
-        $this->assertStringStartsWith("🚨 *Sensitive data in logs – Main Website Store (all websites)*\n> 🚨 Possible",
+        $this->assertStringStartsWith("🚨 *Sensitive data in logs – Main Website Store (all websites)*\n\n> 🚨 Possible",
             $text);
         $everything = $text . json_encode($result) . json_encode($this->store->rows);
         foreach (self::VALUES as $value) {

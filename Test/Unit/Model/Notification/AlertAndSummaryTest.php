@@ -96,7 +96,8 @@ class AlertAndSummaryTest extends TestCase
                 'NEW ERROR main: b x2 #22222222']], self::NOW)]);
         $this->alert(0);
         $this->assertCount(1, $this->sent);
-        $this->assertStringContainsString("NEW ERROR main: a x1 #11111111\nNEW ERROR main: b x2 #22222222",
+        $this->assertStringContainsString("\n\n> NEW ERROR main: a x1 #11111111\n"
+            . "> NEW ERROR main: b x2 #22222222\n\n> Check: ",
             $this->sent[0]);
         $this->assertSame(['system_log' => 2], $this->store->row(AlertPlan::NOTICED . '0'));
         $this->sent = [];
@@ -117,7 +118,7 @@ class AlertAndSummaryTest extends TestCase
     public function testAWebsitesAlertCarriesOnlyItsOwnChecks(): void
     {
         $this->alert(2);
-        $this->assertSame(["🔴 *Emails disabled – Shop*\nEmails are disabled.\nCheck: Look at Email sending."],
+        $this->assertSame(["🔴 *Emails disabled – Shop*\n\n> Emails are disabled.\n\n> Check: Look at Email sending."],
             $this->sent);
         $this->sent = [];
         $this->alert(1);
@@ -136,9 +137,10 @@ class AlertAndSummaryTest extends TestCase
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
         $this->assertCount(1, $this->sent);
         $this->assertStringStartsWith("*Daily summary – Shop – 20 Oct*\n\n*Problems (3)*\n"
-            . "🔴 Cron: no job has run since 07:48 (12 min)\n🟡 Indexers: x invalid for 2 h\n"
-            . '🔴 Email sending: emails are disabled', $this->sent[0]);
-        $this->assertStringEndsWith("*OK all day*\nCaches", $this->sent[0], 'the tally of 25 hours ago is left out');
+            . "> 🔴 Cron: no job has run since 07:48 (12 min)\n> 🟡 Indexers: x invalid for 2 h\n"
+            . "> 🔴 Email sending: emails are disabled\n\n", $this->sent[0]);
+        $this->assertStringEndsWith("\n\n*OK all day*\n> Caches", $this->sent[0],
+            'the tally of 25 hours ago is left out');
     }
 
     public function testTheSummaryOnlyWhenDueAndOn(): void
