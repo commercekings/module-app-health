@@ -12,6 +12,8 @@ use PHPUnit\Framework\TestCase;
  * docs/examples/host-status.sh against a scripted Docker CLI (_files/host-status/docker): what it reports when Docker
  * cannot be read or a project has no container - a failure, never a healthy-looking report - and that App health takes
  * every report it writes. Linux only (it reads /proc), with bash and jq.
+ *
+ * phpcs:disable Magento2.Security.InsecureFunction -- it runs the shell script it tests
  */
 class HostStatusScriptTest extends TestCase
 {
@@ -39,7 +41,9 @@ class HostStatusScriptTest extends TestCase
     private function report(array $env, bool $docker = true): array
     {
         $bin = sys_get_temp_dir() . '/host-status-bin-' . getmypid();
-        @mkdir($bin);
+        if (!is_dir($bin)) {
+            mkdir($bin);
+        }
         // the system's tools, without its docker: ours or none
         foreach (['bash', 'jq', 'awk', 'tr', 'cut', 'sort', 'grep', 'sha1sum', 'df', 'nproc', 'date', 'mktemp', 'rm',
             'cat', 'hostname'] as $tool) {
@@ -48,7 +52,9 @@ class HostStatusScriptTest extends TestCase
                 symlink($path, $bin . '/' . $tool);
             }
         }
-        @unlink($bin . '/docker');
+        if (is_link($bin . '/docker')) {
+            unlink($bin . '/docker');
+        }
         if ($docker) {
             symlink(realpath(self::FAKE . '/docker'), $bin . '/docker');
         }
