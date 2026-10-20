@@ -136,6 +136,14 @@ class Config
         return array_slice(array_values(array_unique($valid)), 0, 5);
     }
 
+    /** @return string[] *Errors at once from*: the var/log files whose ERROR entries are sent at once, like CRITICAL */
+    public function getImmediateLogFiles(): array
+    {
+        $names = preg_split('/[\s,]+/', (string)$this->scopeConfig->getValue(self::SECTION
+            . '/system_log/immediate_files'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        return array_values(array_unique(array_filter($names, fn ($name) => preg_match(FileLogSource::NAME, $name))));
+    }
+
     /** A check without a setting (e.g. another module's) is on. */
     public function isCheckEnabled(string $code): bool
     {

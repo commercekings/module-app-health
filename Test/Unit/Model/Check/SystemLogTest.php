@@ -121,6 +121,22 @@ class SystemLogTest extends TestCase
             'told already: not in the digest');
     }
 
+    public function testAnErrorOfAFileToldAtOnceIsNotLeftForTheHourlyStatus(): void
+    {
+        $config = $this->config(['system_log/error_count' => '20', 'system_log/window_minutes' => '5',
+            'system_log/max_read_kb' => '1024', 'system_log/extra_files' => "payment.log",
+            'system_log/immediate_files' => "payment.log\n../x.log"]);
+        $this->check = new SystemLog($this->logReader($this->state, $config), new Fingerprints($this->state, $config),
+            $config, $this->state, $this->clock);
+        $this->run5();
+        $this->appendLog(self::line('ERROR', 'Gateway timeout for order 5'), 'payment.log');
+        $result = $this->run5(self::line('ERROR', 'Unable to send order 7'));
+        $this->assertCount(2, $result->notices, 'the payment.log error at once, and where to look');
+        $this->assertStringStartsWith('Error: Gateway timeout for (', $result->notices[0]);
+        $this->assertSame(['Unable to send'], array_map(fn ($e) => $this->store->row(Fingerprints::KEY)[$e[1]]['label'],
+            $this->store->row(Fingerprints::ERRORS_KEY)), 'only the system.log error waits for the hourly status');
+    }
+
     public function testACriticalIsToldAgainAfterTheRepeatInterval(): void
     {
         $this->run5();

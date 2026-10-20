@@ -13,7 +13,8 @@ use CommerceKings\AppHealth\Model\RunState;
  * most LIMIT, the least recently seen go first - into the "fingerprints:recent" row (when first seen, when dropped;
  * kept RECENT_SECONDS, at most RECENT_LIMIT), so an error dropped and seen again within a day is not "NEW" again.
  * record() returns what the team should hear at once: a CRITICAL entry seen for the first time ("NEW"), or - for
- * checks that ask - one not told within the repeat interval. ERROR entries go to the hourly status instead: each run's
+ * checks that ask - one not told within the repeat interval; so is an ERROR entry of a file in *Errors at once from*.
+ * The other ERROR entries go to the hourly status instead: each run's
  * count per fingerprint in the "errors:recent" row ([time, fingerprint, count, new], RECENT_ERRORS_HOURS, at most
  * RECENT_ERRORS_LIMIT). WARNING entries are only counted (the daily summary).
  */
@@ -50,9 +51,12 @@ class Fingerprints
     public function record(array $entries, int $now, bool $repeatCritical): array
     {
         $runs = [];
+        $immediate = array_flip($this->config->getImmediateLogFiles());
         foreach ($entries as $entry) {
             $fp = (string)$entry['fingerprint'];
-            $runs[$fp] ??= $entry + ['count' => 0, 'last' => 0];
+            $runs[$fp] ??= $entry + ['count' => 0, 'last' => 0, 'immediate' => false];
+            // an ERROR of a file in *Errors at once from* is told like a CRITICAL one
+            $runs[$fp]['immediate'] = $runs[$fp]['immediate'] || isset($immediate[(string)($entry['source'] ?? '')]);
             $runs[$fp]['count']++;
             $runs[$fp]['rank'] = max((int)$runs[$fp]['rank'], (int)$entry['rank']);
             $runs[$fp]['last'] = max($runs[$fp]['last'], (int)($entry['time'] ?? $now));
@@ -97,16 +101,17 @@ class Fingerprints
                 $recentChanged = true;
             }
             $level = Normalizer::group((int)$run['rank']);
-            if ($level === 'ERROR') {
+            $urgent = $level === 'CRITICAL' || ($level === 'ERROR' && $run['immediate']);
+            if ($level === 'ERROR' && !$urgent) {
                 $errors[] = [$now, (string)$fp, (int)$run['count'], $seen === null ? 1 : 0];
             }
             $kind = match (true) {
-                $level !== 'CRITICAL' => null,
+                !$urgent => null,
                 $seen === null => 'NEW',
-                $repeatCritical && $level === 'CRITICAL' && (int)($seen['told'] ?? 0) <= $now - $repeat => 'CRITICAL',
+                $repeatCritical && (int)($seen['told'] ?? 0) <= $now - $repeat => 'CRITICAL',
                 default => null,
             };
-            if ($learning !== null && $level === 'CRITICAL' && ($kind === 'NEW' || isset($learning['seen'][$fp]))) {
+            if ($learning !== null && $urgent && ($kind === 'NEW' || isset($learning['seen'][$fp]))) {
                 // learning: counted for the digest, and told now as far as repeats go - unless it keeps coming
                 $learning['counts'][$fp] = (int)($learning['counts'][$fp] ?? 0) + (int)$run['count'];
                 if ($learning['counts'][$fp] >= self::LEARNING_REPEATS) {

@@ -111,8 +111,9 @@ class LogReader
             if ($safe === null) {
                 continue;
             }
+            $safe['source'] = $source; // the file (or the source's code) it came from
             if ($safe['sensitive'] !== []) {
-                $sensitive[] = $safe + ['source' => $source];
+                $sensitive[] = $safe;
             }
             if ($safe['rank'] > 0) {
                 $entries[] = $safe;
