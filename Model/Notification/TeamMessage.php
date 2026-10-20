@@ -33,6 +33,8 @@ use Psr\Log\LoggerInterface;
 class TeamMessage
 {
     public const STUCK_MINUTES = 60;
+    /** A claim not finished after this (the worker stopped, maybe after the provider took it): maybe sent. */
+    public const LEASE_MINUTES = 10;
     public const RETRY_MINUTES = [5, 15, 30, 60];
     public const TEMPORARY_MIN_SECONDS = 60;
     public const TEMPORARY_MAX_SECONDS = 3600;
@@ -94,6 +96,13 @@ class TeamMessage
             return false;
         }
         $queuedAt = $row['queued_at'] ?? null;
+        $db = $this->resource->getConnection();
+        $key = $this->deliveryState->keyCondition($type, $websiteId);
+        $version = (int)($row['delivery_version'] ?? 0);
+        if ($version % 2 === 1) {
+            // claimed and not finished: another worker is sending it - or stopped, maybe after the provider took it
+            return $this->takeOver($type, $websiteId, $version, $key, $compose);
+        }
         $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
         $composed = $target !== null ? $compose($target, $row) : null;
         if ($composed === null) {
@@ -102,19 +111,17 @@ class TeamMessage
         }
         [$text, $sent] = $composed;
         $post = $composed[2] ?? true;
-        $db = $this->resource->getConnection();
-        $version = (int)$row['delivery_version'] + 1;
-        $key = $this->deliveryState->keyCondition($type, $websiteId);
-        // one worker per queued mark: a copy of the message or a late one finds the version raised
-        $claimed = $db->update($this->deliveryState->getTableName(), ['delivery_version' => $version],
-            $key + ['delivery_version = ?' => $version - 1,
-                'queued_at <=> ?' => $queuedAt ?? new Expression('NULL')]);
+        // one worker per queued mark, exclusive while it sends: the claim makes the version odd - a copy of the
+        // message or a late one, before or after it, finds it raised or odd - and every outcome makes it even again
+        $claimed = $db->update($this->deliveryState->getTableName(), ['delivery_version' => $version + 1],
+            $key + ['delivery_version = ?' => $version, 'queued_at <=> ?' => $queuedAt ?? new Expression('NULL')]);
         if (!$claimed) {
             return false;
         }
-        $mine = $key + ['delivery_version = ?' => $version];
+        $mine = $key + ['delivery_version = ?' => $version + 1];
+        $done = ['delivery_version' => $version + 2];
         if (!$post) {
-            $this->recordSent($sent, $mine);
+            $this->recordSent($sent, $mine, $done);
             $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d delivered quietly (not posted)',
                 $type, $websiteId));
             return true;
@@ -127,13 +134,13 @@ class TeamMessage
             // it is out, or may be (the provider can't tell): never again - a missed alert beats a duplicate
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d may have been sent (%s);'
                 . ' not sent again', $type, $websiteId, get_class($e->getPrevious() ?? $e)));
-            $this->recordSent($sent, $mine);
+            $this->recordSent($sent, $mine, $done);
             return true;
         } catch (TemporaryFailureException $e) {
             $wait = min(self::TEMPORARY_MAX_SECONDS, max(self::TEMPORARY_MIN_SECONDS,
                 $e->getRetryAfter() ?? self::RETRY_MINUTES[0] * 60));
             $db->update($this->deliveryState->getTableName(), ['queued_at' => null,
-                'skip_until' => new Expression('NOW() + INTERVAL ' . $wait . ' SECOND')], $mine);
+                'skip_until' => new Expression('NOW() + INTERVAL ' . $wait . ' SECOND')] + $done, $mine);
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d not sent for now, next try in'
                 . ' %d seconds', $type, $websiteId, $wait));
             return false;
@@ -141,7 +148,7 @@ class TeamMessage
             $failed = (int)$row['failed_sends'] + 1;
             $wait = self::RETRY_MINUTES[min($failed, count(self::RETRY_MINUTES)) - 1];
             $db->update($this->deliveryState->getTableName(), ['queued_at' => null, 'failed_sends' => $failed,
-                'skip_until' => new Expression('NOW() + INTERVAL ' . $wait . ' MINUTE')], $mine);
+                'skip_until' => new Expression('NOW() + INTERVAL ' . $wait . ' MINUTE')] + $done, $mine);
             if ($e instanceof \InvalidArgumentException) {
                 // not an address the channel takes: a setting to fix, not a reason for the consumer to reject
                 $this->logger->error(sprintf('CommerceKings_AppHealth: %s for scope %d not sent: the recipient is'
@@ -153,12 +160,44 @@ class TeamMessage
             throw $e;
         }
         if ($status !== SenderInterface::SENT) {
-            $db->update($this->deliveryState->getTableName(), ['queued_at' => null], $mine);
+            $db->update($this->deliveryState->getTableName(), ['queued_at' => null] + $done, $mine);
             $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d not sent (%s)', $type, $websiteId,
                 $status));
             return false;
         }
-        $this->recordSent($sent, $mine);
+        $this->recordSent($sent, $mine, $done);
+        return true;
+    }
+
+    /**
+     * A claim not finished: within LEASE_MINUTES another worker is sending it - nothing to do; after, it stopped
+     * (maybe after the provider took the message): one worker takes it over in one statement and records what is
+     * due as told, without posting - a missed alert beats a duplicate.
+     *
+     * @param array<int|string, mixed> $key
+     * @param \Closure(Target, array<string, mixed>): ?array{0: string, 1: \Closure(): void, 2?: bool} $compose
+     */
+    private function takeOver(string $type, int $websiteId, int $version, array $key, \Closure $compose): bool
+    {
+        $taken = $this->resource->getConnection()->update($this->deliveryState->getTableName(),
+            ['delivery_version' => $version + 1], $key + ['delivery_version = ?' => $version,
+                'updated_at < NOW() - INTERVAL ' . self::LEASE_MINUTES . ' MINUTE']);
+        if (!$taken) {
+            return false;
+        }
+        $row = $this->deliveryState->load($type, $websiteId);
+        $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
+        $composed = $target !== null ? $compose($target, $row) : null;
+        $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d may have been sent (a delivery'
+            . ' claimed over %d minutes ago never finished); recorded, not sent again', $type, $websiteId,
+            self::LEASE_MINUTES));
+        $mine = $key + ['delivery_version = ?' => $version + 1];
+        if ($composed === null) {
+            $this->resource->getConnection()->update($this->deliveryState->getTableName(), ['queued_at' => null],
+                $mine);
+            return false;
+        }
+        $this->recordSent($composed[1], $mine, []);
         return true;
     }
 
@@ -167,14 +206,15 @@ class TeamMessage
      * not sent - or sent but not told - and post it again.
      *
      * @param array<int|string, mixed> $mine
+     * @param array<string, int> $done the claim's end (an even version), [] when it is even already
      */
-    private function recordSent(\Closure $sent, array $mine): void
+    private function recordSent(\Closure $sent, array $mine, array $done): void
     {
         $db = $this->resource->getConnection();
         $db->beginTransaction();
         try {
             $sent();
-            $this->markSent($mine);
+            $this->markSent($mine, $done);
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -215,12 +255,15 @@ class TeamMessage
         return false;
     }
 
-    /** @param array<int|string, mixed> $mine */
-    private function markSent(array $mine): void
+    /**
+     * @param array<int|string, mixed> $mine
+     * @param array<string, int> $done
+     */
+    private function markSent(array $mine, array $done): void
     {
         $this->resource->getConnection()->update($this->deliveryState->getTableName(),
-            ['sent_at' => new Expression('NOW()'), 'queued_at' => null, 'failed_sends' => 0, 'skip_until' => null],
-            $mine);
+            ['sent_at' => new Expression('NOW()'), 'queued_at' => null, 'failed_sends' => 0, 'skip_until' => null]
+            + $done, $mine);
     }
 
     /** Nothing to send for this message: clear the mark it was queued with (a newer one stays). */

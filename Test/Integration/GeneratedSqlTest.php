@@ -148,6 +148,57 @@ class GeneratedSqlTest extends TestCase
         $this->assertTrue($teamMessage->isFailing(), 'a retry waiting');
     }
 
+    public function testOneWorkerPostsAMessageEvenWhenAnotherReadsItMidSend(): void
+    {
+        $table = $this->table('ck_notification_delivery_state');
+        $key = ['type = ?' => 'app_health_alert', 'reference_id = ?' => 0, 'subject_key = ?' => ''];
+        $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);
+        $deliveryState->method('getTableName')->willReturn($table);
+        $deliveryState->method('keyCondition')->willReturn($key);
+        $deliveryState->method('load')->willReturnCallback(fn () => $this->db->fetchRow($this->db->select()
+            ->from($table)->where('type = ?', 'app_health_alert')) ?: null);
+        $targets = $this->createStub(\CommerceKings\AppHealth\Model\Targets::class);
+        $targets->method('forWebsite')->willReturn(new \CommerceKings\AppHealth\Model\Target(0, 1, 'slack', 'C0',
+            'Shop', 'UTC'));
+        $domain = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
+        $domain->method('matches')->willReturn(true);
+        $sender = $this->createStub(\CommerceKings\Notification\Api\SenderInterface::class);
+        $teamMessage = new \CommerceKings\AppHealth\Model\Notification\TeamMessage($this->resource, $deliveryState,
+            $this->createStub(\CommerceKings\Notification\Api\QueueInterface::class), $sender, $targets,
+            $this->createStub(\Psr\Log\LoggerInterface::class), $domain);
+        $posts = 0;
+        $told = 0;
+        $compose = function () use (&$told) {
+            return ['Problem: Cron stopped', function () use (&$told) {
+                $told++;
+            }];
+        };
+        $second = null;
+        $sender->method('send')->willReturnCallback(function () use (&$posts, &$second, $teamMessage, $compose) {
+            $posts++;
+            // worker B gets a copy of the message while A is sending: it reads A's claim
+            $second ??= $teamMessage->deliver('app_health_alert', '0', $compose);
+            return \CommerceKings\Notification\Api\SenderInterface::SENT;
+        });
+        $this->db->insert($table, ['type' => 'app_health_alert', 'reference_id' => 0, 'subject_key' => '',
+            'delivery_version' => 4, 'failed_sends' => 0, 'queued_at' => gmdate('Y-m-d H:i:s', $this->now)]);
+        $this->assertTrue($teamMessage->deliver('app_health_alert', '0', $compose));
+        $this->assertSame([false, 1, 1], [$second, $posts, $told], 'B sends nothing: one post, told once');
+        $row = $deliveryState->load('app_health_alert', 0);
+        $this->assertSame([6, null], [(int)$row['delivery_version'], $row['queued_at']], 'the claim ended');
+
+        // a worker that claimed and stopped (maybe after Slack took it): within the lease nothing; after, told
+        $this->db->update($table, ['delivery_version' => 7, 'queued_at' => gmdate('Y-m-d H:i:s', $this->now),
+            'updated_at' => gmdate('Y-m-d H:i:s', $this->now)], $key);
+        $this->assertFalse($teamMessage->deliver('app_health_alert', '0', $compose), 'another worker may be sending');
+        $this->db->update($table, ['updated_at' => gmdate('Y-m-d H:i:s', $this->now - 1200)], $key);
+        $this->assertTrue($teamMessage->deliver('app_health_alert', '0', $compose));
+        $this->assertSame([1, 2], [$posts, $told], 'maybe sent: recorded as told, not posted again');
+        $row = $deliveryState->load('app_health_alert', 0);
+        $this->assertSame([8, null], [(int)$row['delivery_version'], $row['queued_at']]);
+        $this->assertNotNull($row['sent_at']);
+    }
+
     public function testEmailFailingSeesASendSinceInOneUnion(): void
     {
         $deliveryState = $this->createStub(\CommerceKings\Notification\Api\DeliveryStateInterface::class);

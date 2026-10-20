@@ -181,11 +181,50 @@ class TeamMessageTest extends TestCase
         [$claim, $sent] = $this->updateData();
         $this->assertSame(['delivery_version' => 5], $claim);
         $this->assertContains('2026-10-20 08:00:00', $this->updates[0][2], 'the mark this message was queued with');
-        $this->assertSame(['sent_at' => 'NOW()', 'queued_at' => null, 'failed_sends' => 0, 'skip_until' => null],
+        $this->assertSame(['sent_at' => 'NOW()', 'queued_at' => null, 'failed_sends' => 0, 'skip_until' => null,
+            'delivery_version' => 6],
             $sent);
         $this->assertSame(5, $this->updates[1][2]['delivery_version = ?']);
         $this->assertSame([['beginTransaction', 1], ['recorded', 1], ['commit', 2]], $this->transactions,
             'what was told and "sent" in one transaction: no second post after a crash between them');
+    }
+
+    public function testAWorkerReadingAnotherWorkersClaimSendsNothing(): void
+    {
+        $this->assertFalse($this->teamMessage(['delivery_version' => 5] + self::ROW, updates: [0])
+            ->deliver('app_health_alert', '1', $this->compose()));
+        $this->assertSame([[], 0], [$this->sent, $this->recorded], 'an odd version: another worker is sending it');
+        $this->assertCount(1, $this->updates, 'only the take-over try, the mark left to the sending worker');
+        $this->assertSame(['delivery_version' => 6], $this->updateData()[0]);
+        $this->assertContains('updated_at < NOW() - INTERVAL 10 MINUTE', $this->updates[0][2], 'within its lease');
+    }
+
+    public function testAClaimNeverFinishedIsMaybeSentRecordedNotPostedAgain(): void
+    {
+        $this->assertTrue($this->teamMessage(['delivery_version' => 5] + self::ROW)
+            ->deliver('app_health_alert', '1', $this->compose()));
+        $this->assertSame([[], 1], [$this->sent, $this->recorded], 'a worker stopped after claiming (maybe after'
+            . ' the provider took it): recorded as told, not posted again - a missed alert beats a duplicate');
+        $this->assertSame(['delivery_version' => 6], $this->updateData()[0], 'taken over in one statement');
+        $this->assertSame('NOW()', $this->updateData()[1]['sent_at']);
+        $this->assertSame(6, $this->updates[1][2]['delivery_version = ?']);
+        $this->assertStringContainsString('warning: CommerceKings_AppHealth: app_health_alert for scope 1 may have'
+            . ' been sent (a delivery claimed', implode("\n", $this->logs));
+    }
+
+    public function testEveryOutcomeEndsTheClaim(): void
+    {
+        $this->teamMessage(self::ROW)->deliver('app_health_alert', '1', $this->compose());
+        $this->assertSame(6, $this->updateData()[1]['delivery_version'], 'sent: even again, idle');
+        foreach ([SenderInterface::QUIET_HOURS, new TemporaryFailureException('rate limited', 30),
+            new \RuntimeException('down')] as $outcome) {
+            $this->updates = [];
+            try {
+                $this->teamMessage(self::ROW, $outcome)->deliver('app_health_alert', '1', $this->compose());
+            } catch (\RuntimeException) {
+            }
+            $this->assertSame(6, $this->updateData()[1]['delivery_version'] ?? null, 'not sent, a retry, a failure');
+        }
     }
 
     public function testAClaimLostToAnotherWorkerSendsNothing(): void
@@ -209,7 +248,8 @@ class TeamMessageTest extends TestCase
     {
         $this->teamMessage(self::ROW, new TemporaryFailureException('rate limited', 30))
             ->deliver('app_health_alert', '1', $this->compose());
-        $this->assertSame(['queued_at' => null, 'skip_until' => 'NOW() + INTERVAL 60 SECOND'], $this->updateData()[1],
+        $this->assertSame(['queued_at' => null, 'skip_until' => 'NOW() + INTERVAL 60 SECOND', 'delivery_version' => 6],
+            $this->updateData()[1],
             'at least a minute');
         $this->assertSame(0, $this->recorded);
     }
@@ -222,7 +262,8 @@ class TeamMessageTest extends TestCase
                 ->deliver('app_health_alert', '1', $this->compose());
             $this->fail('rethrown');
         } catch (\RuntimeException) {
-            $this->assertSame(['queued_at' => null, 'failed_sends' => 6, 'skip_until' => 'NOW() + INTERVAL 60 MINUTE'],
+            $this->assertSame(['queued_at' => null, 'failed_sends' => 6, 'skip_until' => 'NOW() + INTERVAL 60 MINUTE',
+                'delivery_version' => 6],
                 $this->updateData()[1], 'never given up: the longest wait again');
         }
         $this->assertSame(0, $this->recorded);
@@ -263,7 +304,7 @@ class TeamMessageTest extends TestCase
     public function testNotSentForAnotherReasonClearsTheMark(): void
     {
         $this->teamMessage(self::ROW, SenderInterface::COOLDOWN)->deliver('app_health_alert', '1', $this->compose());
-        $this->assertSame(['queued_at' => null], $this->updateData()[1]);
+        $this->assertSame(['queued_at' => null, 'delivery_version' => 6], $this->updateData()[1]);
         $this->assertSame(0, $this->recorded);
     }
 }
