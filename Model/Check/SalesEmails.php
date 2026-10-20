@@ -80,9 +80,10 @@ class SalesEmails implements WebsiteCheckInterface
         foreach (self::TABLES as $entity => $table) {
             $rows = $db->select()->from($this->resource->getTableName($table), ['store_id'])
                 ->where('created_at >= ?', $from)->where('created_at < ?', $to)
-                ->where('send_email = 1')
-                // async sending counts failed attempts up from a negative number; null = never tried
-                ->where('email_sent IS NULL OR email_sent <= 0')
+                // COALESCE keeps the send_email and email_sent indexes out: an email_sent range has no time bound
+                // (old unsent rows); async sending counts failed attempts up from a negative number, null = never tried
+                ->where('COALESCE(send_email, 0) = 1')
+                ->where('COALESCE(email_sent, 0) <= 0')
                 ->limit(self::CAP);
             $parts[] = $db->select()->from(['t' => $rows], ['entity' => new Expression($db->quote($entity)),
                 'store_id', 'count' => new Expression('COUNT(*)')])->group('store_id');

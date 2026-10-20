@@ -58,6 +58,8 @@ class SalesEmailsTest extends TestCase
         $wheres = $this->wheres();
         $this->assertSame(4, count(array_keys($wheres, 'created_at >= ?', true)));
         $this->assertSame(4, count(array_keys($wheres, 'created_at < ?', true)));
+        $this->assertSame(4, count(array_keys($wheres, 'COALESCE(email_sent, 0) <= 0', true)),
+            'only the created_at index can bound the rows');
         $created = array_values(array_filter($this->calls, fn ($call) => $call[0] === 'where'
             && in_array($call[1], ['created_at >= ?', 'created_at < ?'], true)));
         $this->assertSame([gmdate('Y-m-d H:i:s', self::NOW - 24 * 3600), gmdate('Y-m-d H:i:s', self::NOW - 1800)],
