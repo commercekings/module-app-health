@@ -270,6 +270,29 @@ class RunnerTest extends TestCase
         $this->assertNull($this->store->row('checks'), 'not even the checks');
     }
 
+    public function testTheFirstRunStoresTheDomainWhenNoneIs(): void
+    {
+        $accepted = 0;
+        $domain = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
+        $domain->method('matches')->willReturn(true);
+        $domain->method('stored')->willReturnCallback(function () use (&$accepted) {
+            return $accepted > 0 ? 'shop.example.com' : '';
+        });
+        $domain->method('accept')->willReturnCallback(function () use (&$accepted) {
+            $accepted++;
+        });
+        $this->siteDomain = $domain;
+        $this->settings = ['general/enabled' => '1'];
+        $this->run5();
+        $this->run5();
+        $this->assertSame(1, $accepted, 'switched on in env.php or config.php, never saved in the admin: stored'
+            . ' by the first run, so a copy made later is told apart');
+        $this->settings = ['general/enabled' => '0'];
+        $accepted = 0;
+        $this->run5();
+        $this->assertSame(0, $accepted, 'not while App health is off');
+    }
+
     public function testTheTimeSinceTheStatusChangedIsKept(): void
     {
         $start = $this->clock->now;

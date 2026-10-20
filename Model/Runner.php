@@ -79,6 +79,10 @@ class Runner
         $started = microtime(true);
         $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'degraded' => false,
             'ms' => 0.0];
+        if (!$snapshot && $this->config->isEnabled() && $this->siteDomain->stored() === '') {
+            // switched on without the admin (env.php, config.php): the first run stores the domain the save would
+            $this->siteDomain->accept();
+        }
         if (!$snapshot && !$this->siteDomain->matches()) {
             // a copy of the shop (staging, a developer's database): no message, no heartbeat ping - nothing runs
             $report['silent'] = 'copy of ' . $this->siteDomain->stored();
