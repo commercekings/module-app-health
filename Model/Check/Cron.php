@@ -17,9 +17,10 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 /**
  * Magento cron from cron_schedule: no other job has run for "stale_minutes" (fail), a job has been running for over
  * "running_minutes" (fail), jobs ended with an error since the last run (warn, job codes and counts), MISSED or more
- * jobs missed in the last hour (warn), or this check itself did not run for GAP_MINUTES up to GAP_MAX_HOURS (warn:
- * cron was down and is back). A job that ended with an error stays a warning until it succeeds again (or
- * "quiet_minutes" pass): no news is no recovery. Counts: runs and errors.
+ * jobs missed in the last hour (warn). When this check itself did not run for GAP_MINUTES up to GAP_MAX_HOURS, cron
+ * was down and is back: a notice at once ("Cron was down from 23:10 to 06:40 (7 h)"), and that run does not say
+ * "Cron stopped" because the other jobs have not run yet. A job that ended with an error stays a warning until it
+ * succeeds again (or "quiet_minutes" pass): no news is no recovery. Counts: runs and errors.
  *
  * Causes: nothing scheduled at all (cron not started) or scheduled but not started; a stuck job and how many jobs of
  * its group wait; a job failing REPEATED times in 2 hours, with its latest error masked; too many missed jobs.
@@ -113,7 +114,9 @@ class Cron implements CheckInterface
         $others = array_values(array_diff($jobs, [self::OWN_JOB]));
         $window = ($staleMinutes + 60) * 60;
         $lastActivity = $others === [] ? $now : $this->lastActivity($others, $now - $window);
-        if ($lastActivity === null || $lastActivity < $now - $staleMinutes * 60) {
+        // back after a gap: this check runs, so cron does - the other jobs just have not run yet
+        $gap = $last > 0 && $now - $last > self::GAP_MINUTES * 60;
+        if (!$gap && ($lastActivity === null || $lastActivity < $now - $staleMinutes * 60)) {
             $fail[] = $lastActivity === null ? sprintf('no job has run for over %s', Format::duration($window))
                 : sprintf('no job has run since %s (%s)', Format::at($lastActivity),
                     Format::duration($now - $lastActivity));
@@ -152,18 +155,16 @@ class Cron implements CheckInterface
                 (string)__('Cron runs too rarely or a run takes too long: schedule cron every minute and check how'
                     . ' long bin/magento cron:run takes.'));
         }
-        if ($last > 0 && $now - $last > self::GAP_MINUTES * 60) {
-            $warn[] = sprintf('this check did not run for %s (cron was down)', Format::duration($now - $last));
-        }
+        $notices = $gap ? [sprintf('Cron was down from %s to %s (%s); it runs again.', Format::at($last),
+            Format::at($now), Format::duration($now - $last)), 'Check: ' . __('Why did cron stop - the server'
+            . ' restarted, the cron container or the crontab? The server\'s logs of that time say.')] : [];
         $detail = implode('; ', array_merge($fail, $warn));
         $result = match (true) {
-            $fail !== [] => CheckResult::fail($detail, $counts, $stuck ? 'Cron jobs stuck' : 'Cron stopped'),
-            $warn !== [] => CheckResult::warn($detail, $counts, match (true) {
-                $errors !== [] || $quietFailing !== [] => 'Cron job errors',
-                $missed >= self::MISSED => 'Cron jobs missed',
-                default => 'Cron was down',
-            }),
-            default => CheckResult::ok('', $counts),
+            $fail !== [] => new CheckResult(CheckResult::FAIL, $detail, $counts, $notices,
+                $stuck ? 'Cron jobs stuck' : 'Cron stopped'),
+            $warn !== [] => new CheckResult(CheckResult::WARN, $detail, $counts, $notices,
+                $errors !== [] || $quietFailing !== [] ? 'Cron job errors' : 'Cron jobs missed'),
+            default => new CheckResult(CheckResult::OK, '', $counts, $notices),
         };
         return $causes === [] ? $result : $result->withCauses($causes);
     }

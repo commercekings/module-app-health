@@ -150,13 +150,18 @@ class CronTest extends TestCase
         $this->assertSame(CheckResult::OK, $this->check([], [[]], [$this->ago(30), '9'], self::NOW - 300)->status);
     }
 
-    public function testCronBackAfterAGapWarns(): void
+    public function testCronBackAfterAGapSaysWhenItWasDownNotThatItStopped(): void
     {
-        $result = $this->check([], [[]], [$this->ago(30), '0'], self::NOW - 47 * 60);
-        $this->assertSame(CheckResult::WARN, $result->status);
-        $this->assertSame('this check did not run for 47 min (cron was down)', $result->detail);
+        $result = $this->check([], [[]], [$this->ago(7 * 3600), '0'], self::NOW - 7 * 3600);
+        $this->assertSame(CheckResult::OK, $result->status, 'this check runs: cron is back - not "Cron stopped"'
+            . ' because the other jobs have not run yet');
+        $this->assertSame(['Cron was down from {t:' . (self::NOW - 7 * 3600) . '} to {t:' . self::NOW . '} (7 h);'
+            . ' it runs again.', 'Check: Why did cron stop - the server restarted, the cron container or the crontab?'
+            . ' The server\'s logs of that time say.'], $result->notices, 'one notice, at once');
+        $short = $this->check([], [[]], [$this->ago(30), '0'], self::NOW - 10 * 60);
+        $this->assertSame([], $short->notices, 'a run 10 minutes after the last: no gap');
         $off = $this->check([], [[]], [$this->ago(30), '0'], self::NOW - 25 * 3600);
-        $this->assertSame(CheckResult::OK, $off->status, 'the module was off for over a day: a fresh start');
+        $this->assertSame([], $off->notices, 'the module was off for over a day: a fresh start');
     }
 
     public function testOnlyThisModulesJobIsNotActivity(): void

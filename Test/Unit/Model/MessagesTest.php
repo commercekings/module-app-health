@@ -230,6 +230,14 @@ class MessagesTest extends TestCase
             $this->messages->status($target, [], [], 0, [], 0));
     }
 
+    public function testCronBackAfterAGap(): void
+    {
+        $this->assertSame("*Cron was down · Main Website Store*\n\nCron was down from 02:30 to 10:00 (7 h); it runs"
+            . " again.\n\nWhat to do: Look at the server's logs.", $this->messages->notices($this->target(), 'cron', [
+                'Cron was down from {t:' . (self::NOW - 27000) . '} to {t:' . self::NOW . '} (7 h); it runs again.',
+                "Check: Look at the server's logs."]));
+    }
+
     public function testAServersNewProblemIsAProblemNotAnError(): void
     {
         $this->assertStringStartsWith('*New problem in Server status · Main Website Store*',

@@ -26,7 +26,7 @@ class Messages
     /** Checks with a section of their own in the summary (not in "All OK", nor sensitive_data: notices only). */
     private const LOGS = ['system_log', 'exceptions'];
     /** A check's notices with a title of their own (the high alert for sensitive data in logs). */
-    private const NOTICE_TITLES = ['sensitive_data' => 'Security: sensitive data in logs'];
+    private const NOTICE_TITLES = ['sensitive_data' => 'Security: sensitive data in logs', 'cron' => 'Cron was down'];
     /** What a check's notices are, in "New <noun> in <label>" (else "error"): a server's line is a problem. */
     private const NOTICE_NOUNS = ['external' => 'problem'];
     /** Notices shown per message (folded ones can add up), then "…and N more". */
