@@ -43,7 +43,7 @@ class SystemLogTest extends TestCase
     {
         $this->appendLog($append, 'system.log');
         $this->state->begin();
-        $result = $this->check->run();
+        $result = $this->check->run([])[0];
         $this->state->commit();
         $this->clock->now += $minutes * 60;
         return $result;
@@ -76,7 +76,7 @@ class SystemLogTest extends TestCase
         $this->assertCount(1, $errors, 'one error, twice: for the hourly status');
         $this->assertSame([2, 1], [$errors[0][2], $errors[0][3]], 'its count in the run, new');
         $critical = $this->run5(self::line('CRITICAL', 'Payment gateway down 77'), 1);
-        $this->assertCount(1, $critical->notices, 'a new critical: at once');
+        $this->assertCount(2, $critical->notices, 'a new critical: at once, with what to do');
         $this->assertMatchesRegularExpression('/^Critical: Payment gateway down \(\{t:\d+\}\)$/u',
             $critical->notices[0]);
         $again = $this->run5(self::line('ERROR', 'Unable to send order 5'));
@@ -92,18 +92,18 @@ class SystemLogTest extends TestCase
     public function testACriticalIsToldAgainAfterTheRepeatInterval(): void
     {
         $this->run5();
-        $this->assertCount(1, $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices);
+        $this->assertCount(2, $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices, 'and what to do');
         $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices);
         $this->clock->now += 6 * 3600;
         $again = $this->run5(self::line('CRITICAL', 'Payment gateway down'));
-        $this->assertCount(1, $again->notices);
+        $this->assertCount(2, $again->notices);
         $this->assertStringStartsWith('Critical: Payment gateway down ({t:', $again->notices[0], 'not "NEW"');
     }
 
     public function testAnErrorDroppedFromTheMemoryIsNotNewAgainWithinADay(): void
     {
         $this->run5();
-        $this->assertCount(1, $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices, 'new');
+        $this->assertCount(2, $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices, 'new, what to do');
         $fp = (string)array_key_first(array_filter($this->store->row(Fingerprints::KEY),
             fn ($e) => $e['level'] === 'CRITICAL'));
         $lines = '';
@@ -127,7 +127,7 @@ class SystemLogTest extends TestCase
         }
         $result = $this->run5($lines);
         $this->assertCount(Fingerprints::LIMIT, $this->store->row(Fingerprints::KEY));
-        $this->assertCount(SystemLog::NOTICES + 1, $result->notices, 'five, then "+N more"');
+        $this->assertCount(SystemLog::NOTICES + 2, $result->notices, 'five, then "+N more", then what to do');
         $this->assertStringStartsWith('…and 515 more', $result->notices[SystemLog::NOTICES]);
     }
 }

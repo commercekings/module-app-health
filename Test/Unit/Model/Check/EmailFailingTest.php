@@ -53,7 +53,7 @@ class EmailFailingTest extends TestCase
         $this->calls = [];
         $result = (new EmailFailing($this->resource($this->db(['fetchPairs' => [$failing], 'fetchOne' => $sent])),
             $state, $log, $reader, $this->config(['email_failing/failed_reminders' => '3',
-            'email_failing/quiet_minutes' => '60']), $this->clock, $this->state))->run();
+            'email_failing/quiet_minutes' => '60']), $this->clock, $this->state))->run([])[0];
         $this->clock->now += 300;
         return $result;
     }

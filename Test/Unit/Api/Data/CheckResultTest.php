@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Test\Unit\Api\Data;
 
+use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use PHPUnit\Framework\TestCase;
 
@@ -52,5 +53,32 @@ class CheckResultTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
+    }
+
+    public function testWithHintGivesWhatToDoWhereNothingSaysIt(): void
+    {
+        $plain = CheckResult::fail('no job has run for 65 min', [], 'Cron stopped')->withHint('Restart cron.');
+        $this->assertSame([['general', 'no job has run for 65 min', 'Restart cron.']],
+            array_map(fn (Cause $cause) => $cause->toArray(), $plain->causes), 'the detail as a cause, with the hint');
+        $this->assertSame(['fail', 'no job has run for 65 min', 'Cron stopped'], [$plain->status, $plain->detail,
+            $plain->title], 'the rest as it was');
+
+        $causes = CheckResult::warn('2 problems')->withCauses([new Cause('a', 'first'), new Cause('b', 'second')])
+            ->withHint('General.');
+        $this->assertSame(['General.', ''], array_map(fn (Cause $cause) => $cause->hint, $causes->causes),
+            'on the first cause');
+        $own = CheckResult::fail('x')->withCauses([new Cause('a', 'first'), new Cause('b', 'second', 'Own.')])
+            ->withHint('General.');
+        $this->assertSame(['', 'Own.'], array_map(fn (Cause $cause) => $cause->hint, $own->causes),
+            'a cause with its own hint keeps the general one out');
+
+        $news = new CheckResult(CheckResult::OK, '', [], ['NEW ERROR x']);
+        $this->assertSame(['NEW ERROR x', 'Check: Look at the log.'], $news->withHint('Look at the log.')->notices,
+            'news of an OK check is told with what to do');
+        $this->assertSame([], $news->withHint('Look at the log.')->causes, 'an OK check has no causes');
+        $checked = new CheckResult(CheckResult::OK, '', [], ['NEW x', 'Check: Mine.']);
+        $this->assertSame(['NEW x', 'Check: Mine.'], $checked->withHint('General.')->notices);
+        $this->assertEquals(CheckResult::ok(), CheckResult::ok()->withHint('General.'));
+        $this->assertEquals(CheckResult::fail('x'), CheckResult::fail('x')->withHint(' '), 'no hint: as it was');
     }
 }

@@ -42,7 +42,7 @@ class ExternalTest extends TestCase
         $state->begin();
         $result = (new External(new StatusFiles($filesystem ?? $this->filesystem()),
             new ReportValidator(new Normalizer($this->createStub(Detector::class))), $this->config(), $state,
-            $this->clock))->run();
+            $this->clock))->run([])[0];
         $state->commit();
         return $result;
     }
@@ -222,7 +222,9 @@ class ExternalTest extends TestCase
         $this->assertSame([], $this->check()->notices, 'the alert tells it');
         $this->clock->now += 60;
         $this->report('host-1', ['disk' => 'fail', 'php' => 'fail']);
-        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)'], $this->check()->notices);
+        $this->assertSame(['Also failing: host-1 · Php: 97.5 % (details)', 'Check: Look at the server named above. No status at all:'
+            . ' is the status script still scheduled on the server (cron or systemd timer), and can it write'
+            . ' var/app-health?'], $this->check()->notices);
         $this->assertSame([], $this->check()->notices, 'once');
     }
 }

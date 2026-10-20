@@ -16,11 +16,6 @@ class Luhn implements SensitiveDataValidatorInterface
     private const PREFIX = '/^(?:4|5[1-5]|2(?:2[2-9][1-9]|2[3-9]|[3-6]|7[01]|720)|3[47]|6(?:011|5|4[4-9]|2)'
         . '|35(?:2[89]|[3-8])|3(?:0[0-5]|[68])|5[06-9])/';
 
-    public function getCode(): string
-    {
-        return 'luhn';
-    }
-
     public function getPattern(): string
     {
         return '/(?<![\d.\/-])\d(?:[ -]?\d){12,18}(?![\d.\/-])/';

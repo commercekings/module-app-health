@@ -29,7 +29,8 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
 - **Heartbeat:** an encrypted URL pinged after every run while the hourly status goes out (not when it has been due
   for 10 minutes and is not delivered).
 - **Admin:** *Stores > Configuration > CommerceKings > App health*, with *Send test alert*.
-- **Stable extension points (`@api`):** `Api\CheckInterface`, `Api\WebsiteCheckInterface`, `Api\Data\CheckResult` and
-  `Model\CheckPool`'s "checks" argument.
+- **Stable extension points (`@api`):** `Api\CheckInterface` (one interface: `run($websiteIds)` returns results by
+  scope), `Api\Data\CheckResult` (hints on its causes, `withHint()` for a general one) and the pools' di.xml arguments
+  ("checks", "sources", "validators"), where the item name is the code.
 
 No public release has been tagged or published yet.

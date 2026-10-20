@@ -55,12 +55,8 @@ class Cron implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.');
     }
@@ -70,7 +66,12 @@ class Cron implements CheckInterface
         return 'Cron';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $cursor = (array)($this->state->get('cursor:' . self::CODE) ?? []);

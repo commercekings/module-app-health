@@ -49,7 +49,7 @@ class CronTest extends TestCase
         $db = $this->db(['fetchAll' => [$finished], 'fetchPairs' => $pairs, 'fetchOne' => $one]);
         return (new Cron($this->resource($db), $cronConfig, $this->config($settings + ['cron/stale_minutes' => '5',
             'cron/running_minutes' => '60', 'cron/quiet_minutes' => '60']), $this->state, new Clock(self::NOW),
-            $this->normalizer()))->run();
+            $this->normalizer()))->run([])[0];
     }
 
     private function ago(int $seconds): string

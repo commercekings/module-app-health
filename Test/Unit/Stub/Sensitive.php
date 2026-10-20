@@ -21,7 +21,7 @@ trait Sensitive
 {
     /**
      * @param string[] $extraXml more app_health_rules.xml contents, merged after the shipped one by code
-     * @param SensitiveDataValidatorInterface[] $extraValidators
+     * @param array<string, SensitiveDataValidatorInterface> $extraValidators by code
      */
     private function detector(array $settings = [], array $custom = [], array $extraXml = [],
         array $extraValidators = []): Detector
@@ -41,7 +41,7 @@ trait Sensitive
             Rules::CUSTOM => json_encode($custom),
             default => null,
         });
-        $pool = new ValidatorPool(array_merge([new Luhn(), new Iban()], $extraValidators));
+        $pool = new ValidatorPool(['luhn' => new Luhn(), 'iban' => new Iban()] + $extraValidators);
         return new Detector(new Rules($data, $scopeConfig, $pool, new RegexGuard()), $pool);
     }
 

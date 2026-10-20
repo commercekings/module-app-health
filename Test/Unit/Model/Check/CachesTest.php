@@ -37,7 +37,7 @@ class CachesTest extends TestCase
         $types->method('getInvalidated')->willReturn(array_fill_keys($invalidated, new DataObject()));
         $state = new RunState($this->store);
         $state->begin();
-        $result = (new Caches($types, $this->config(['caches/minutes' => '60']), $state, $this->clock))->run();
+        $result = (new Caches($types, $this->config(['caches/minutes' => '60']), $state, $this->clock))->run([])[0];
         $state->commit();
         return $result;
     }

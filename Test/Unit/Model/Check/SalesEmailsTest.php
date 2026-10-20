@@ -35,7 +35,7 @@ class SalesEmailsTest extends TestCase
         $scopeConfig->method('isSetFlag')->willReturn(true);
         return (new SalesEmails($this->resource($this->db(['fetchAll' => [$rows]])), $manager,
             $this->config(['sales_emails/unsent_count' => '3', 'sales_emails/unsent_minutes' => '30']),
-            new Clock(self::NOW), $scopeConfig))->runForWebsites([1, 2]);
+            new Clock(self::NOW), $scopeConfig))->run([1, 2]);
     }
 
     public function testUnsentEmailsPerWebsite(): void

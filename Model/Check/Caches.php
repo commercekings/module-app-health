@@ -29,12 +29,8 @@ class Caches implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('System > Cache Management: enable the cache types, or refresh the invalidated ones.');
     }
@@ -44,7 +40,12 @@ class Caches implements CheckInterface
         return 'Caches';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $disabled = [];

@@ -27,12 +27,8 @@ class Maintenance implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.');
     }
@@ -42,7 +38,12 @@ class Maintenance implements CheckInterface
         return 'Maintenance';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         if (!$this->maintenanceMode->isOn()) {
             if (!empty($this->state->get('cursor:' . self::CODE)['since'])) {

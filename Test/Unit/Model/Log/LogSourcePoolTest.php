@@ -41,11 +41,6 @@ class LogSourcePoolTest extends TestCase
             {
             }
 
-            public function getCode(): string
-            {
-                return 'erp_feed';
-            }
-
             public function read(array $cursor, int $maxBytes): LogChunk
             {
                 $from = (int)($cursor['line'] ?? 0);
@@ -75,13 +70,13 @@ class LogSourcePoolTest extends TestCase
                 'file' => '/var/www/html/app/code/Erp/Sync/Model/Push.php', 'line' => 31]),
             json_encode(['severity' => 'DEBUG', 'text' => 'ignored']),
         ]);
-        $check = new SystemLog($this->logReader($state, $config, [$feed]), new Fingerprints($state, $config), $config,
+        $check = new SystemLog($this->logReader($state, $config, ['erp_feed' => $feed]), new Fingerprints($state, $config), $config,
             $state, new Clock());
         $state->begin();
-        $result = $check->run();
+        $result = $check->run([])[0];
         $state->commit();
         $this->assertSame(1, $result->counts['critical']);
-        $this->assertCount(1, $result->notices);
+        $this->assertCount(2, $result->notices, 'the entry, then what to do');
         $this->assertMatchesRegularExpression('/^Critical: Sync of order \(\{t:\d+\}\)\n'
             . 'Where: app\/code\/Erp\/Sync\/Model\/Push.php:31$/u', $result->notices[0]);
         $this->assertStringNotContainsString('jane', json_encode($result));
@@ -92,14 +87,18 @@ class LogSourcePoolTest extends TestCase
     {
         $filesystem = $this->createStub(Filesystem::class);
         $scopeConfig = $this->createStub(ScopeConfigInterface::class);
-        foreach ([[['source' => new \stdClass(), 'parser' => new MonologLineParser()]],
-            [['source' => $this->thirdParty([])['source']]],
-            [$this->thirdParty([]), $this->thirdParty([])]] as $sources) {
+        foreach ([
+            'item "erp" must be an array of a "source"' => ['erp' => ['source' => new \stdClass(),
+                'parser' => new MonologLineParser()]],
+            'item "erp" must be' => ['erp' => ['source' => $this->thirdParty([])['source']]],
+            '"0" is not a code' => [$this->thirdParty([])],
+            '"Erp Feed" is not a code' => ['Erp Feed' => $this->thirdParty([])],
+        ] as $message => $sources) {
             try {
                 new LogSourcePool($this->config(), $filesystem, $scopeConfig, new MonologLineParser(), $sources);
-                $this->fail('accepted');
-            } catch (\InvalidArgumentException) {
-                $this->addToAssertionCount(1);
+                $this->fail('accepted: ' . $message);
+            } catch (\InvalidArgumentException $e) {
+                $this->assertStringContainsString($message, $e->getMessage());
             }
         }
     }

@@ -95,6 +95,29 @@ class CheckResult
             $causes);
     }
 
+    /**
+     * The same result with what to do, for a check's one general hint: a problem or warning without any hint gets it -
+     * on its first cause, or as a cause of its own made from the detail when it has none - and notices without a
+     * "Check: ..." line end with "Check: <hint>" (also when the check is OK: news is told with what to do). A cause's
+     * own hint stays.
+     */
+    public function withHint(string $hint): self
+    {
+        if (trim($hint) === '') {
+            return $this;
+        }
+        $causes = $this->causes;
+        if ($this->status !== self::OK && array_filter($causes, fn (Cause $cause) => $cause->hint !== '') === []) {
+            $first = $causes[0] ?? new Cause('general', $this->detail);
+            $causes[0] = new Cause($first->code, $first->detail, $hint);
+        }
+        $notices = $this->notices;
+        if ($notices !== [] && array_filter($notices, fn (string $notice) => str_starts_with($notice, 'Check: ')) === []) {
+            $notices[] = 'Check: ' . $hint;
+        }
+        return new self($this->status, $this->detail, $this->counts, $notices, $this->title, $this->gauges, $causes);
+    }
+
     /** @param array<string, int> $counts */
     public static function ok(string $detail = '', array $counts = []): self
     {

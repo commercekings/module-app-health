@@ -335,17 +335,19 @@ there) and `status.json.dist` – the format with every field explained, to copy
 
 ## Extending
 
-Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth` namespace.
+Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth` namespace. In every pool the di.xml
+item name is the code (`[a-z0-9_]`): a check's for its state, its settings (`commercekings_app_health/<code>/…`) and
+its messages, a log source's for its cursor, a validator's for `validator="<code>"` in rules.
 
 | For | Use |
 |---|---|
-| A check for the whole shop | `Api\CheckInterface` (`getCode()`, `getLabel()`, `getHint()`, `run()`) in `Model\CheckPool` "checks" |
-| A check per website | `Api\WebsiteCheckInterface` (`runForWebsites($websiteIds)`: a result per website id) in the same pool |
+| A check | `Api\CheckInterface` (`getLabel()`, `run($websiteIds)`) in `Model\CheckPool` "checks": results by scope – `[CheckInterface::SHOP => $result]` for the whole shop (to the default recipient), one per website id asked about for something each website has (to its recipient) |
 | What a check returns | `Api\Data\CheckResult` – `ok()`, `warn()` or `fail()`, a title, a one-line detail of names and numbers, counts for the daily summary, gauges, notices (one-off news) – and its causes, `Api\Data\Cause` (code, detail, hint) via `withCauses()` |
+| What to do | the hint of each `Api\Data\Cause`; `CheckResult::withHint($hint)` adds a check's one general hint where nothing says what to do (a problem without hinted causes, news without a "Check: …" line) |
 | A check's on/off switch | `commercekings_app_health/<code>/enabled` (on when not set; a field in your `system.xml` shows it) |
 | A log source | `Api\LogSourceInterface` (new data since a cursor, as `Api\Data\LogChunk`) and `Api\LogParserInterface` (data to `Api\Data\LogEntry` items) in `Model\Log\LogSourcePool` "sources", for the `system_log` or `exceptions` check; app health makes every entry safe itself (fingerprint, label, masking, file:line) |
 | Sensitive-data rules, no PHP | `etc/app_health_rules.xml` in any module (schema `etc/app_health_rules.xsd`), merged by rule set and rule code: add a set or a rule, override a shipped one, or turn it off (`enabled="false"`) |
-| A validator for rules | `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
+| A validator for rules | `Api\SensitiveDataValidatorInterface` (`getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
 | Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
 | Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, *Website channels*: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert`, `app_health_summary` and `app_health_status` |
 | Status from outside Magento | any tool that writes `var/app-health/status-<source>.json` in the format above (version 1) – no PHP |
@@ -361,6 +363,27 @@ A check, in your module's `etc/di.xml`:
         </argument>
     </arguments>
 </type>
+```
+
+```php
+use CommerceKings\AppHealth\Api\Data\CheckResult;
+use CommerceKings\AppHealth\Model\Format;
+
+class SyncCheck implements \CommerceKings\AppHealth\Api\CheckInterface
+{
+    public function getLabel(): string
+    {
+        return 'ERP sync';
+    }
+
+    public function run(array $websiteIds): array
+    {
+        $result = $this->lastSyncAge() > 3600
+            ? CheckResult::fail('no ERP sync for ' . Format::duration($this->lastSyncAge()), [], 'ERP sync stopped')
+            : CheckResult::ok();
+        return [self::SHOP => $result->withHint((string)__('Is the ERP connector\'s cron job running?'))];
+    }
+}
 ```
 
 A rule set, in your module's `etc/app_health_rules.xml` – a set of its own, a shipped rule changed, a shipped set off:

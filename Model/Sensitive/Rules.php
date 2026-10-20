@@ -77,7 +77,7 @@ class Rules
                 }
                 $rules[] = ['key' => $setCode . '/' . $code, 'set' => (string)$setCode,
                     'setLabel' => (string)($set['label'] ?? $setCode), 'label' => (string)($rule['label'] ?? $code),
-                    'pattern' => $pattern, 'validator' => $validator?->getCode(),
+                    'pattern' => $pattern, 'validator' => $validator !== null ? (string)$rule['validator'] : null,
                     // the rule's setting, its own, its set's setting, its set's
                     'severity' => $this->severity($setting['severity'] ?? '')
                         ?? $this->severity($rule['severity'] ?? '') ?? $this->severity($setSetting['severity'] ?? '')

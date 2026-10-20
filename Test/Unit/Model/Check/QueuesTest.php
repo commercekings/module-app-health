@@ -75,7 +75,7 @@ class QueuesTest extends TestCase
         $state->begin();
         $result = (new Queues($this->resource($db), $topology, $pool, $deployment,
             $this->config(['queues/max_messages' => '100', 'queues/growing_minutes' => '15']), $state, $this->clock,
-            $this->createStub(LoggerInterface::class), $consumers))->run();
+            $this->createStub(LoggerInterface::class), $consumers))->run([])[0];
         $state->commit();
         $this->clock->now += 300;
         return $result;

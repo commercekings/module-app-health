@@ -57,12 +57,12 @@ trait LogDir
         $filesystem = $this->logFilesystem();
         $scopeConfig = $this->createStub(ScopeConfigInterface::class);
         $monolog = new MonologLineParser();
-        $pool = new LogSourcePool($config, $filesystem, $scopeConfig, $monolog, array_merge([
-            ['source' => new FileLogSource($filesystem, $scopeConfig, 'system', 'system.log'), 'parser' => $monolog,
+        $pool = new LogSourcePool($config, $filesystem, $scopeConfig, $monolog, [
+            'system' => ['source' => new FileLogSource($filesystem, $scopeConfig, 'system.log'), 'parser' => $monolog,
                 'check' => 'system_log'],
-            ['source' => new FileLogSource($filesystem, $scopeConfig, 'exception', 'exception.log'),
+            'exception' => ['source' => new FileLogSource($filesystem, $scopeConfig, 'exception.log'),
                 'parser' => $monolog, 'check' => 'exceptions'],
-        ], $extra));
+        ] + $extra);
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getRoot')->willReturn('/var/www/html');
         $detector = $this->detector();

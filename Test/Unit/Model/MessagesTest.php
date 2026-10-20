@@ -37,7 +37,9 @@ class MessagesTest extends TestCase
     public function testAProblemSaysWhatAndWhereThenWhyAndWhatToDo(): void
     {
         $check = ['status' => 'fail', 'title' => 'Cron stopped', 'since' => self::NOW - 600,
-            'detail' => 'no job has run since {t:' . (self::NOW - 3900) . '} (65 min)'];
+            'detail' => 'no job has run since {t:' . (self::NOW - 3900) . '} (65 min)',
+            // what CheckResult::withHint() makes of a problem without causes: the detail as a cause with the hint
+            'causes' => [['general', 'no job has run since {t:' . (self::NOW - 3900) . '} (65 min)', 'Look at Cron.']]];
         $this->assertSame("*Problem: Cron stopped · Main Website Store*\n\n"
             . "No job has run since 08:55 (65 min).\n\n"
             . 'What to do: Look at Cron.', $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
@@ -61,12 +63,13 @@ class MessagesTest extends TestCase
     public function testAWarningARepeatAndARecovery(): void
     {
         $warn = ['status' => 'warn', 'title' => 'Cache invalidated', 'detail' => 'config invalidated for 2 h',
-            'since' => self::NOW - 7200];
+            'since' => self::NOW - 7200, 'causes' => [['general', 'config invalidated for 2 h', 'Look at Caches.']]];
         $this->assertSame("*Warning: Cache invalidated · Main Website Store*\n\nConfig invalidated for 2 h.\n\n"
             . 'What to do: Look at Caches.', $this->messages->alert($this->target(1), 'caches', $warn,
                 AlertPlan::PROBLEM));
         $fail = ['status' => 'fail', 'detail' => 'catalog_product_price invalid for 7 h',
-            'since' => self::NOW - 25 * 3600];
+            'since' => self::NOW - 25 * 3600,
+            'causes' => [['general', 'catalog_product_price invalid for 7 h', 'Look at Indexers.']]];
         $this->assertSame("*Problem: Indexers · Main Website Store*\n\n"
             . "catalog_product_price invalid for 7 h.\nStill failing since 19 Oct 09:00.\n\n"
             . 'What to do: Look at Indexers.',
@@ -82,7 +85,8 @@ class MessagesTest extends TestCase
         $this->assertSame("*New error in system.log · Main Website Store*\n\n"
             . "Error: Unable to send order (09:50)\nWhere: app/code/A/B.php:84\n\nWhat to do: Look at system.log.",
             $this->messages->notices($this->target(), 'system_log',
-                [7 => "Error: Unable to send order ({t:" . (self::NOW - 600) . "})\nWhere: app/code/A/B.php:84"]));
+                [7 => "Error: Unable to send order ({t:" . (self::NOW - 600) . "})\nWhere: app/code/A/B.php:84",
+                    'Check: Look at system.log.']));
     }
 
     public function testSeveralNewErrorsApartByABlankLine(): void
@@ -97,6 +101,7 @@ class MessagesTest extends TestCase
                     . 'Message: Card *** declined',
                 'Critical: NoSuchEntityException ({t:' . (self::NOW - 300) . '})',
                 '…and 2 more (see the daily summary)',
+                'Check: Look at exception.log.',
             ]));
     }
 
@@ -104,10 +109,13 @@ class MessagesTest extends TestCase
     {
         $notices = array_map(fn ($i) => 'Critical: e' . $i . ' ({t:' . self::NOW . '})', range(1, 12));
         $notices[] = '…and 4 more (see the daily summary)';
+        $notices[] = 'Check: Look at system.log.';
+        $notices[] = 'Check: Look at system.log.';
         $text = $this->messages->notices($this->target(), 'system_log', $notices);
         $this->assertStringContainsString("Critical: e10 (10:00)\n…and 6 more (see the daily summary)\n\nWhat to do:",
             $text, 'ten, then the two over and the four the check counted');
         $this->assertStringNotContainsString('e11', $text);
+        $this->assertSame(1, substr_count($text, 'What to do:'), 'notices of two runs: what to do once');
     }
 
     public function testTheDailySummary(): void

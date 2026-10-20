@@ -44,12 +44,8 @@ class Queues implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Are the consumers running (cron_consumers_runner or supervisor)?'
             . ' bin/magento queue:consumers:list');
@@ -60,7 +56,12 @@ class Queues implements CheckInterface
         return 'Queue';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $max = $this->config->getInt(self::CODE, 'max_messages', 1000);

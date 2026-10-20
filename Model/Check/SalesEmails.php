@@ -5,7 +5,7 @@ namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\Data\Cause;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
-use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
+use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Model\Config;
 use CommerceKings\AppHealth\Model\Format;
 use Magento\Framework\App\Config\ScopeConfigInterface;
@@ -20,7 +20,7 @@ use Magento\Store\Model\StoreManagerInterface;
  * (send_email = 1) without email_sent after "unsent_minutes" (fail). One query: per table a range of the last
  * LOOKBACK_HOURS on its created_at index, at most CAP rows, counted by store view.
  */
-class SalesEmails implements WebsiteCheckInterface
+class SalesEmails implements CheckInterface
 {
     public const CODE = 'sales_emails';
     public const LOOKBACK_HOURS = 24;
@@ -37,12 +37,8 @@ class SalesEmails implements WebsiteCheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Is the sales email cron running (async sending), and does the mail server accept mail?');
     }
@@ -52,7 +48,16 @@ class SalesEmails implements WebsiteCheckInterface
         return 'Sales emails';
     }
 
-    public function runForWebsites(array $websiteIds): array
+    public function run(array $websiteIds): array
+    {
+        return array_map(fn (CheckResult $result) => $result->withHint($this->hint()), $this->check($websiteIds));
+    }
+
+    /**
+     * @param int[] $websiteIds
+     * @return array<int, CheckResult> by website id
+     */
+    private function check(array $websiteIds): array
     {
         $minutes = $this->config->getInt(self::CODE, 'unsent_minutes', 30);
         $threshold = $this->config->getInt(self::CODE, 'unsent_count', 3);

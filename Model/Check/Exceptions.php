@@ -32,12 +32,8 @@ class Exceptions implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('var/log/exception.log: look for the class around that time, in the file it names.');
     }
@@ -47,7 +43,12 @@ class Exceptions implements CheckInterface
         return 'exception.log';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $new = $this->log->newEntries();

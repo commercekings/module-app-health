@@ -81,29 +81,33 @@ class Runner
         $notices = [];
         $websiteIds = array_values(array_filter(array_keys($targets)));
         foreach ($this->pool->getAll() as $code => $check) {
-            $perWebsite = !$check instanceof CheckInterface;
-            if (!$this->config->isCheckEnabled($code) || ($perWebsite && $websiteIds === [])) {
+            if (!$this->config->isCheckEnabled($code)) {
                 continue;
             }
-            $scopes = $perWebsite ? $websiteIds : [0];
+            // the scopes the check had last time
+            $known = array_keys(array_filter($previous, fn ($row) => is_array($row) && isset($row[$code])));
             if (microtime(true) - $started >= $this->budgetSeconds) {
                 $report['skipped'][] = $code;
                 $report['complete'] = false;
-                foreach ($scopes as $scope) {
-                    if (isset($previous[$scope][$code])) {
-                        $checks[$scope][$code] = $previous[$scope][$code];
-                    }
+                foreach ($known as $scope) {
+                    $checks[$scope][$code] = $previous[$scope][$code];
                 }
                 continue;
             }
             $begin = microtime(true);
             try {
-                $results = $perWebsite ? $check->runForWebsites($websiteIds) : [0 => $check->run()];
+                $results = $check->run($websiteIds);
+                // the whole shop, or each website asked about (one left out counts as "could not run")
+                $scopes = isset($results[CheckInterface::SHOP]) ? [CheckInterface::SHOP] : $websiteIds;
             } catch (\Throwable $e) {
                 $this->logger->error(sprintf('CommerceKings_AppHealth: check %s failed (%s at %s:%d)', $code,
                     get_class($e), $e->getFile(), $e->getLine()));
                 $results = [];
+                $scopes = $known ?: [CheckInterface::SHOP];
                 $report['complete'] = false;
+            }
+            if ($scopes === []) {
+                continue; // a check per website, and no website asked about
             }
             $ms = round((microtime(true) - $begin) * 1000, 1);
             $worst = 0;

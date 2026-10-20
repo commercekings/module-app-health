@@ -29,7 +29,7 @@ class IndexersTest extends TestCase
         $pairs = [['catalog_product_price_view' => 'enabled'], ['indexer_reindex_all_invalid' => gmdate('Y-m-d H:i:s',
             self::NOW - 600)]];
         return (new Indexers($this->resource($this->db(['fetchAll' => [$rows], 'fetchPairs' => $pairs])), $config,
-            $this->config(['indexers/minutes' => '60']), new Clock(self::NOW)))->run();
+            $this->config(['indexers/minutes' => '60']), new Clock(self::NOW)))->run([])[0];
     }
 
     private function ago(int $seconds): string

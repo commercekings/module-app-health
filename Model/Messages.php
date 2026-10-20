@@ -72,12 +72,12 @@ class Messages
             $facts[] = 'Still failing since ' . $this->when($target, (int)$check['since']) . '.';
         }
         return $this->block('*' . self::WORDS[$status] . ': ' . $title . ' · ' . $this->where($target) . '*', $facts,
-            $hints !== [] ? array_slice(array_keys($hints), 0, 2) : [$this->pool->getHint($code)]);
+            array_slice(array_keys($hints), 0, 2));
     }
 
     /**
      * One check's new notices (e.g. new errors in its logs; each of one or more lines, those of several lines apart
-     * by a blank line), then what to do ("Check: ..." notices, else the check's hint).
+     * by a blank line), then what to do (the "Check: ..." notices, each once).
      *
      * @param string[] $notices
      */
@@ -109,7 +109,7 @@ class Messages
         $several = array_filter($facts, fn (string $fact) => str_contains($fact, "\n")) !== [];
         return $this->block('*' . $title . ' · ' . $this->where($target) . '*',
             $facts !== [] ? [implode($several ? "\n\n" : "\n", $facts)] : [],
-            $hints !== [] ? $hints : [$this->pool->getHint($code)]);
+            array_values(array_unique($hints)));
     }
 
     /**

@@ -126,9 +126,10 @@ class RunnerTest extends TestCase
         $this->results['caches'] = new CheckResult('ok', '', [], ['NEW ERROR main: x x1 #12345678']);
         $this->assertSame([0], $this->run5()['queued']);
         $row = $this->store->row(AlertPlan::NOTICES . '0');
-        $this->assertSame([[1, $this->clock->now - 300, 'caches', 'NEW ERROR main: x x1 #12345678']], $row['items']);
+        $this->assertSame([[1, $this->clock->now - 300, 'caches', 'NEW ERROR main: x x1 #12345678'],
+            [2, $this->clock->now - 300, 'caches', 'Check: Look at Caches.']], $row['items'], 'with what to do');
         $this->results['caches'] = CheckResult::ok();
-        $this->store->seed([AlertPlan::NOTICED . '0' => ['caches' => ['id' => 1, 'at' => 0]]]); // the consumer told it
+        $this->store->seed([AlertPlan::NOTICED . '0' => ['caches' => ['id' => 2, 'at' => 0]]]); // the consumer told it
         $this->assertSame([], $this->run5()['queued']);
     }
 
@@ -142,6 +143,36 @@ class RunnerTest extends TestCase
         $this->assertSame(['cron', 'caches'], array_keys($checks[0]));
         $this->assertSame('fail', $checks[2]['email_disabled']['status']);
         $this->assertSame('ok', $checks[1]['email_disabled']['status']);
+    }
+
+    public function testAFailingCheckCountsAsCouldNotRunWhereItRanLastTime(): void
+    {
+        $this->websites = [1, 2];
+        $this->run5();
+        $this->results['email_disabled'] = new \RuntimeException('down');
+        $this->results['cron'] = new \RuntimeException('down');
+        $checks = $this->runAndRead();
+        $this->assertSame(['warn', 'warn'], [$checks[1]['email_disabled']['status'],
+            $checks[2]['email_disabled']['status']], 'the websites it answered for before');
+        $this->assertSame('warn', $checks[0]['cron']['status']);
+        $this->assertArrayNotHasKey('email_disabled', $checks[0], 'not the whole shop');
+        $this->assertStringContainsString('could not run', $checks[1]['email_disabled']['detail']);
+    }
+
+    public function testAWebsiteLeftOutCountsAsCouldNotRun(): void
+    {
+        $this->websites = [1, 2];
+        $this->results['email_disabled'] = [1 => CheckResult::ok()];
+        $checks = $this->runAndRead();
+        $this->assertSame(['ok', 'warn'], [$checks[1]['email_disabled']['status'],
+            $checks[2]['email_disabled']['status']]);
+    }
+
+    /** @return array<mixed> the "checks" row after a run */
+    private function runAndRead(): array
+    {
+        $this->run5();
+        return $this->store->row('checks');
     }
 
     public function testRunsInARowWithTheSameStatusAreCounted(): void

@@ -5,7 +5,6 @@ namespace CommerceKings\AppHealth\Test\Unit\Stub;
 
 use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Api\Data\CheckResult;
-use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
 use CommerceKings\AppHealth\Model\CheckPool;
 
 /** A pool of scripted checks: each answers what the test set in $results (code => result or a \Throwable). */
@@ -21,59 +20,28 @@ trait Pool
     private function pool(array $shopWide, array $perWebsite = []): CheckPool
     {
         $checks = [];
-        foreach ($shopWide as $code => $label) {
-            $checks[] = new class ($code, $label, $this) implements CheckInterface {
-                public function __construct(private string $code, private string $label, private object $test)
-                {
-                }
+        foreach ([[$shopWide, false], [$perWebsite, true]] as [$labels, $perSite]) {
+            foreach ($labels as $code => $label) {
+                $checks[$code] = new class ($code, $label, $perSite, $this) implements CheckInterface {
+                    public function __construct(private string $code, private string $label, private bool $perSite,
+                        private object $test)
+                    {
+                    }
 
-                public function getCode(): string
-                {
-                    return $this->code;
-                }
+                    public function getLabel(): string
+                    {
+                        return $this->label;
+                    }
 
-                public function getLabel(): string
-                {
-                    return $this->label;
-                }
-
-                public function getHint(): string
-                {
-                    return 'Look at ' . $this->label . '.';
-                }
-
-                public function run(): CheckResult
-                {
-                    return $this->test->answer($this->code);
-                }
-            };
-        }
-        foreach ($perWebsite as $code => $label) {
-            $checks[] = new class ($code, $label, $this) implements WebsiteCheckInterface {
-                public function __construct(private string $code, private string $label, private object $test)
-                {
-                }
-
-                public function getCode(): string
-                {
-                    return $this->code;
-                }
-
-                public function getLabel(): string
-                {
-                    return $this->label;
-                }
-
-                public function getHint(): string
-                {
-                    return 'Look at ' . $this->label . '.';
-                }
-
-                public function runForWebsites(array $websiteIds): array
-                {
-                    return $this->test->answer($this->code, $websiteIds);
-                }
-            };
+                    public function run(array $websiteIds): array
+                    {
+                        $results = $this->perSite ? $this->test->answer($this->code, $websiteIds)
+                            : [self::SHOP => $this->test->answer($this->code)];
+                        return array_map(fn (CheckResult $result) => $result->withHint('Look at ' . $this->label . '.'),
+                            $results);
+                    }
+                };
+            }
         }
         return new CheckPool($checks);
     }

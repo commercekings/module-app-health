@@ -45,12 +45,8 @@ class External implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Look at the server named above. No status at all: is the status script still scheduled'
             . ' on the server (cron or systemd timer), and can it write var/app-health?');
@@ -61,7 +57,12 @@ class External implements CheckInterface
         return 'Server status';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = (int)$this->dateTime->gmtTimestamp();
         $staleAfter = $this->config->getInt(self::CODE, 'stale_minutes', 15) * 60;

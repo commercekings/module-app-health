@@ -23,15 +23,9 @@ class FileLogSource implements LogSourceInterface
     public function __construct(
         private readonly Filesystem $filesystem,
         private readonly ScopeConfigInterface $scopeConfig,
-        private readonly string $code,
         private readonly string $file = '',
         private readonly string $fileConfigPath = ''
     ) {
-    }
-
-    public function getCode(): string
-    {
-        return $this->code;
     }
 
     /** The file name, or '' when it is not a valid one. */

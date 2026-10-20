@@ -39,7 +39,8 @@ class AlertAndSummaryTest extends TestCase
                 'caches' => ['status' => 'ok', 'since' => self::NOW]],
             1 => ['email_disabled' => ['status' => 'ok', 'since' => self::NOW]],
             2 => ['email_disabled' => ['status' => 'fail', 'title' => 'Emails disabled',
-                'detail' => 'emails are disabled', 'since' => self::NOW]],
+                'detail' => 'emails are disabled', 'since' => self::NOW,
+                'causes' => [['general', 'emails are disabled', 'Look at Email sending.']]]],
         ], 'tally:' . gmdate('YmdH', self::NOW - 3600) => [0 => ['cron' => ['w' => 2, 'c' => ['runs' => 10]]],
             2 => ['email_disabled' => ['w' => 2, 'c' => []]]],
             'tally:' . gmdate('YmdH', self::NOW - 25 * 3600) => [0 => ['cron' => ['w' => 0, 'c' => ['runs' => 99]]]]]);
@@ -92,13 +93,13 @@ class AlertAndSummaryTest extends TestCase
         $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => self::NOW],
             'indexers' => ['status' => 'warn', 'at' => self::NOW]],
             AlertPlan::NOTICES . '0' => AlertPlan::addNotices([], ['system_log' => ["Error: a (07:00)\nWhere: a.php:1",
-                'Error: b (2×, 07:10)']], self::NOW)]);
+                'Error: b (2×, 07:10)', 'Check: Look at system.log.']], self::NOW)]);
         $this->alert(0);
         $this->assertCount(1, $this->sent);
         $this->assertStringContainsString("*New errors in system.log · Shop*\n\n"
             . "Error: a (07:00)\nWhere: a.php:1\n\nError: b (2×, 07:10)\n\nWhat to do: ",
             $this->sent[0]);
-        $this->assertSame(['system_log' => ['id' => 2, 'at' => self::NOW]],
+        $this->assertSame(['system_log' => ['id' => 3, 'at' => self::NOW]],
             $this->store->row(AlertPlan::NOTICED . '0'));
         $this->sent = [];
         $this->alert(0);

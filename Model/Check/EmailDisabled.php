@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Check;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
-use CommerceKings\AppHealth\Api\WebsiteCheckInterface;
+use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Api\Data\Cause;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\ResourceConnection;
@@ -16,7 +16,7 @@ use CommerceKings\AppHealth\Model\Format;
  * Per website: "Disable Email Communications" (system/smtp/disable) on for any of its store views (fail), whatever the
  * scope it was set in, from the configuration Magento already holds (also env.php and config.php).
  */
-class EmailDisabled implements WebsiteCheckInterface
+class EmailDisabled implements CheckInterface
 {
     public const CODE = 'email_disabled';
     private const PATH = 'system/smtp/disable';
@@ -28,12 +28,8 @@ class EmailDisabled implements WebsiteCheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Stores > Configuration > Advanced > System > Mail Sending Settings >'
             . ' Disable Email Communications.');
@@ -44,7 +40,16 @@ class EmailDisabled implements WebsiteCheckInterface
         return 'Email sending';
     }
 
-    public function runForWebsites(array $websiteIds): array
+    public function run(array $websiteIds): array
+    {
+        return array_map(fn (CheckResult $result) => $result->withHint($this->hint()), $this->check($websiteIds));
+    }
+
+    /**
+     * @param int[] $websiteIds
+     * @return array<int, CheckResult> by website id
+     */
+    private function check(array $websiteIds): array
     {
         $views = array_fill_keys($websiteIds, 0);
         $off = array_fill_keys($websiteIds, 0);

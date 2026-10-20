@@ -38,7 +38,7 @@ class EmailDisabledTest extends TestCase
         $manager->method('getStores')->willReturn($stores);
         $db = $this->db(['fetchAll' => [[['scope' => 'stores', 'scope_id' => '2'], ['scope' => 'websites',
             'scope_id' => '1']]]]);
-        return (new EmailDisabled($config, $manager, $this->resource($db)))->runForWebsites($websiteIds);
+        return (new EmailDisabled($config, $manager, $this->resource($db)))->run($websiteIds);
     }
 
     public function testEachWebsiteForItsOwnStoreViews(): void

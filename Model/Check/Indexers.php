@@ -31,12 +31,8 @@ class Indexers implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('bin/magento indexer:status; is the indexer cron (indexer_reindex_all_invalid) running?');
     }
@@ -46,7 +42,12 @@ class Indexers implements CheckInterface
         return 'Indexers';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $indexers = $this->indexerConfig->getIndexers();
         $ids = array_map('strval', array_keys($indexers));

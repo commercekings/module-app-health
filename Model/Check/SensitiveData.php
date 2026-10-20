@@ -35,12 +35,8 @@ class SensitiveData implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('Stop logging it where the entry is written, then remove or rotate the log file.');
     }
@@ -50,7 +46,12 @@ class SensitiveData implements CheckInterface
         return 'Sensitive data in logs';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $findings = [];

@@ -67,7 +67,7 @@ class PrivacyTest extends TestCase
                 $log, $reader, $config, $clock, $state)];
         $run = function () use ($state, $checks): array {
             $state->begin();
-            $results = array_map(fn ($check) => $check->run(), $checks);
+            $results = array_map(fn ($check) => $check->run([])[0], $checks);
             $state->commit();
             return $results;
         };

@@ -52,7 +52,7 @@ class SensitiveDataTest extends TestCase
         $this->appendLog($system, 'system.log');
         $this->appendLog($exception);
         $this->state->begin();
-        $result = $this->check->run();
+        $result = $this->check->run([])[0];
         $this->state->commit();
         $this->clock->now += 300;
         return $result;

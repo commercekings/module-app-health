@@ -34,11 +34,6 @@ class RulesTest extends TestCase
     public function testAnotherModulesFileAddsASetWithItsValidatorOverridesARuleAndTurnsASetOff(): void
     {
         $validator = new class implements SensitiveDataValidatorInterface {
-            public function getCode(): string
-            {
-                return 'fixture_loyalty';
-            }
-
             public function getPattern(): string
             {
                 return '/\bLC-\d{8}\b/';
@@ -50,7 +45,7 @@ class RulesTest extends TestCase
             }
         };
         $detector = $this->detector([], [], [(string)file_get_contents(dirname(__DIR__, 2)
-            . '/_files/app_health_rules.xml')], [$validator]);
+            . '/_files/app_health_rules.xml')], ['fixture_loyalty' => $validator]);
         $rules = $detector->rules();
         $this->assertArrayNotHasKey('personal/iban', $rules, 'its set turned off');
         $this->assertSame('warning', $rules['pci/card_cvv']['severity'], 'overridden by code');

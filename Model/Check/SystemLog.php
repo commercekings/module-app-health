@@ -37,12 +37,8 @@ class SystemLog implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('var/log/system.log: look for the error around that time, in the file it names.');
     }
@@ -52,7 +48,12 @@ class SystemLog implements CheckInterface
         return 'system.log';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $now = $this->dateTime->gmtTimestamp();
         $read = $this->reader->entries(self::CODE);

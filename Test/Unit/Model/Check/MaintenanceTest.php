@@ -31,7 +31,7 @@ class MaintenanceTest extends TestCase
         $mode->method('isOn')->willReturn($on);
         $state = new RunState($this->store);
         $state->begin();
-        $result = (new Maintenance($mode, $this->config(['maintenance/minutes' => '15']), $state, $this->clock))->run();
+        $result = (new Maintenance($mode, $this->config(['maintenance/minutes' => '15']), $state, $this->clock))->run([])[0];
         $state->commit();
         return $result;
     }

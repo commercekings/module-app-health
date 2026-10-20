@@ -7,38 +7,38 @@ use CommerceKings\AppHealth\Api\CheckInterface;
 use CommerceKings\AppHealth\Model\CheckPool;
 use PHPUnit\Framework\TestCase;
 
+/** The checks by their di.xml item name - the code - in di.xml order. */
 class CheckPoolTest extends TestCase
 {
-    private function check(string $code, string $label = 'Label'): CheckInterface
+    private function check(string $label = 'Label'): CheckInterface
     {
         $check = $this->createStub(CheckInterface::class);
-        $check->method('getCode')->willReturn($code);
         $check->method('getLabel')->willReturn($label);
         return $check;
     }
 
     public function testChecksByCodeInTheirOrder(): void
     {
-        $pool = new CheckPool(['b' => $this->check('beta', 'Beta'), 'a' => $this->check('alpha', 'Alpha')]);
+        $pool = new CheckPool(['beta' => $this->check('Beta'), 'alpha' => $this->check('Alpha')]);
         $this->assertSame(['beta', 'alpha'], array_keys($pool->getAll()));
         $this->assertSame('Alpha', $pool->getLabel('alpha'));
         $this->assertSame('gone', $pool->getLabel('gone'), 'a check no longer installed shows its code');
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('invalid')]
-    public function testInvalidChecksAreRefused(array $checks): void
+    public function testInvalidChecksAreRefused(array $checks, string $message): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        new CheckPool(array_map(fn ($check) => is_string($check) ? $this->check($check) : $check, $checks));
+        $this->expectExceptionMessage($message);
+        new CheckPool(array_map(fn ($check) => $check ?? $this->check(), $checks));
     }
 
     public static function invalid(): array
     {
         return [
-            'not a check' => [[new \stdClass()]],
-            'invalid code' => [['Cron Check']],
-            'too long' => [[str_repeat('a', 33)]],
-            'twice' => [['cron', 'cron']],
+            'not a check' => [['cron' => new \stdClass()], 'item "cron" must be a ' . CheckInterface::class],
+            'no code' => [[null], '"0" is not a code'],
+            'invalid code' => [['Cron Check' => null], '"Cron Check" is not a code'],
+            'too long' => [[str_repeat('a', 33) => null], 'at most 32 characters'],
         ];
     }
 }

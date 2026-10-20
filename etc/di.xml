@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
-    <!-- the checks, in the order they run (argument "checks": name => CheckInterface for a shop-wide check,
-         WebsiteCheckInterface for a check per website); another module adds its own -->
+    <!-- the checks, in the order they run (argument "checks": code => CheckInterface; the item name is the check's code,
+         used for its state, settings and messages); another module adds its own -->
     <type name="CommerceKings\AppHealth\Model\CheckPool">
         <arguments>
             <argument name="checks" xsi:type="array">
@@ -20,17 +20,16 @@
             </argument>
         </arguments>
     </type>
-    <!-- the log sources and their parsers, by the check that reads them (argument "sources": name =>
-         [source => LogSourceInterface, parser => LogParserInterface, check => code]); another module adds its own -->
+    <!-- the log sources and their parsers, by the check that reads them (argument "sources":
+         code => [source => LogSourceInterface, parser => LogParserInterface, check => code]; the item name is the
+         source's code, its cursor "cursor:log:<code>"); another module adds its own -->
     <virtualType name="CommerceKingsAppHealthSystemLogSource" type="CommerceKings\AppHealth\Model\Log\FileLogSource">
         <arguments>
-            <argument name="code" xsi:type="string">system</argument>
             <argument name="fileConfigPath" xsi:type="string">commercekings_app_health/system_log/file</argument>
         </arguments>
     </virtualType>
     <virtualType name="CommerceKingsAppHealthExceptionLogSource" type="CommerceKings\AppHealth\Model\Log\FileLogSource">
         <arguments>
-            <argument name="code" xsi:type="string">exception</argument>
             <argument name="fileConfigPath" xsi:type="string">commercekings_app_health/exceptions/file</argument>
         </arguments>
     </virtualType>
@@ -73,7 +72,8 @@
             <argument name="ruleSets" xsi:type="object">CommerceKingsAppHealthRulesData</argument>
         </arguments>
     </type>
-    <!-- validators rule sets use by code (argument "validators": name => SensitiveDataValidatorInterface) -->
+    <!-- validators rule sets use by code (argument "validators": code => SensitiveDataValidatorInterface; a rule names it
+         as validator="<code>") -->
     <type name="CommerceKings\AppHealth\Model\Sensitive\ValidatorPool">
         <arguments>
             <argument name="validators" xsi:type="array">

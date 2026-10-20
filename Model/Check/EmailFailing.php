@@ -58,12 +58,8 @@ class EmailFailing implements CheckInterface
     ) {
     }
 
-    public function getCode(): string
-    {
-        return self::CODE;
-    }
-
-    public function getHint(): string
+        /** What to do, for a problem without a hint of its own. */
+    private function hint(): string
     {
         return (string)__('The mail server or the email provider\'s settings; the class in var/log/exception.log.');
     }
@@ -73,7 +69,12 @@ class EmailFailing implements CheckInterface
         return 'Sending';
     }
 
-    public function run(): CheckResult
+    public function run(array $websiteIds): array
+    {
+        return [self::SHOP => $this->check()->withHint($this->hint())];
+    }
+
+    private function check(): CheckResult
     {
         $mailEntries = array_values(array_filter(array_merge($this->log->newEntries()['safe'],
             $this->reader->entries(SystemLog::CODE)['entries']), fn ($entry) => !empty($entry['mail'])));

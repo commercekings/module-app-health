@@ -8,11 +8,6 @@ use CommerceKings\AppHealth\Api\SensitiveDataValidatorInterface;
 /** An IBAN: a country code, 2 check digits and up to 30 characters, with a valid ISO 7064 mod-97 checksum. */
 class Iban implements SensitiveDataValidatorInterface
 {
-    public function getCode(): string
-    {
-        return 'iban';
-    }
-
     public function getPattern(): string
     {
         return '/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b/';

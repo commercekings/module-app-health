@@ -18,8 +18,9 @@ Nothing runs on the storefront: no plugins, observers, layout or frontend routes
 
 1. Nothing happens while alerts are off everywhere and no heartbeat is set (a few configuration reads).
 2. `Model\RunState` reads the module's state once (about 10 rows of Magento's `flag` table, one query).
-3. The enabled checks run in `Model\CheckPool`'s order. Shop-wide checks (`Api\CheckInterface`) run once; checks per
-   website (`Api\WebsiteCheckInterface`) run once for all websites. A check that would start after
+3. The enabled checks run in `Model\CheckPool`'s order, each once, asked about all websites
+   (`Api\CheckInterface::run($websiteIds)`): a check of the whole shop answers for scope 0, a check per website for
+   each website (one left out counts as "could not run"). A check that would start after
    `Runner::BUDGET_SECONDS` (5 s) is skipped and keeps its last result; one that throws becomes a warning ("could not
    run") and only its exception class is logged.
 4. Each result goes to the `checks` row by scope (0 = the shared checks, else the website id) and code, with the time
@@ -121,13 +122,12 @@ log message*).
 
 ### Adding a log source
 
-A module's own log (a file, a service, a stream) feeds a check with one class pair and one di.xml item:
+A module's own log (a file, a service, a stream) feeds a check with one class pair and one di.xml item, whose name
+is the source's code (its cursor is `cursor:log:<code>`):
 
 ```php
 class ErpFeedSource implements \CommerceKings\AppHealth\Api\LogSourceInterface
 {
-    public function getCode(): string { return 'erp_feed'; }
-
     /** $cursor is what the last read returned ([] the first time: start at the end) */
     public function read(array $cursor, int $maxBytes): \CommerceKings\AppHealth\Api\Data\LogChunk
     {
