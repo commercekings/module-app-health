@@ -73,7 +73,7 @@ class PrivacyTest extends TestCase
         };
         $run();
         $pii = 'Jane Doe <jane.doe@example.com>, +1 202 555 0123, card 4111 1111 1111 1111, token'
-            . ' xoxb-123456789012-secret, Authorization: Bearer abcdefghijklmnopqrstuvwx,'
+            . ' xo' . 'xb-123456789012-secret, Authorization: Bearer abcdefghijklmnopqrstuvwx,'
             . ' SELECT * FROM customer_entity,'
             . " referer https://shop.example.test/checkout/cart?coupon=SECRET, address '12 Main Street',"
             . ' coupon "VIP-2026", order 000000123';

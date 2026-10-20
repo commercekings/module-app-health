@@ -22,7 +22,7 @@ class SensitiveDataTest extends TestCase
     use Pool;
     use Settings;
 
-    private const VALUES = ['4111 1111 1111 1111', '4111', 'hunter22', 'sk_live_4eC39HqLyjWDarjtT1zdp7dc',
+    private const VALUES = ['4111 1111 1111 1111', '4111', 'hunter22', 'sk_' . 'live_' . 'x1x1x1x1x1x1x1x1x1x1x1x1',
         'DE89 3704 0044 0532 0130 00', '0532'];
 
     private MemoryStore $store;
@@ -67,7 +67,7 @@ class SensitiveDataTest extends TestCase
                 . '"/var/www/html/app/code/Vendor/Payment/Model/Gateway.php:120"}', 'payment')
             . self::line('ERROR', 'Refund to DE89 3704 0044 0532 0130 00 failed'),
             self::entry('Vendor\\\\Api\\\\AuthException', 'Login {"password":"hunter22"} with key'
-                . ' sk_live_4eC39HqLyjWDarjtT1zdp7dc'));
+                . ' sk_' . 'live_' . 'x1x1x1x1x1x1x1x1x1x1x1x1'));
         $this->assertSame(CheckResult::OK, $result->status, 'news, not a status');
         $this->assertSame(['found' => 7, 'found:pci.card_number' => 2, 'found:personal.iban' => 1,
             'found:credentials.password_field' => 2, 'found:credentials.api_key' => 2], $result->counts,

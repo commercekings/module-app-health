@@ -161,7 +161,7 @@ class TeamMessageTest extends TestCase
     {
         $row = ['failed_sends' => '5'] + self::ROW;
         try {
-            $this->teamMessage($row, new \RuntimeException('Slack unreachable, token xoxb-secret'))
+            $this->teamMessage($row, new \RuntimeException('Slack unreachable, token xo' . 'xb-secret'))
                 ->deliver('app_health_alert', '1', $this->compose());
             $this->fail('rethrown');
         } catch (\RuntimeException) {

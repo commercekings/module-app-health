@@ -23,11 +23,13 @@ class DetectorTest extends TestCase
             'pci/card_number' => 'Payment for order 000000123 with card 4111 1111 1111 1111 declined',
             'pci/card_cvv' => '{"cc_number":"x","cvv":"123"}',
             'pci/card_track' => 'swipe %B4111111111111111^DOE/JANE^2512101000000000?',
-            'credentials/private_key' => "-----BEGIN RSA PRIVATE KEY-----\nMIIE...",
-            'credentials/jwt' => 'token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N',
+            // key-shaped values built from parts: no secret-scanner false alarm on the source
+            'credentials/private_key' => '-----BEGIN RSA ' . 'PRIVATE KEY-----' . "\nMIIE...",
+            'credentials/jwt' => 'token eyJ' . 'hbGciOiJIUzI1NiJ9.eyJ' . 'zdWIiOiIxMjM0NTY3ODkwIn0'
+                . '.dozjgNryP4J3jVmNHl0w5N',
             'credentials/auth_header' => 'headers: {"Authorization": "Bearer abcdefghijklmnop123"}',
             'credentials/password_field' => 'login {"username":"jane","password":"hunter22"}',
-            'credentials/api_key' => 'Stripe call with sk_live_4eC39HqLyjWDarjtT1zdp7dc failed',
+            'credentials/api_key' => 'Stripe call with sk_' . 'live_' . str_repeat('x1', 12) . ' failed',
             'personal/iban' => 'refund to DE89 3704 0044 0532 0130 00',
             'personal/bulk_emails' => 'to a@x.io, b@x.io, c@x.io, d@x.io, e@x.io',
             'personal/bulk_phones' => 'call +1 202 555 0101, +1 202 555 0102, +1 202 555 0103, +1 202 555 0104,'

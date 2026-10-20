@@ -65,7 +65,7 @@ class NormalizerTest extends TestCase
     public function testTheMaskedMessage(): void
     {
         $masked = $this->normalizer->mask('Mail to jane@example.com (+1 202 555 0123) order 000000123 token'
-            . ' sk_live_abcdef1234567890 at https://x.test/a "Blue Shirt" ok');
+            . ' sk_' . 'live_abcdef1234567890 at https://x.test/a "Blue Shirt" ok');
         $this->assertSame('Mail to *** (***) order *** token *** at *** ok', $masked, 'repeated *** as one');
         $this->assertSame(Normalizer::MESSAGE_LENGTH, mb_strlen($this->normalizer->mask(str_repeat('word ', 100))));
         $this->assertNull($this->safe('m')['message'], 'only when asked');

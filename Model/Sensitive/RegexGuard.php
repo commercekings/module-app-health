@@ -76,7 +76,7 @@ class RegexGuard
                     . ' customer%d@example.test: Connection could not be established with host smtp.example.test:587'
                     . ' {"exception":"[object] (Magento\\\\Framework\\\\Exception\\\\MailException(code: 0): x at'
                     . ' /var/www/html/vendor/magento/module-email/Model/Transport.php:240)","order_id":"%d",'
-                    . '"token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.%s"} []', $i % 60, $i, $i, $i,
+                    . '"token":"eyJ' . 'hbGciOiJIUzI1NiJ9.eyJ' . 'zdWIiOiIxMjM0In0.%s"} []', $i % 60, $i, $i, $i,
                     str_repeat('Ab3', 14));
                 $lines[] = sprintf('#%d /var/www/html/vendor/magento/framework/Interception/Interceptor.php(%d):'
                     . ' Magento\\Framework\\App\\Http->launch()', $i, $i);
