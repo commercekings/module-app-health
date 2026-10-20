@@ -149,16 +149,27 @@ class Messages
     }
 
     /**
-     * The hourly status: "All checks OK" or "2 problems: Cron, Queue", then "New errors this hour: N" with a line per
-     * error ("• Unable to send (3×, new)") when there were any.
+     * The hourly status: "All checks OK", "2 problems: Cron, Indexers" (or "No problems"), "Warnings: Queue (backlog
+     * 120)", then "New errors this hour: N" with a line per error ("• Unable to send (3×, new)") when there were any.
      *
-     * @param string[] $problems the labels of the checks not ok
+     * @param string[] $problems the labels of the checks failing
+     * @param list<array{0: string, 1: string}> $warnings the label and detail of the checks warning
      * @param list<array{0: string, 1: int, 2: bool}> $errors label, count, first seen since the last status
      */
-    public function status(Target $target, array $problems, int $errorCount, array $errors, int $moreErrors): string
+    public function status(Target $target, array $problems, array $warnings, int $errorCount, array $errors,
+        int $moreErrors): string
     {
-        $text = '*Hourly status · ' . $this->where($target) . "*\n\n" . ($problems === [] ? 'All checks OK'
-            : Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems));
+        $text = '*Hourly status · ' . $this->where($target) . "*\n\n" . match (true) {
+            $problems !== [] => Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems),
+            $warnings !== [] => 'No problems',
+            default => 'All checks OK',
+        };
+        if ($warnings !== []) {
+            $text .= "\nWarnings: " . implode(', ', array_map(function (array $warning) use ($target): string {
+                $detail = CheckResult::clean($this->times($target, $warning[1]), 60);
+                return $warning[0] . ($detail !== '' ? ' (' . $detail . ')' : '');
+            }, $warnings));
+        }
         if ($errorCount > 0) {
             $text .= "\n\nNew errors this hour: " . Format::number($errorCount);
             foreach ($errors as [$label, $count, $new]) {

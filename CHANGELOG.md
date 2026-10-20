@@ -9,7 +9,8 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
   RabbitMQ, off by default), sending (mail transport errors, failing CommerceKings notifications), email sending per
   website and unsent sales emails per website, every 5 minutes within a 5-second budget; each with its own switch and
   thresholds.
-- **Alerts:** change-only – a problem at once, "recovered" after 2 OK runs in a row; a failing check repeated after
+- **Alerts:** change-only – a problem at once, "resolved" at the first OK run (after 2 in a row for the log, queue
+  and sending checks); warnings in the hourly status and the daily summary; a failing check repeated after
   *Repeat a failing check after* (6 hours). Shop-wide checks alert the default scope's recipient once, a website's own
   checks its recipient. New critical log entries and sensitive data at once (at most one message per check every 30
   minutes), log errors in the hourly status, warnings in the daily summary.

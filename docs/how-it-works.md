@@ -50,8 +50,10 @@ the scope):
   again after the wait. A recipient the channel rejects is logged as a setting to fix. A message that may have gone out
   (`MessageSentException`) is never sent again.
 
-**Pace:** a check's change is sent at once (a "recovered" only after *Recovered after* OK runs in a row, the
-`runs` in the checks row); a check's notices – new CRITICAL log entries, exceptions, sensitive data – at most once per
+**Pace:** a check going to FAIL is sent at once, and its "resolved" at its first OK run – for the checks that count
+in a time window (`AlertPlan::WINDOW_CHECKS`: exceptions, system_log, queues, email_failing) only after *Recovered
+after* OK runs in a row (the `runs` in the checks row). A WARN is not sent at once: the hourly status and the daily
+summary list it (fail to warn waits for the OK). A check's notices – new CRITICAL log entries, exceptions, sensitive data – at most once per
 *New log errors at most every* (30 min) per scope, what came in between folded into the next (at most 10 shown). ERROR
 log entries are not notices: `Model\Log\Fingerprints` adds each run's count per error to `errors:recent`, and the
 hourly status lists them. WARNING entries only count, for the daily summary.

@@ -45,7 +45,7 @@
                 </field>
                 <field id="recover_runs" translate="label comment" type="text" sortOrder="61" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Recovered after (OK runs in a row)</label>
-                    <comment>A problem is sent as recovered only after this many OK runs in a row (5 minutes apart), so a check that flaps doesn't send "recovered" and the problem again. Default: 2.</comment>
+                    <comment>For the checks that count in a time window (system.log, exception.log, Queues, Sending): a problem is sent as resolved only after this many OK runs in a row (5 minutes apart), so one that flaps doesn't send "resolved" and the problem again. The other checks are resolved at their first OK run. Default: 2.</comment>
                     <validate>required-entry validate-digits validate-greater-than-zero</validate>
                     <depends><field id="enabled">1</field></depends>
                 </field>

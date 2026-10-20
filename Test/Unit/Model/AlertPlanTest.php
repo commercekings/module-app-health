@@ -27,10 +27,9 @@ class AlertPlanTest extends TestCase
     {
         $checks = $this->checks(['cron' => 'fail', 'caches' => 'ok', 'queues' => 'warn']);
         $changes = AlertPlan::changes($checks, [], self::NOW, self::REPEAT);
-        $this->assertSame(['cron' => AlertPlan::PROBLEM, 'queues' => AlertPlan::PROBLEM], $changes);
+        $this->assertSame(['cron' => AlertPlan::PROBLEM], $changes, 'a warning is not sent at once (hourly status)');
         $told = AlertPlan::told($checks, [], $changes, self::NOW);
-        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW],
-            'queues' => ['status' => 'warn', 'at' => self::NOW]], $told);
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $told);
         $this->assertSame([], AlertPlan::changes($checks, $told, self::NOW + self::REPEAT - 1, self::REPEAT),
             'still failing within the interval: nothing');
         $this->assertSame(['cron' => AlertPlan::REPEAT],
@@ -48,17 +47,17 @@ class AlertPlanTest extends TestCase
         $this->assertSame([], AlertPlan::changes($checks, $after, self::NOW + 300, self::REPEAT));
     }
 
-    public function testRecoveredOnlyAfterEnoughOkRunsInARow(): void
+    public function testAThresholdCheckRecoversAfterEnoughOkRunsAStateCheckAtOnce(): void
     {
-        $told = ['cron' => ['status' => 'fail', 'at' => self::NOW - 600]];
-        $checks = ['cron' => ['status' => 'ok', 'since' => self::NOW, 'runs' => 1]];
-        $this->assertSame([], AlertPlan::changes($checks, $told, self::NOW, self::REPEAT, 2), 'one ok run: not yet');
-        $checks['cron']['runs'] = 2;
-        $this->assertSame(['cron' => AlertPlan::RECOVERED], AlertPlan::changes($checks, $told, self::NOW,
-            self::REPEAT, 2));
-        $checks = ['cron' => ['status' => 'warn', 'since' => self::NOW, 'runs' => 1]];
-        $this->assertSame(['cron' => AlertPlan::PROBLEM], AlertPlan::changes($checks, $told, self::NOW,
-            self::REPEAT, 2), 'fail to warn is news at once');
+        $told = ['system_log' => ['status' => 'fail', 'at' => self::NOW - 600],
+            'maintenance' => ['status' => 'fail', 'at' => self::NOW - 600]];
+        $checks = ['system_log' => ['status' => 'ok', 'runs' => 1], 'maintenance' => ['status' => 'ok', 'runs' => 1]];
+        $this->assertSame(['maintenance' => AlertPlan::RECOVERED], AlertPlan::changes($checks, $told, self::NOW,
+            self::REPEAT, 2), 'a spike window: one ok run is not yet; maintenance mode off: resolved');
+        $checks['system_log']['runs'] = 2;
+        $this->assertSame(['system_log' => AlertPlan::RECOVERED, 'maintenance' => AlertPlan::RECOVERED],
+            AlertPlan::changes($checks, $told, self::NOW, self::REPEAT, 2));
+        $this->assertSame(['exceptions', 'system_log', 'queues', 'email_failing'], AlertPlan::WINDOW_CHECKS);
     }
 
     public function testNoticesOfACheckAtMostOncePerIntervalTheRestFoldedIntoTheNext(): void
@@ -75,11 +74,14 @@ class AlertPlanTest extends TestCase
             1800)));
     }
 
-    public function testAWorseOrBetterProblemIsNews(): void
+    public function testAWarningIsNotNewsAWorseProblemIs(): void
     {
-        $told = ['cron' => ['status' => 'warn', 'at' => self::NOW - 60], 'caches' => ['status' => 'fail', 'at' => 0]];
-        $this->assertSame(['cron' => AlertPlan::PROBLEM, 'caches' => AlertPlan::PROBLEM],
-            AlertPlan::changes($this->checks(['cron' => 'fail', 'caches' => 'warn']), $told, self::NOW, self::REPEAT));
+        $told = ['caches' => ['status' => 'fail', 'at' => self::NOW - 60]];
+        $this->assertSame(['cron' => AlertPlan::PROBLEM], AlertPlan::changes($this->checks(['cron' => 'fail',
+            'caches' => 'warn', 'queues' => 'warn']), $told, self::NOW, self::REPEAT),
+            'fail to warn: nothing yet (resolved when ok), ok to warn: nothing');
+        $this->assertSame(['caches' => AlertPlan::RECOVERED], AlertPlan::changes($this->checks(['caches' => 'ok']),
+            $told, self::NOW, self::REPEAT));
     }
 
     public function testAChangeNotYetToldKeepsItsOwnRecord(): void

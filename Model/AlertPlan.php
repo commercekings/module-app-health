@@ -19,14 +19,22 @@ class AlertPlan
     public const NOTICES_KEPT = 30;
     public const NOTICES_HOURS = 24;
 
+    /** Checks that count in a time window: "recovered" only after Config::getRecoverRuns() OK runs in a row. */
+    public const WINDOW_CHECKS = ['exceptions', 'system_log', 'queues', 'email_failing'];
+
     public const PROBLEM = 'problem';
     public const RECOVERED = 'recovered';
     public const REPEAT = 'repeat';
 
     /**
+     * What to send at once: a check going to FAIL (a problem), or back to OK after a told problem (recovered), or a
+     * fail still going on after the repeat interval. A WARN is not sent at once (the hourly status and the daily
+     * summary list it): ok to warn is no news, and fail to warn waits for the OK. A check in WINDOW_CHECKS (counts in
+     * a time window) recovers only after $recoverRuns OK runs in a row; the others (a state) at their first OK run.
+     *
      * @param array<string, array<mixed>> $checks code => ['status' => ..., ...] (the "checks" row)
      * @param array<string, array<mixed>> $alerted code => ['status' => ..., 'at' => unix time]
-     * @param int $recoverRuns ok runs in a row ("runs" in the checks row) before a problem counts as recovered
+     * @param int $recoverRuns ok runs in a row ("runs" in the checks row) before a window check counts as recovered
      * @return array<string, string> code => self::PROBLEM, RECOVERED or REPEAT, in the checks' order
      */
     public static function changes(array $checks, array $alerted, int $now, int $repeatSeconds,
@@ -36,14 +44,17 @@ class AlertPlan
         foreach ($checks as $code => $check) {
             $status = (string)($check['status'] ?? CheckResult::OK);
             $told = (string)($alerted[$code]['status'] ?? CheckResult::OK);
-            if ($status !== $told) {
-                if ($status === CheckResult::OK && (int)($check['runs'] ?? $recoverRuns) < $recoverRuns) {
-                    continue; // not ok for long enough: no "recovered" that a flapping check takes back
+            if ($status === CheckResult::WARN || $status === $told) {
+                if ($status === CheckResult::FAIL && (int)($alerted[$code]['at'] ?? 0) <= $now - $repeatSeconds) {
+                    $changes[$code] = self::REPEAT;
                 }
-                $changes[$code] = $status === CheckResult::OK ? self::RECOVERED : self::PROBLEM;
-            } elseif ($status === CheckResult::FAIL && (int)($alerted[$code]['at'] ?? 0) <= $now - $repeatSeconds) {
-                $changes[$code] = self::REPEAT;
+                continue;
             }
+            if ($status === CheckResult::OK && in_array($code, self::WINDOW_CHECKS, true)
+                && (int)($check['runs'] ?? $recoverRuns) < $recoverRuns) {
+                continue; // not ok for long enough: no "recovered" that a flapping window takes back
+            }
+            $changes[$code] = $status === CheckResult::OK ? self::RECOVERED : self::PROBLEM;
         }
         return $changes;
     }

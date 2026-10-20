@@ -75,14 +75,12 @@ class AlertAndSummaryTest extends TestCase
             $this->messages(), $this->config(), new Clock(self::NOW)))->process((string)$scope);
     }
 
-    public function testOneMessagePerProblemFailsFirstEachRecordedOnce(): void
+    public function testOneMessagePerProblemEachRecordedOnceAWarningNotAtOnce(): void
     {
         $this->alert(0);
-        $this->assertCount(2, $this->sent);
+        $this->assertCount(1, $this->sent, 'the indexers\' warning waits for the hourly status');
         $this->assertStringStartsWith('*Problem: Cron stopped · Shop (all websites)*', $this->sent[0]);
-        $this->assertStringStartsWith('*Warning: Indexers · Shop (all websites)*', $this->sent[1]);
-        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW],
-            'indexers' => ['status' => 'warn', 'at' => self::NOW]], $this->store->row('alerted:0'));
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $this->store->row('alerted:0'));
         $this->sent = [];
         $this->alert(0);
         $this->assertSame([], $this->sent, 'told already: nothing to send');
@@ -113,7 +111,7 @@ class AlertAndSummaryTest extends TestCase
         $this->assertNull($this->store->row('alerted:0'));
         $this->failing = false;
         $this->alert(0);
-        $this->assertCount(2, $this->sent);
+        $this->assertCount(1, $this->sent);
     }
 
     public function testAWebsitesAlertCarriesOnlyItsOwnChecks(): void

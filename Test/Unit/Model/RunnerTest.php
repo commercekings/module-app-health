@@ -146,9 +146,10 @@ class RunnerTest extends TestCase
         $this->assertSame(2, $this->store->row('checks')[0]['cron']['runs']);
         $this->results['cron'] = CheckResult::ok();
         $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => 1]]]);
-        $this->assertSame([], $this->run5()['queued'], 'one ok run: not recovered yet (Recover after 2 runs)');
+        $this->assertSame([0], $this->run5()['queued'], 'cron, a state: resolved at its first ok run');
         $this->assertSame(1, $this->store->row('checks')[0]['cron']['runs']);
-        $this->assertSame([0], $this->run5()['queued'], 'the second: recovered');
+        $this->run5();
+        $this->assertSame(2, $this->store->row('checks')[0]['cron']['runs']);
     }
 
     public function testTheTimeSinceTheStatusChangedIsKept(): void

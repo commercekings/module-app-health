@@ -10,9 +10,9 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
   alert at once – the rule and where, never the value.
 - **Ten checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
   `exception.log` (new errors, with where they happened), queue backlogs, and sales emails that don't go out.
-- **Only news, at the right pace.** A problem at once, "recovered" once it is OK for two runs in a row; a check still
-  failing is repeated every 6 hours. Critical log errors and sensitive data at once, log errors in the hourly status,
-  warnings in the daily summary.
+- **Only news, at the right pace.** A problem at once, "resolved" once it is OK (for the log, queue and sending checks
+  two runs in a row); a check still failing is repeated every 6 hours; a check's warning in the hourly status.
+  Critical log errors and sensitive data at once, log errors in the hourly status, log warnings in the daily summary.
 - **Proof that alerts can go out.** An hourly status ("All checks OK", or the problems) through the same queue and
   channel: when it stops coming, so does the heartbeat.
 - **The right channel.** Checks for the whole shop go to one channel; each website's own (its email settings, its
@@ -76,7 +76,8 @@ The logs are read every 5 minutes; what you hear, and when:
 
 | What | When | Where |
 |---|---|---|
-| A check going to *Problem* or *Warning* (cron, indexers, caches, ...) | at once; again every 6 h while it fails; *Resolved* after 2 OK runs in a row | its recipient |
+| A check going to *Problem* (cron, indexers, caches, ...) | at once; again every 6 h while it fails; *Resolved* at the first OK run – for system.log, exception.log, Queues and Sending after 2 OK runs in a row | its recipient |
+| A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | default recipient, each website's |
 | Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | default recipient |
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | default recipient |
 | ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | default recipient |
@@ -87,7 +88,8 @@ The logs are read every 5 minutes; what you hear, and when:
 ```
 *Hourly status · Main Website Store (all websites)*
 
-2 problems: Cron, Queue
+1 problem: Cron
+Warnings: Queue (commercekings.notification.send: 120 messages)
 
 New errors this hour: 14
 • Unable to send (9×, new)
@@ -286,7 +288,6 @@ Always masked, in the label and the message, as `***`:
 
 - Checks run inside Magento's cron: a cron that is down entirely is reported when it comes back – use the heartbeat for
   the rest. Nothing is sent from cron directly: every message goes through Notification's queue.
-- A check's *Warning* is sent at once like a *Problem*.
 - Sales emails count only entities created in the last 24 hours; queues read the MySQL queue and RabbitMQ (AMQP)
   connections, not others (e.g. ActiveMQ).
 - Messages are in English.

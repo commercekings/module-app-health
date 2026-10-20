@@ -57,7 +57,8 @@ class StatusTest extends TestCase
     public function testTheProblemsOfEveryScopeAndTheErrorsSinceTheLastStatus(): void
     {
         $store = (new MemoryStore())->seed([
-            'checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => ['status' => 'warn'],
+            'checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => ['status' => 'warn',
+                'detail' => 'commercekings.notification.send: 120 messages'],
                 'caches' => ['status' => 'ok']], 2 => ['email_disabled' => ['status' => 'fail']]],
             Fingerprints::KEY => ['aaaaaaaa' => ['label' => 'Unable to send'],
                 'bbbbbbbb' => ['label' => 'Magento\\Framework\\Exception\\NoSuchEntityException']],
@@ -66,8 +67,15 @@ class StatusTest extends TestCase
                 [self::NOW - 300, 'bbbbbbbb', 5, 1]],
         ]);
         $this->send($store, gmdate('Y-m-d H:i:s', self::NOW - 3600));
-        $this->assertSame(["*Hourly status · Shop (all websites)*\n\n3 problems: Cron, Queue, Email sending\n\n"
+        $this->assertSame(["*Hourly status · Shop (all websites)*\n\n2 problems: Cron, Email sending\n"
+            . "Warnings: Queue (commercekings.notification.send: 120 messages)\n\n"
             . "New errors this hour: 8\n• NoSuchEntityException (5×, new)\n• Unable to send (3×)"], $this->sent);
+    }
+
+    public function testOnlyWarnings(): void
+    {
+        $this->send((new MemoryStore())->seed(['checks' => [0 => ['queues' => ['status' => 'warn']]]]));
+        $this->assertSame(["*Hourly status · Shop (all websites)*\n\nNo problems\nWarnings: Queue"], $this->sent);
     }
 
     public function testAtMostFiveErrorsThenCounted(): void

@@ -16,8 +16,9 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 /**
  * Notification type "app_health_status", reference 0: the hourly status, to the default scope's recipient, through the
  * same queue, consumer and channel as the alerts - so a status that stops coming means the sending path is broken
- * (the heartbeat stops too: Runner pings only while the last status went out). One line for the checks ("All checks
- * OK" or the problems), then the log errors since the last status (ERROR entries: they don't alert one by one).
+ * (the heartbeat stops too: Runner pings only while the last status went out). A line for the checks ("All checks
+ * OK" or the problems), one for the warnings (not sent at once), then the log errors since the last status (ERROR
+ * entries: they don't alert one by one).
  */
 class Status implements NotificationTypeInterface
 {
@@ -47,10 +48,15 @@ class Status implements NotificationTypeInterface
                 : $now - $this->config->getHourlyStatusMinutes() * 60;
             $rows = $this->store->load(['checks', Fingerprints::KEY, Fingerprints::ERRORS_KEY]);
             $problems = [];
+            $warnings = [];
             foreach ((array)($rows['checks'] ?? []) as $checks) {
                 foreach ((array)$checks as $code => $check) {
-                    if (($check['status'] ?? CheckResult::OK) !== CheckResult::OK) {
+                    $status = $check['status'] ?? CheckResult::OK;
+                    if ($status === CheckResult::FAIL) {
                         $problems[(string)$code] = $this->pool->getLabel((string)$code);
+                    } elseif ($status === CheckResult::WARN) {
+                        $warnings[(string)$code] ??= [$this->pool->getLabel((string)$code),
+                            (string)($check['detail'] ?? '')];
                     }
                 }
             }
@@ -69,7 +75,7 @@ class Status implements NotificationTypeInterface
                 $errors[] = [Fingerprints::name((array)($known[$fp] ?? ['label' => '#' . $fp])), $error['count'],
                     $error['new']];
             }
-            return [$this->messages->status($target, array_values($problems),
+            return [$this->messages->status($target, array_values($problems), array_values($warnings),
                 array_sum(array_column($byFingerprint, 'count')), $errors, count($byFingerprint) - count($errors)),
                 fn () => null];
         });
