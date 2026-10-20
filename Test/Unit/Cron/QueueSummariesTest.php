@@ -55,6 +55,9 @@ class QueueSummariesTest extends TestCase
         $this->rows[3] = ['queued_at' => '2026-10-20 07:59:00', 'sent_at' => null];
         $this->assertSame([], $cron->execute(), 'sent since 07:30, or on its way: one read each, nothing queued');
         $this->assertSame([], $queued);
+        $this->rows[3] = ['queued_at' => '2026-10-20 06:59:00', 'sent_at' => null];
+        $this->assertSame([3], $cron->execute(), 'a mark older than STUCK_MINUTES (a killed consumer, a lost'
+            . ' message): queued again, not skipped for ever');
     }
 
     public function testACopyOfTheShopQueuesNoSummary(): void

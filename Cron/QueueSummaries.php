@@ -54,10 +54,12 @@ class QueueSummaries
             if (!$this->schedule->isDue($slot, null, $now)) {
                 continue;
             }
-            // one read while the day's summary is out (or on its way): nothing more to do
+            // one read while the day's summary is out (or on its way): nothing more to do - but a mark older than
+            // STUCK_MINUTES (a killed consumer, a lost message) is queued again (queue() takes it over)
             $row = $this->deliveryState->load(Summary::CODE, $websiteId);
-            if ($row !== null && ($row['queued_at'] !== null
-                || !$this->schedule->isDue($slot, $row['sent_at'] ?? null, $now))) {
+            $onItsWay = $row !== null && $row['queued_at'] !== null
+                && (string)$row['queued_at'] >= gmdate('Y-m-d H:i:s', $now - TeamMessage::STUCK_MINUTES * 60);
+            if ($onItsWay || ($row !== null && !$this->schedule->isDue($slot, $row['sent_at'] ?? null, $now))) {
                 continue;
             }
             $notSince = $this->resource->getConnection()->quoteInto('(sent_at IS NULL OR sent_at < ?)',
