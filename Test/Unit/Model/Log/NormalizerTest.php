@@ -48,6 +48,11 @@ class NormalizerTest extends TestCase
             'at most 3 words');
         $this->assertSame('customer *** could', $this->safe('customer jane doe could not pay')['label'],
             'a lowercase name after "customer"');
+        foreach (['Bearer abcdefghij rejected' => 'Bearer *** rejected', 'pw=hunter failed now' => '*** failed now',
+            'secret_value: topsecret now' => 'secret_value: *** now', 'login jane failed' => 'login *** failed',
+            'hash=abcdef mismatch here' => '*** mismatch here'] as $message => $label) {
+            $this->assertSame($label, $this->safe($message)['label'], $message . ' (the review\'s probes)');
+        }
         $this->assertSame(['plain words', []], [$this->safe('plain words', ['evil class!'])['label'],
             $this->safe('plain words', ['evil class!'])['classes']], 'not a class name: not used');
     }
@@ -87,6 +92,16 @@ class NormalizerTest extends TestCase
             'IPv6' => ['from 2001:db8:85a3::8a2e:370:7334 and fe80::1 at 10:39:00', 'from *** and *** at 10:39:00'],
             'IPv6 in full' => ['peer 2001:0db8:0000:0000:0000:ff00:0042:8329 down', 'peer *** down'],
             'not IPv6' => ['Cache::clean and Bad::run failed', 'Cache::clean and Bad::run failed'],
+            // the review's probes
+            'a password "is"' => ['password is s3cr3t! here', 'password is *** here'],
+            'credentials' => ['credentials hunter2 rejected', 'credentials *** rejected'],
+            'a word with digits' => ['Login with Passw0rd failed', 'Login with *** failed'],
+            'a bearer token' => ['Bearer abcdefghij rejected', 'Bearer *** rejected'],
+            'Authorization: Bearer' => ['Authorization: Bearer abcdefghij', 'Authorization: ***'],
+            'pw, otp' => ['pw=hunter otp 123 auth: x', 'pw=*** otp *** auth: ***'],
+            'a key word in a longer name' => ['secret_value: topsecret api_token=x', 'secret_value: *** api_token=***'],
+            'a login name' => ['login jane failed', 'login *** failed'],
+            'still not a value' => ['password is incorrect for login failed', 'password is incorrect for login failed'],
         ];
     }
 

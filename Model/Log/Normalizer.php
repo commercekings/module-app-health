@@ -47,10 +47,15 @@ class Normalizer
         'refused' => ['/Connection refused|Unable to connect|could not be established|Connection reset/i',
             'the mail server refused the connection'],
     ];
-    /** A secret's key words: the value after them is masked, whatever its length. */
-    private const SECRET_WORDS = 'password|passwd|passphrase|pass|pwd|secret|token|api[_-]?key|key|pin|cvv2?|cvc2?';
+    /**
+     * A secret's key words, also inside a longer name ("api_token", "secret_value"): the value after them is masked,
+     * whatever its length.
+     */
+    private const SECRET_WORDS = '(?:[a-z0-9]+[_-])*(?:password|passwd|passphrase|pass|pwd|pw|secret|token|api[_-]?key'
+        . '|key|pin|cvv2?|cvc2?|otp|auth|authorization|bearer|credentials?)(?:[_-][a-z0-9]+)*';
     /** A person's key words: the one or two words after them are masked. */
-    private const NAME_WORDS = 'customer|name|firstname|lastname|username|user|recipient|cardholder|buyer|contact';
+    private const NAME_WORDS = 'customer|name|firstname|lastname|username|user|login|recipient|cardholder|buyer'
+        . '|contact';
     /** Words after a key word that are not a value or a name ("invalid password for", "customer id"). */
     private const NOT_VALUES = ['a', 'already', 'an', 'and', 'are', 'at', 'be', 'been', 'by', 'can', 'cannot', 'change',
         'changed', 'confirmation', 'could', 'data', 'did', 'does', 'email', 'empty', 'entity', 'exists', 'expired',
@@ -139,7 +144,8 @@ class Normalizer
             '/"[^"]{0,500}"|\'[^\']{0,500}\'|“[^”]{0,500}”|`[^`]{0,500}`/u',
             '#\b[a-z][a-z0-9+.-]{1,9}://[^\s"\'()]+#i',
             '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/',
-            '/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{12,}\b/',
+            // a word of letters and digits ("Passw0rd", "s3cr3t"), short ones ("e2e", "v2") left
+            '/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{6,}\b/',
             '/[A-Za-z0-9+\/_-]{24,}={0,2}/',
             '/\+?\d[\d ()\/.-]{5,}\d/',
             '/\d{4,}/',
@@ -160,9 +166,10 @@ class Normalizer
     private function keyWords(string $message): string
     {
         $isValue = fn (string $word): bool => !in_array(strtolower(rtrim($word, '.:!?')), self::NOT_VALUES, true);
-        $message = (string)preg_replace_callback('/\b(' . self::SECRET_WORDS . ')\b(\s*[:=]\s*|\s+)'
-            . '("[^"]*"|\'[^\']*\'|[^\s,;()]+)/i', fn (array $m) => preg_match('/[:=]/', $m[2]) || $isValue($m[3])
-                ? $m[1] . $m[2] . '***' : $m[0], $message);
+        // "password is s3cr3t": "is" is no value there; "Authorization: Bearer abc": the scheme and its token
+        $message = (string)preg_replace_callback('/(?<![\w-])(' . self::SECRET_WORDS . ')(?![\w-])'
+            . '(\s*[:=]\s*|\s+(?:is|was)\s+(?=\S)|\s+)((?:(?:bearer|basic)\s+)?(?:"[^"]*"|\'[^\']*\'|[^\s,;()]+))/i',
+            fn (array $m) => preg_match('/[:=]/', $m[2]) || $isValue($m[3]) ? $m[1] . $m[2] . '***' : $m[0], $message);
         return (string)preg_replace_callback('/\b(' . self::NAME_WORDS . ')(\s*[:=]\s*|\s+)(\p{L}[\p{L}\'.-]*)'
             . '(?:(\s+)(\p{L}[\p{L}\'.-]*))?/iu', function (array $m) use ($isValue): string {
                 if (!$isValue($m[3])) {
@@ -198,13 +205,14 @@ class Normalizer
     {
         $words = array_slice(preg_split('/ /', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [], 0, self::LABEL_WORDS);
         $first = (string)strtok(trim($message), ' ');
-        if ($words !== [] && preg_match('/^[a-z][a-z0-9_-]{0,15}:?$/D', $first) && !preg_match('/\d{4}/', $first)
-            && str_contains($words[0], '<n>')) {
+        $named = $words !== [] && preg_match('/^[a-z][a-z0-9_-]{0,15}:?$/D', $first)
+            && !preg_match('/\d{4}/', $first) && str_contains($words[0], '<n>');
+        if ($named) {
             $words[0] = $first;
         }
         foreach ($words as $i => $word) {
-            if ($i === 0 && $word === $first) {
-                continue;
+            if ($i === 0 && $named) {
+                continue; // it names something ("e2e"); any other first word is checked like the rest ("pw=x")
             }
             if (str_contains($word, '<') || ($i > 0 && preg_match('/\p{Lu}/u', $word))
                 || !preg_match('/^[\p{L}\p{P}]+$/u', $word)) {
