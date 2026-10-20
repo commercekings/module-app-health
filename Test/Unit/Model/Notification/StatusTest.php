@@ -75,24 +75,25 @@ class StatusTest extends TestCase
         $this->send($store, gmdate('Y-m-d H:i:s', self::NOW - 3600));
         $this->assertSame(["*Hourly status · Shop*\n\n2 problems: Cron, Email sending\n"
             . "Warnings: Queue (commercekings.notification.send: 120 messages)\n\n"
-            . "New errors this hour: 8\n• NoSuchEntityException (5×, new)\n• Unable to send (3×)"], $this->sent);
+            . "New errors this hour: 5\n• NoSuchEntityException (5×, new)"], $this->sent,
+            'an error seen before only from ERROR_THRESHOLD in the interval: Unable to send (3×) is not news');
     }
 
     public function testOnlyWarnings(): void
     {
         $this->send((new MemoryStore())->seed(['checks' => [0 => ['queues' => ['status' => 'warn']]]]));
-        $this->assertSame(["*Hourly status · Shop*\n\nNo problems\nWarnings: Queue"], $this->sent);
+        $this->assertSame(["*Hourly status · Shop*\n\nWarnings: Queue"], $this->sent);
     }
 
     public function testAtMostFiveErrorsThenCounted(): void
     {
         $errors = [];
         foreach (range(1, 7) as $i) {
-            $errors[] = [self::NOW - 60, 'fp' . $i, 10 - $i, 0];
+            $errors[] = [self::NOW - 60, 'fp' . $i, 20 - $i, 0];
         }
         $this->send((new MemoryStore())->seed([Fingerprints::ERRORS_KEY => $errors]));
-        $this->assertStringEndsWith("• #fp5 (5×)\n• …and 2 more", $this->sent[0], 'the most frequent first');
-        $this->assertStringContainsString('New errors this hour: 42', $this->sent[0]);
+        $this->assertStringEndsWith("• #fp5 (15×)\n• …and 2 more", $this->sent[0], 'the most frequent first');
+        $this->assertStringContainsString('New errors this hour: 112', $this->sent[0]);
     }
 
     public function testSentToTheScopeItWasQueuedFor(): void
@@ -115,15 +116,46 @@ class StatusTest extends TestCase
             'at most 3 hours: what errors:recent keeps');
     }
 
+    public function testOnlyWhatTheLastPostedStatusDidNotSay(): void
+    {
+        $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'fail'],
+            'queues' => ['status' => 'ok']]]]);
+        $this->send($store);
+        $this->assertSame(["*Hourly status · Shop*\n\n1 problem: Cron"], $this->sent);
+        $this->assertSame(['cron'], $store->row(Status::POSTED_KEY)[0]['open']);
+        $this->sent = [];
+        $this->posted = [];
+        $this->send($store);
+        $this->assertSame([false], $this->posted, 'Cron still failing: told already, nothing new - quiet');
+        $store->seed(['checks' => [0 => ['cron' => ['status' => 'fail'], 'queues' => ['status' => 'warn',
+            'detail' => 'growing']]]]);
+        $this->send($store);
+        $this->assertSame([false, true], $this->posted);
+        $this->assertSame("*Hourly status · Shop*\n\nWarnings: Queue (growing)\nStill open: Cron", $this->sent[1],
+            'the new warning, and what is still open');
+        $this->assertSame(['cron', 'queues'], $store->row(Status::POSTED_KEY)[0]['open']);
+    }
+
+    public function testAKnownErrorIsListedAgainFromTheThresholdANewOneAtOnce(): void
+    {
+        $store = (new MemoryStore())->seed([Fingerprints::KEY => ['aaaaaaaa' => ['label' => 'Unable to send'],
+            'bbbbbbbb' => ['label' => 'Slow']],
+            Fingerprints::ERRORS_KEY => [[self::NOW - 60, 'aaaaaaaa', Status::ERROR_THRESHOLD, 0],
+                [self::NOW - 60, 'bbbbbbbb', Status::ERROR_THRESHOLD - 1, 0]]]);
+        $this->send($store);
+        $this->assertStringEndsWith("New errors this hour: 10\n• Unable to send (10×)", $this->sent[0],
+            'Slow (9×, seen before) is in the daily summary, not here');
+    }
+
     public function testAllOkIsPostedOnceADayElseDeliveredQuietly(): void
     {
         $store = (new MemoryStore())->seed(['checks' => [0 => ['cron' => ['status' => 'ok']]]]);
         $this->send($store);
         $this->assertSame([true], $this->posted, 'never posted as all OK: posted');
-        $this->assertSame(['at' => self::NOW, 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0]);
+        $this->assertSame(['at' => self::NOW, 'open' => [], 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0]);
         $this->send($store);
         $this->assertSame([true, false], $this->posted, 'again today: delivered quietly');
-        $this->assertSame(['at' => self::NOW, 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0],
+        $this->assertSame(['at' => self::NOW, 'open' => [], 'ok_at' => self::NOW], $store->row(Status::POSTED_KEY)[0],
             'a quiet one changes nothing');
         $store->seed(['checks' => [0 => ['cron' => ['status' => 'fail']]]]);
         $this->send($store);

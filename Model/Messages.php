@@ -166,32 +166,40 @@ class Messages
     }
 
     /**
-     * The hourly status: "All checks OK", "2 problems: Cron, Indexers" (or "No problems"), "Warnings: Queue (backlog
-     * 120)", then "New errors this hour: N" with a line per error ("• Unable to send (3×, new)") when there were any.
+     * The hourly status: "2 problems: Cron, Indexers", "Warnings: Queue (backlog 120)", "Still open: Caches" (told
+     * before) - else "All checks OK" - then "New errors this hour: N" with a line per error ("• Unable to send (3×,
+     * new)") when there were any.
      *
      * @param string[] $problems the labels of the checks failing
      * @param list<array{0: string, 1: string}> $warnings the label and detail of the checks warning
      * @param list<array{0: string, 1: int, 2: bool}> $errors label, count, first seen since the last status
      * @param list<array{0: string, 1: string}> $idle the label and detail of the checks with nothing to check yet
      * @param string $heading "Hourly status", or "Status now" for the admin's button
+     * @param string[] $known the labels of checks still not OK that a posted status told before
      */
     public function status(Target $target, array $problems, array $warnings, int $errorCount, array $errors,
-        int $moreErrors, array $idle = [], string $heading = 'Hourly status'): string
+        int $moreErrors, array $idle = [], string $heading = 'Hourly status', array $known = []): string
     {
-        $text = '*' . $heading . ' · ' . $this->where($target) . "*\n\n" . match (true) {
-            $problems !== [] => Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems),
-            $warnings !== [] => 'No problems',
-            default => 'All checks OK',
-        };
-        foreach ($idle as [$label, $detail]) {
-            $text .= "\n" . $label . ': ' . CheckResult::clean($detail, 80); // "Server status: not set up (...)"
+        $lines = [];
+        if ($problems !== []) {
+            $lines[] = Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems);
         }
         if ($warnings !== []) {
-            $text .= "\nWarnings: " . implode(', ', array_map(function (array $warning) use ($target): string {
+            $lines[] = 'Warnings: ' . implode(', ', array_map(function (array $warning) use ($target): string {
                 $detail = CheckResult::clean($this->times($target, $warning[1]), 60);
                 return $warning[0] . ($detail !== '' ? ' (' . $detail . ')' : '');
             }, $warnings));
         }
+        if ($known !== []) {
+            $lines[] = 'Still open: ' . implode(', ', $known); // told before: the daily summary has them
+        }
+        foreach ($idle as [$label, $detail]) {
+            $lines[] = $label . ': ' . CheckResult::clean($detail, 80); // "Server status: not set up (...)"
+        }
+        if ($problems === [] && $warnings === [] && $known === []) {
+            array_unshift($lines, 'All checks OK');
+        }
+        $text = '*' . $heading . ' · ' . $this->where($target) . "*\n\n" . implode("\n", $lines);
         if ($errorCount > 0) {
             $text .= "\n\nNew errors this hour: " . Format::number($errorCount);
             foreach ($errors as [$label, $count, $new]) {

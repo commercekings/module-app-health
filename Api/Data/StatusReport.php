@@ -17,6 +17,8 @@ class StatusReport
      * @param string[] $problems the labels of the checks failing
      * @param array<string, string> $warnings label => detail of the checks warning
      * @param list<array{label: string, count: int, new: bool}> $errors the most frequent errors since the last status
+     * @param string[] $known the labels of checks still not OK that a posted status told before (not in $problems
+     *     or $warnings: those are the new ones)
      */
     public function __construct(
         public readonly int $scopeId,
@@ -26,13 +28,20 @@ class StatusReport
         public readonly int $errorCount,
         public readonly array $errors,
         public readonly ?int $lastPostedAt,
-        public readonly ?int $lastOkPostedAt
+        public readonly ?int $lastOkPostedAt,
+        public readonly array $known = []
     ) {
     }
 
-    /** Nothing failing, nothing warning, no new errors. */
+    /** Nothing failing, nothing warning (new or told before), no new errors. */
     public function isAllOk(): bool
     {
-        return $this->problems === [] && $this->warnings === [] && $this->errorCount === 0;
+        return $this->problems === [] && $this->warnings === [] && $this->known === [] && $this->errorCount === 0;
+    }
+
+    /** Something the last posted status did not say: a new problem or warning, or new errors. */
+    public function hasNews(): bool
+    {
+        return $this->problems !== [] || $this->warnings !== [] || $this->errorCount > 0;
     }
 }

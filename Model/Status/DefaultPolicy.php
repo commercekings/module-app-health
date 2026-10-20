@@ -8,9 +8,9 @@ use CommerceKings\AppHealth\Api\StatusPolicyInterface;
 use CommerceKings\AppHealth\Model\Config;
 
 /**
- * The shipped policy: the interval is *Hourly status every* (60 minutes); a status with problems, warnings or new
- * errors is posted, "All checks OK" once a day - the first status at or after the scope's *Daily summary at* time -
- * and every other one is delivered quietly.
+ * The shipped policy: the interval is *Hourly status every* (60 minutes); a status with news is posted - a problem or
+ * warning the last posted status did not have, new errors - and "All checks OK" once a day (the first status at or
+ * after *Daily summary at*); every other one is delivered quietly: what a posted status told is in the daily summary.
  */
 class DefaultPolicy implements StatusPolicyInterface
 {
@@ -26,8 +26,11 @@ class DefaultPolicy implements StatusPolicyInterface
 
     public function shouldPost(StatusReport $report): bool
     {
+        if ($report->hasNews()) {
+            return true; // only what the last posted status did not say: what it said is in the daily summary
+        }
         if (!$report->isAllOk()) {
-            return true;
+            return false;
         }
         $minute = $this->config->getSummaryMinute();
         $slot = $report->now->setTime(intdiv($minute, 60), $minute % 60);

@@ -106,8 +106,8 @@ class StatusNowTest extends TestCase
             $delivery->channel, $delivery->useCooldown, $delivery->stoppable, $delivery->type]);
         $text = ($delivery->content)()->text;
         $this->assertStringStartsWith("*Status now · Shop*\n\n1 problem: Cron\n"
-            . "Server status: not set up (no status file from a server yet)\n"
-            . 'Warnings: Caches (config invalidated for 2 h)', $text);
+            . "Warnings: Caches (config invalidated for 2 h)\n"
+            . 'Server status: not set up (no status file from a server yet)', $text);
         $this->assertStringContainsString("New errors this hour: 3\n• Unable to send order (3×)", $text,
             'the errors since the last hourly status, as it would say them');
         $this->assertSame($rows, $this->store->rows, 'nothing written');

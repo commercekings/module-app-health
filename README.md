@@ -89,7 +89,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
 | ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
 | WARNING log entries | the daily summary | global |
-| The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with problems, warnings or new errors – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
+| The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with news since the last posted one – a new problem or warning, a new error, or a known one 10+ times in the hour (a "Still open: …" line names what it told before) – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
 | *Send status now* (admin) | when you press it: the checks run now and what they find is posted as "Status now" (problems, warnings, what is not set up, the log errors since the last hourly status) – nothing else changes: no alert is marked told, the hourly status keeps its time | global |
 | The daily summary | once a day at *Daily summary at*: a global one (the shared checks, and websites without a channel of their own, named) and one per website channel (its own items, in its time zone) | global, each website channel |
 
@@ -199,7 +199,7 @@ delivery state rows of the types `app_health_*` in `ck_notification_delivery_sta
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
+| Alerts | Enabled (No); Shop domain (stored when first switched on; *Use <domain>* after a move); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 
@@ -209,6 +209,11 @@ All settings are global (default scope); a website gets its own channel through 
 
 - Set the channel and recipient (and *Website channels* where a website has its own), save, then *Send test alert*.
 - Keep `commerceKingsNotificationSend` running – the same consumer as every CommerceKings notification.
+- **Staging and copies stay silent.** App health stores the shop's domain when it is first switched on (*Shop
+  domain*). A copy of the database at another domain – staging, a developer's machine – sends no alert and pings no
+  heartbeat, and the admin says so; after a real move, *Use <domain>* makes the new domain the shop's. To keep a
+  staging site off for good, lock it there: `bin/magento config:set commercekings_app_health/general/enabled 0
+  --lock-env` (written to its `app/etc/env.php`, so a fresh copy of the production database can't switch it on).
 - **Add a heartbeat and outside checks.** Magento can't report its own death: when the server, Docker, PHP, the database
   or cron is down, no check runs. Create a heartbeat check in an uptime service (e.g. Healthchecks.io, Better Stack or
   UptimeRobot) expecting a ping every 5 minutes, connect that service's **Slack integration**, and paste its URL into

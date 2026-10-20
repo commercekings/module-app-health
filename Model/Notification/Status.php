@@ -34,6 +34,8 @@ class Status implements NotificationTypeInterface
     public const CODE = 'app_health_status';
     /** Log errors listed, the most frequent first. */
     public const ERRORS = 5;
+    /** A known error (seen before) is listed again when it comes this often in an interval. */
+    public const ERROR_THRESHOLD = 10;
     public const POSTED_KEY = 'status:posted';
     /** The interval, whatever the policy says. */
     public const MIN_MINUTES = 15;
@@ -67,21 +69,30 @@ class Status implements NotificationTypeInterface
             $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC')
                 : $now - self::intervalMinutes($this->policy, $target->websiteId) * 60;
             $rows = $this->store->load(['checks', Fingerprints::KEY, Fingerprints::ERRORS_KEY, self::POSTED_KEY]);
-            $parts = $this->parts((array)($rows['checks'] ?? []), (array)($rows[Fingerprints::KEY] ?? []),
-                (array)($rows[Fingerprints::ERRORS_KEY] ?? []), $from);
-            ['problems' => $problems, 'warnings' => $warnings, 'errorCount' => $errorCount, 'errors' => $errors]
-                = $parts;
             $posted = (array)($rows[self::POSTED_KEY] ?? []);
             $mine = (array)($posted[$target->websiteId] ?? []);
-            $report = new StatusReport($target->websiteId, $this->localNow($target, $now), $problems,
-                array_column($warnings, 1, 0), $errorCount,
-                array_map(fn ($e) => ['label' => $e[0], 'count' => $e[1], 'new' => $e[2]], $errors),
-                isset($mine['at']) ? (int)$mine['at'] : null, isset($mine['ok_at']) ? (int)$mine['ok_at'] : null);
+            // only what the last posted status did not say: a check not OK then is "still open"; an error new or
+            // frequent (what a posted status told, the daily summary has)
+            $told = array_flip(array_map('strval', (array)($mine['open'] ?? [])));
+            $parts = $this->parts((array)($rows['checks'] ?? []), (array)($rows[Fingerprints::KEY] ?? []),
+                (array)($rows[Fingerprints::ERRORS_KEY] ?? []), $from,
+                fn (int $count, bool $new) => $new || $count >= self::ERROR_THRESHOLD);
+            $open = array_keys($parts['problems'] + array_column($parts['warnings'], 0, 2));
+            $parts['known'] = array_values(array_intersect_key($parts['problems'] + array_column($parts['warnings'], 0,
+                2), $told));
+            $parts['problems'] = array_diff_key($parts['problems'], $told);
+            $parts['warnings'] = array_values(array_filter($parts['warnings'], fn ($w) => !isset($told[$w[2]])));
+            $report = new StatusReport($target->websiteId, $this->localNow($target, $now),
+                array_values($parts['problems']), array_column($parts['warnings'], 1, 0), $parts['errorCount'],
+                array_map(fn ($e) => ['label' => $e[0], 'count' => $e[1], 'new' => $e[2]], $parts['errors']),
+                isset($mine['at']) ? (int)$mine['at'] : null, isset($mine['ok_at']) ? (int)$mine['ok_at'] : null,
+                $parts['known']);
             $post = $this->policy->shouldPost($report);
             $text = $this->text($target, $parts);
-            return [$text, function () use ($post, $report, $posted, $mine, $now, $target): void {
+            return [$text, function () use ($post, $report, $posted, $now, $target, $open, $mine): void {
                 if ($post) {
-                    $posted[$target->websiteId] = ['at' => $now] + ($report->isAllOk() ? ['ok_at' => $now] : $mine);
+                    $posted[$target->websiteId] = ['at' => $now, 'open' => $open]
+                        + ($report->isAllOk() ? ['ok_at' => $now] : array_intersect_key($mine, ['ok_at' => 1]));
                     $this->store->save([self::POSTED_KEY => $posted]);
                 }
             }, $post];
@@ -95,11 +106,13 @@ class Status implements NotificationTypeInterface
      * @param array<int|string, array<string, array<mixed>>> $checks
      * @param array<string, array<mixed>> $fingerprints
      * @param list<array<int, mixed>> $recentErrors
-     * @return array{problems: string[], warnings: list<array{0: string, 1: string}>,
+     * @param (\Closure(int, bool): bool)|null $keepError which errors to list: count since $from, first seen then
+     * @return array{problems: array<string, string>, warnings: list<array{0: string, 1: string, 2: string}>,
      *     idle: list<array{0: string, 1: string}>, errorCount: int, errors: list<array{0: string, 1: int, 2: bool}>,
      *     moreErrors: int}
      */
-    public function parts(array $checks, array $fingerprints, array $recentErrors, int $from): array
+    public function parts(array $checks, array $fingerprints, array $recentErrors, int $from,
+        ?\Closure $keepError = null): array
     {
         $problems = [];
         $warnings = [];
@@ -113,7 +126,7 @@ class Status implements NotificationTypeInterface
                     $problems[(string)$code] = $this->pool->getLabel((string)$code);
                 } elseif ($status === CheckResult::WARN) {
                     $warnings[(string)$code] ??= [$this->pool->getLabel((string)$code),
-                        (string)($check['detail'] ?? '')];
+                        (string)($check['detail'] ?? ''), (string)$code];
                 }
             }
         }
@@ -125,13 +138,16 @@ class Status implements NotificationTypeInterface
                 $byFingerprint[$fp]['new'] = $byFingerprint[$fp]['new'] || (bool)$new;
             }
         }
+        if ($keepError !== null) {
+            $byFingerprint = array_filter($byFingerprint, fn ($e) => $keepError($e['count'], $e['new']));
+        }
         uasort($byFingerprint, fn ($a, $b) => $b['count'] <=> $a['count']);
         $errors = [];
         foreach (array_slice($byFingerprint, 0, self::ERRORS, true) as $fp => $error) {
             $errors[] = [Fingerprints::name((array)($fingerprints[$fp] ?? ['label' => '#' . $fp])), $error['count'],
                 $error['new']];
         }
-        return ['problems' => array_values($problems), 'warnings' => array_values($warnings),
+        return ['problems' => $problems, 'warnings' => array_values($warnings),
             'idle' => array_values($idle), 'errorCount' => array_sum(array_column($byFingerprint, 'count')),
             'errors' => $errors, 'moreErrors' => count($byFingerprint) - count($errors)];
     }
@@ -139,8 +155,9 @@ class Status implements NotificationTypeInterface
     /** @param array<string, mixed> $parts parts() */
     public function text(Target $target, array $parts, string $heading = 'Hourly status'): string
     {
-        return $this->messages->status($target, $parts['problems'], $parts['warnings'], $parts['errorCount'],
-            $parts['errors'], $parts['moreErrors'], $parts['idle'], $heading);
+        return $this->messages->status($target, array_values($parts['problems']), $parts['warnings'],
+            $parts['errorCount'], $parts['errors'], $parts['moreErrors'], $parts['idle'], $heading,
+            (array)($parts['known'] ?? []));
     }
 
     private function localNow(Target $target, int $now): \DateTimeImmutable
