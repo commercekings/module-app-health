@@ -481,6 +481,15 @@ class RunnerTest extends TestCase
         $this->assertSame(['caches', 'email_disabled'], $report['skipped']);
     }
 
+    public function testTheStatusOffForgetsWhenItWasDue(): void
+    {
+        $this->store->seed(['status' => ['due_since' => $this->clock->now - 86400]]);
+        $this->settings = ['general/hourly_status' => '0'];
+        $this->run5();
+        $this->assertSame([], $this->store->row('status') ?? [], 'switched on again later: not "overdue" from'
+            . ' before (no false hold or admin notice)');
+    }
+
     public function testNothingRunsWhileAlertsAreOffAndNoHeartbeatIsSet(): void
     {
         $this->shopWide = false;

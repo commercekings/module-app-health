@@ -188,6 +188,8 @@ class Runner
             }
             // late: due since the grace time and still not out (each run tried it)
             $statusLate = $statusDue && $dueSince <= $now - self::STATUS_GRACE_MINUTES * 60;
+        } elseif (($this->state->get('status')['due_since'] ?? 0) > 0) {
+            $this->state->set('status', []); // off (or nowhere to send): not "overdue" from before when back on
         }
         foreach ($notices as $scope => $byCode) {
             $this->state->set(AlertPlan::NOTICES . $scope,
