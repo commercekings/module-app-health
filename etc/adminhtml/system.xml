@@ -219,6 +219,12 @@
                     <comment>More var/log files in the same format, one per line (e.g. payment.log), at most 5; never debug.log.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
+                <field id="immediate_files" translate="label comment" type="textarea" sortOrder="95" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Errors at once from</label>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFiles</backend_model>
+                    <comment>ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
             </group>
             <group id="sensitive_data" translate="label comment" sortOrder="58" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Sensitive data in logs</label>

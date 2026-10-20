@@ -67,10 +67,12 @@ Cron,Cron
 "Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.","Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable."
 "Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.","Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels."
 "ERROR and above. Default: 20.","ERROR and above. Default: 20."
+"ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none.","ERROR entries of these files are sent at once (like CRITICAL), not in the hourly status. Default: none."
 "Email communications disabled","Email communications disabled"
 "Email sending","Email sending"
 Enabled,Enabled
 "Enter one log file only (e.g. system.log); more files go in *Extra log files*.","Enter one log file only (e.g. system.log); more files go in *Extra log files*."
+"Errors at once from","Errors at once from"
 Exceptions,Exceptions
 "Extra log files","Extra log files"
 "Failed in the last hour, e.g. cart reminders. Default: 3.","Failed in the last hour, e.g. cart reminders. Default: 3."
