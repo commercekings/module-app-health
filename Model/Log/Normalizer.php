@@ -135,7 +135,8 @@ class Normalizer
      * PHP's function prefixes ("stream_socket_client(): ") and repeated *** go first; a longer message keeps its
      * trailing reason ("(Connection refused)") and loses its middle ("…").
      */
-    public function mask(string $message): string
+    /** @param bool $words false: a server's status line - names with digits and numbers stay */
+    public function mask(string $message, bool $words = true): string
     {
         $message = $this->keyWords((string)preg_replace('/\b[a-z_]+\(\): /', '', $message));
         // tokens before numbers: a token's digits masked first would leave the rest of it
@@ -145,11 +146,16 @@ class Normalizer
             '#\b[a-z][a-z0-9+.-]{1,9}://[^\s"\'()]+#i',
             '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/',
             // a word of letters and digits ("Passw0rd", "s3cr3t"), short ones ("e2e", "v2") left
-            '/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{6,}\b/',
+            'words' => '/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{6,}\b/',
             '/[A-Za-z0-9+\/_-]{24,}={0,2}/',
             '/\+?\d[\d ()\/.-]{5,}\d/',
-            '/\d{4,}/',
+            'numbers' => '/\d{4,}/',
         ];
+        if (!$words) {
+            // a server's status, not log text: it names things ("magento2", "kvatex-prod2", "shop2024") and counts
+            // - only what is never a name: secrets after key words, addresses, URLs, quotes, phones, long tokens
+            unset($patterns['words'], $patterns['numbers']);
+        }
         $masked = trim((string)preg_replace('/\s+/u', ' ', (string)preg_replace($patterns, '***', $message)));
         $masked = (string)preg_replace('/\*\*\*(?:[:\/@ ]*\*\*\*)+/', '***', $masked);
         if (mb_strlen($masked) <= self::MESSAGE_LENGTH) {

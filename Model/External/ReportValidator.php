@@ -160,7 +160,7 @@ class ReportValidator
         $label = CheckResult::clean($label, self::LABEL_LENGTH);
         return ['code' => $code, 'label' => $label !== '' ? $label : $code, 'status' => $status,
             'value' => is_int($value) || is_float($value) ? $value : null, 'unit' => $unit,
-            'detail' => CheckResult::clean($this->normalizer->mask($detail), self::DETAIL_LENGTH)]
+            'detail' => CheckResult::clean($this->normalizer->mask($detail, false), self::DETAIL_LENGTH)]
             + ($metrics !== null && $metrics !== [] ? ['metrics' => $metrics] : []);
     }
 

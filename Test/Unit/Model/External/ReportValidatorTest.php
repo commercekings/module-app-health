@@ -107,6 +107,10 @@ class ReportValidatorTest extends TestCase
         foreach (['hunter2', 'Jane', 'Doe', '123', 'x.test'] as $leak) {
             $this->assertStringNotContainsString($leak, $line['detail'], $leak);
         }
+        $names = $this->validator()->validate($this->json([], ['detail' => 'no containers for project magento2 or'
+            . ' kvatex-prod2 or shop2024; check the name']), self::NOW, self::NOW - 900)['checks'][0]['detail'];
+        $this->assertSame('no containers for project magento2 or kvatex-prod2 or shop2024; check the name', $names,
+            'names with digits stay: the script writes names and numbers, not log text');
         foreach (['Backup of jane@example.com', 'say "hi"', "it's", 'a;b', '<b>'] as $label) {
             $this->assertStringContainsString('checks[0].label may only have letters, digits',
                 (string)$this->refusal($this->json([], ['label' => $label])), $label);
