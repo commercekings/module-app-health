@@ -12,7 +12,8 @@ use Magento\Framework\Controller\Result\JsonFactory;
 
 /**
  * POST ckapphealth/domain/accept (form key): "Use <domain>" - this shop, at its current domain, is the one App health
- * reports on (after a move, not on a copy); JSON {success, message}.
+ * reports on (after a move, not on a copy); JSON {success, message}. A domain pinned in app/etc/config.php or env.php
+ * cannot be changed here: the answer says so.
  */
 class Accept extends Action implements HttpPostActionInterface
 {
@@ -35,6 +36,12 @@ class Accept extends Action implements HttpPostActionInterface
                     . ' > Web.')]);
         }
         $this->siteDomain->accept();
+        if ($this->siteDomain->stored() !== $current) {
+            // a value in app/etc/config.php or env.php wins over the database: saving changed nothing
+            return $this->jsonFactory->create()->setData(['success' => false,
+                'message' => (string)__('App health\'s domain is pinned to %1 in app/etc/config.php or env.php'
+                    . ' (commercekings_app_health/general/domain): change it there.', $this->siteDomain->stored())]);
+        }
         return $this->jsonFactory->create()->setData(['success' => true,
             'message' => (string)__('App health now reports on %1. Reload the page.', $current)]);
     }
