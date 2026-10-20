@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model;
 
-use Magento\Framework\HTTP\Client\CurlFactory;
+use Magento\Framework\HTTP\ClientFactory;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -18,7 +18,7 @@ class Heartbeat
 
     public function __construct(
         private readonly Config $config,
-        private readonly CurlFactory $curlFactory,
+        private readonly ClientFactory $clientFactory,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -35,7 +35,7 @@ class Heartbeat
             return false;
         }
         try {
-            $curl = $this->curlFactory->create();
+            $curl = $this->clientFactory->create();
             $curl->setOptions([CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT, CURLOPT_FOLLOWLOCATION => false]);
             $curl->setTimeout(self::TIMEOUT);
             $curl->get($url);

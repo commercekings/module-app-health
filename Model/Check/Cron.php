@@ -15,7 +15,7 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 /**
  * Magento cron from cron_schedule: no other job has run for "stale_minutes" (fail), a job has been running for over
  * "running_minutes" (fail), jobs ended with an error since the last run (warn, job codes and counts), or this check
- * itself did not run for GAP_MINUTES (warn: cron was down and is back). Counts: runs and errors.
+ * itself did not run for GAP_MINUTES up to GAP_MAX_HOURS (warn: cron was down and is back). Counts: runs and errors.
  *
  * Every query filters on the job codes Magento's cron configuration knows, a status and a scheduled_at window, so it
  * uses cron_schedule's (job_code, status, scheduled_at) index. The messages column (error text) is never read.
@@ -26,6 +26,8 @@ class Cron implements CheckInterface
     /** This module's own job: its runs don't prove the rest of cron works. */
     public const OWN_JOB = 'commercekings_app_health_run';
     public const GAP_MINUTES = 15;
+    /** A longer gap is a module that was off (or cron down for days, which the summary and heartbeat show). */
+    public const GAP_MAX_HOURS = 24;
     /** How far back a finished job is looked for after it was scheduled. */
     private const LATE_START_SECONDS = 7200;
 
@@ -53,6 +55,9 @@ class Cron implements CheckInterface
         $now = $this->dateTime->gmtTimestamp();
         $last = (int)($this->state->get('cursor:' . self::CODE)['last'] ?? 0);
         $this->state->set('cursor:' . self::CODE, ['last' => $now]);
+        if ($last > 0 && $now - $last > self::GAP_MAX_HOURS * 3600) {
+            $last = 0; // not run for a long time: start afresh
+        }
         $since = $last > 0 ? $last : $now - 300;
         $jobs = $this->jobCodes();
         if ($jobs === []) {

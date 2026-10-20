@@ -91,6 +91,8 @@ class CronTest extends TestCase
         $result = $this->check([], [], gmdate('Y-m-d H:i:s', self::NOW - 30), self::NOW - 47 * 60);
         $this->assertSame(CheckResult::WARN, $result->status);
         $this->assertSame('this check did not run for 47 min (cron was down)', $result->detail);
+        $off = $this->check([], [], gmdate('Y-m-d H:i:s', self::NOW - 30), self::NOW - 25 * 3600);
+        $this->assertSame(CheckResult::OK, $off->status, 'the module was off for over a day: a fresh start');
     }
 
     public function testOnlyThisModulesJobIsNotActivity(): void

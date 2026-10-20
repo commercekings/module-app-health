@@ -5,8 +5,8 @@ namespace CommerceKings\AppHealth\Test\Unit\Model;
 
 use CommerceKings\AppHealth\Model\Heartbeat;
 use CommerceKings\AppHealth\Test\Unit\Stub\Settings;
-use Magento\Framework\HTTP\Client\Curl;
-use Magento\Framework\HTTP\Client\CurlFactory;
+use Magento\Framework\HTTP\ClientFactory;
+use Magento\Framework\HTTP\ClientInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -22,7 +22,7 @@ class HeartbeatTest extends TestCase
 
     private function heartbeat(string $stored, int|\Throwable $answer = 200): Heartbeat
     {
-        $curl = $this->createStub(Curl::class);
+        $curl = $this->createStub(ClientInterface::class);
         $curl->method('setOptions')->willReturnCallback(function (array $options) {
             $this->options = $options + $this->options;
         });
@@ -36,7 +36,7 @@ class HeartbeatTest extends TestCase
             $this->got = $url;
         });
         $curl->method('getStatus')->willReturn(is_int($answer) ? $answer : 0);
-        $factory = $this->createStub(CurlFactory::class);
+        $factory = $this->createStub(ClientFactory::class);
         $factory->method('create')->willReturn($curl);
         $logger = $this->createStub(LoggerInterface::class);
         $logger->method('warning')->willReturnCallback(function ($message) {
