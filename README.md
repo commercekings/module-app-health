@@ -159,15 +159,49 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
 
 ## Extending
 
-- **A check:** implement `Api\CheckInterface` (shop-wide) or `Api\WebsiteCheckInterface` (per website) and add it to
-  `Model\CheckPool`'s "checks" in your `di.xml`. Return an `Api\Data\CheckResult` – ok, warn or fail, a title, a
-  short detail of names and numbers, optional counts, gauges and notices – and give it a `getHint()`. Its switch is
-  `commercekings_app_health/<code>/enabled` (on when not set).
-- **A log source:** implement `Api\LogSourceInterface` (new data since a cursor) and `Api\LogParserInterface` (data to
-  `Api\Data\LogEntry`), and add both to `Model\Log\LogSourcePool`'s "sources" for the `system_log` or `exceptions`
-  check. App health makes every entry safe itself – fingerprint, label, masking, file:line – whoever parsed it.
+Stable extension points (`@api`); the names are in the `CommerceKings\AppHealth` namespace.
 
-Details and examples: [how it works](docs/how-it-works.md).
+| For | Use |
+|---|---|
+| A check for the whole shop | `Api\CheckInterface` (`getCode()`, `getLabel()`, `getHint()`, `run()`) in `Model\CheckPool` "checks" |
+| A check per website | `Api\WebsiteCheckInterface` (`runForWebsites($websiteIds)`: a result per website id) in the same pool |
+| What a check returns | `Api\Data\CheckResult` – `ok()`, `warn()` or `fail()`, a title, a one-line detail of names and numbers, counts for the daily summary, gauges, notices (one-off news) – and its causes, `Api\Data\Cause` (code, detail, hint) via `withCauses()` |
+| A check's on/off switch | `commercekings_app_health/<code>/enabled` (on when not set; a field in your `system.xml` shows it) |
+| A log source | `Api\LogSourceInterface` (new data since a cursor, as `Api\Data\LogChunk`) and `Api\LogParserInterface` (data to `Api\Data\LogEntry` items) in `Model\Log\LogSourcePool` "sources", for the `system_log` or `exceptions` check; app health makes every entry safe itself (fingerprint, label, masking, file:line) |
+| Sensitive-data rules, no PHP | `etc/app_health_rules.xml` in any module (schema `etc/app_health_rules.xsd`), merged by rule set and rule code: add a set or a rule, override a shipped one, or turn it off (`enabled="false"`) |
+| A validator for rules | `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()`, `isValid($match)`) in `Model\Sensitive\ValidatorPool` "validators"; rules use it as `validator="<code>"` (`type="validator"` for its pattern) |
+| Rules in the admin | *Sensitive data in logs*: *Rule settings* (a set or rule on or off, its severity) and *Custom rules* (regex rules, checked on save) |
+| Where messages go | *Alerts > Channel* (`slack` by default) and *Recipient*, per website: any Notification channel, so any provider module (Notification's `Api\ProviderInterface`) works; sent through Notification's queue as the types `app_health_alert` and `app_health_summary` |
+
+A check, in your module's `etc/di.xml`:
+
+```xml
+<type name="CommerceKings\AppHealth\Model\CheckPool">
+    <arguments>
+        <argument name="checks" xsi:type="array">
+            <item name="erp_sync" xsi:type="object">Vendor\Erp\Model\Health\SyncCheck</item>
+        </argument>
+    </arguments>
+</type>
+```
+
+A rule set, in your module's `etc/app_health_rules.xml` – a set of its own, a shipped rule changed, a shipped set off:
+
+```xml
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:CommerceKings_AppHealth:etc/app_health_rules.xsd">
+    <ruleset code="loyalty" label="Loyalty" severity="critical">
+        <hint>Log the customer id instead of the loyalty card number.</hint>
+        <rule code="loyalty_card" label="loyalty card number">
+            <pattern><![CDATA[/\bLC-\d{8}\b/]]></pattern>
+        </rule>
+    </ruleset>
+    <ruleset code="pci"><rule code="card_cvv" severity="warning"/></ruleset>
+    <ruleset code="personal" enabled="false"/>
+</config>
+```
+
+How to use them – a run, the state, a log source and its parser, the rules: [how it works](docs/how-it-works.md).
 
 ## Sensitive data in logs
 
@@ -192,30 +226,9 @@ What to do: Stop logging it at the source, then rotate or remove the log: card d
 
 Country-specific ID formats and other rules can come as rule-set modules.
 
-- **Add a rule set from a module:** one file, no PHP – `etc/app_health_rules.xml`, merged with ours by code. The same
-  file overrides a shipped rule (by its code) or turns a rule or a set off:
-
-  ```xml
-  <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:noNamespaceSchemaLocation="urn:magento:module:CommerceKings_AppHealth:etc/app_health_rules.xsd">
-      <ruleset code="loyalty" label="Loyalty" severity="critical">
-          <hint>Log the customer id instead of the loyalty card number.</hint>
-          <rule code="loyalty_card" label="loyalty card number">
-              <pattern><![CDATA[/\bLC-\d{8}\b/]]></pattern>
-          </rule>
-      </ruleset>
-      <ruleset code="pci"><rule code="card_cvv" severity="warning"/></ruleset>
-      <ruleset code="personal" enabled="false"/>
-  </config>
-  ```
-
-- **Add a validator** (a check a pattern can't do, like Luhn): a class implementing
-  `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()` for its candidates, `isValid($match)`) and one item
-  in `Model\Sensitive\ValidatorPool`'s "validators"; then `validator="your_code"` (and `type="validator"` to use its
-  pattern) in any rule set.
-- **In the admin** (*Sensitive data in logs*): *Rule settings* turn a set or a rule (`pci`, `pci/card_cvv`) on or off
-  or change its severity; *Custom rules* add regex rules to a shipped set or a new one, checked on save (they compile,
-  at most 300 characters, no nested quantifiers, fast on long lines).
+Add, change or turn off rules from a module (one XML file, no PHP), add a validator, or set them in the admin
+(*Rule settings*, *Custom rules* – a custom rule is checked on save: it compiles, at most 300 characters, no nested
+quantifiers, fast on long lines): see [Extending](#extending).
 
 ## What is masked
 
