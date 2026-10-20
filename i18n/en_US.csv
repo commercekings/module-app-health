@@ -66,6 +66,7 @@ Cron,Cron
 "Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable.","Did a deployment stop halfway? bin/magento maintenance:status, then maintenance:disable."
 "Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.","Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels."
 "ERROR and above. Default: 20.","ERROR and above. Default: 20."
+"Email communications disabled","Email communications disabled"
 "Email sending","Email sending"
 Enabled,Enabled
 "Enter one log file only (e.g. system.log); more files go in *Extra log files*.","Enter one log file only (e.g. system.log); more files go in *Extra log files*."
@@ -89,6 +90,7 @@ Label,Label
 "Log file","Log file"
 "Look at the server named above.","Look at the server named above."
 "Mail counts as working again after (minutes)","Mail counts as working again after (minutes)"
+"Mail delivery errors","Mail delivery errors"
 "Mail transport errors in the logs, and failing CommerceKings notifications.","Mail transport errors in the logs, and failing CommerceKings notifications."
 "Maintenance mode","Maintenance mode"
 "Maintenance mode left on.","Maintenance mode left on."
@@ -163,6 +165,7 @@ Test,Test
 "They were refused when the order was placed: the mail server or provider (see Sending, and var/log/system.log).","They were refused when the order was placed: the mail server or provider (see Sending, and var/log/system.log)."
 "Turn a rule set or a rule off or on, or give it another severity: e.g. ""personal"" 0, or ""pci/card_cvv"" with warning. Codes: README.","Turn a rule set or a rule off or on, or give it another severity: e.g. ""personal"" 0, or ""pci/card_cvv"" with warning. Codes: README."
 "Unsent after (minutes)","Unsent after (minutes)"
+"Unsent sales emails","Unsent sales emails"
 "Use %1","Use %1"
 Website,Website
 "Website channels","Website channels"

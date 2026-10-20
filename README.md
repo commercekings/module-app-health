@@ -66,10 +66,10 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | system.log | a CRITICAL entry never seen before, with its file:line (again after 6 h); ERROR entries in the hourly status; 20 or more errors in 5 min | global |
 | exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | global |
 | Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | global |
-| Sending | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | global |
+| Mail delivery errors | a mail transport error in `system.log` or `exception.log` – failing until a mail is seen going out, or 60 min without a new error; 3 or more CommerceKings notifications failing | global |
 | Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | global |
-| Email sending | *Disable Email Communications* on for any of the website's store views | the website's channel |
-| Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website's channel |
+| Email communications disabled | *Disable Email Communications* on for any of the website's store views | the website's channel |
+| Unsent sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min (cancelled and closed orders left out) | the website's channel |
 | Server status | a line a server reported as `fail` (a container down, a disk 90% full…), `warn` lines as a warning; no report from a server for 15 min. Silent until a server reports ([how](#system-status-from-your-server)) | global |
 
 ### Why it fails
@@ -83,9 +83,9 @@ Each alert says why, as far as Magento's own data shows it, and what to do (`Wha
 | Caches | which type: disabled, or invalidated since when |
 | Maintenance mode | on since when; "likely left on after a deployment" after 30 min |
 | Queues | which queue and its consumer; whether cron starts the consumers (`cron_consumers_runner` in env.php) and when `consumers_runner` last ran |
-| Sending | the kind of mail transport failure – refused, timed out, login refused, TLS, host not found (DNS) – with the port and the latest error (masked); the failing CommerceKings notifications |
-| Email sending | the scope that disables it (default, website, store view, or env.php) |
-| Sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
+| Mail delivery errors | the kind of mail transport failure – refused, timed out, login refused, TLS, host not found (DNS) – with the port and the latest error (masked); the failing CommerceKings notifications |
+| Email communications disabled | the scope that disables it (default, website, store view, or env.php) |
+| Unsent sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
 | Server status | each line not OK: the server, what, its value and the script's detail (masked); "No status from host-1 since 14:02" |
 
 ```

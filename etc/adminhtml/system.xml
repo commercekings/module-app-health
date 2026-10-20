@@ -297,7 +297,7 @@
                 </field>
             </group>
             <group id="email_failing" translate="label comment" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Sending</label>
+                <label>Mail delivery errors</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Mail transport errors in the logs, and failing CommerceKings notifications.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -318,7 +318,7 @@
                 </field>
             </group>
             <group id="email_disabled" translate="label comment" sortOrder="90" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Email sending</label>
+                <label>Email communications disabled</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Disable Email Communications set to Yes for a website's store views. Reported per website; see Website channels.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
@@ -327,7 +327,7 @@
                 </field>
             </group>
             <group id="sales_emails" translate="label comment" sortOrder="100" showInDefault="1" showInWebsite="0" showInStore="0">
-                <label>Sales emails</label>
+                <label>Unsent sales emails</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>
                 <comment>Sales emails not sent in time (the last 24 hours; cancelled and closed orders left out). Reported per website; see Website channels.</comment>
                 <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
