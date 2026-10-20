@@ -29,7 +29,7 @@ class AlertPlanTest extends TestCase
         $changes = AlertPlan::changes($checks, [], self::NOW, self::REPEAT);
         $this->assertSame(['cron' => AlertPlan::PROBLEM], $changes, 'a warning is not sent at once (hourly status)');
         $told = AlertPlan::told($checks, [], $changes, self::NOW);
-        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $told);
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW, 'since' => self::NOW]], $told);
         $this->assertSame([], AlertPlan::changes($checks, $told, self::NOW + self::REPEAT - 1, self::REPEAT),
             'still failing within the interval: nothing');
         $this->assertSame(['cron' => AlertPlan::REPEAT],
@@ -75,6 +75,19 @@ class AlertPlanTest extends TestCase
             1800)));
     }
 
+    public function testTheToldRecordKeepsWhenAProblemBeganAcrossRepeats(): void
+    {
+        $checks = $this->checks(['cron' => 'fail']);
+        $told = AlertPlan::told($checks, [], ['cron' => AlertPlan::PROBLEM], self::NOW - 7200);
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW - 7200, 'since' => self::NOW - 7200]],
+            $told);
+        $told = AlertPlan::told($checks, $told, ['cron' => AlertPlan::REPEAT], self::NOW);
+        $this->assertSame(self::NOW - 7200, $told['cron']['since'], 'a repeat: the same problem');
+        $resolved = AlertPlan::told($this->checks(['cron' => 'ok']), $told, ['cron' => AlertPlan::RECOVERED],
+            self::NOW);
+        $this->assertSame(['cron' => ['status' => 'ok', 'at' => self::NOW]], $resolved);
+    }
+
     public function testAProblemBackSoonAfterItsResolvedWaitsSoItDoesNotFlap(): void
     {
         $resolved = ['external' => ['status' => 'ok', 'at' => self::NOW - 600]];
@@ -113,7 +126,7 @@ class AlertPlanTest extends TestCase
         $checks = $this->checks(['cron' => 'fail', 'caches' => 'fail']);
         $after = AlertPlan::told($checks, $told, ['caches' => AlertPlan::PROBLEM], self::NOW);
         $this->assertSame(['cron' => ['status' => 'fail', 'at' => 100],
-            'caches' => ['status' => 'fail', 'at' => self::NOW]], $after,
+            'caches' => ['status' => 'fail', 'at' => self::NOW, 'since' => self::NOW]], $after,
             'only what the message carried changes; a check no longer run is forgotten');
     }
 }

@@ -82,7 +82,12 @@ class AlertPlan
         $alerted = array_intersect_key($alerted, $checks);
         foreach (array_keys($changes) as $code) {
             $status = (string)($checks[$code]['status'] ?? CheckResult::OK);
-            $alerted[$code] = ['status' => $status, 'at' => $now]; // ok: when it was resolved
+            $was = (array)($alerted[$code] ?? []);
+            // a problem keeps when it began, across repeats and worse or better states (for "Failed for 2 h")
+            $since = ($was['status'] ?? CheckResult::OK) !== CheckResult::OK
+                ? (int)($was['since'] ?? $was['at'] ?? $now) : $now;
+            $alerted[$code] = ['status' => $status, 'at' => $now] // ok: when it was resolved
+                + ($status !== CheckResult::OK ? ['since' => $since] : []);
         }
         return $alerted;
     }

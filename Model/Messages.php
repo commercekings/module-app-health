@@ -51,15 +51,18 @@ class Messages
      *
      * @param array<mixed> $check the check's entry in the "checks" row
      * @param string $change AlertPlan::PROBLEM, REPEAT or RECOVERED
+     * @param int|null $failedSince a recovery: when the problem began (the told record), for "Failed for 2 h"
      */
-    public function alert(Target $target, string $code, array $check, string $change): string
+    public function alert(Target $target, string $code, array $check, string $change, ?int $failedSince = null): string
     {
         $label = $this->pool->getLabel($code);
         $status = (string)($check['status'] ?? CheckResult::OK);
         if ($change === AlertPlan::RECOVERED || $status === CheckResult::OK) {
             $since = (int)($check['since'] ?? 0);
+            $failed = $failedSince !== null && $since > $failedSince
+                ? 'Failed for ' . Format::duration($since - $failedSince) . '; OK' : 'OK';
             return $this->block('*Resolved: ' . $label . ' · ' . $this->where($target) . '*',
-                $since > 0 ? ['OK again since ' . $this->when($target, $since) . '.'] : []);
+                $since > 0 ? [$failed . ' again since ' . $this->when($target, $since) . '.'] : []);
         }
         $title = (string)($check['title'] ?? '') !== '' ? (string)$check['title'] : $label;
         $facts = [];

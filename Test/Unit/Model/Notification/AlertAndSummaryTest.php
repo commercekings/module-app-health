@@ -84,7 +84,8 @@ class AlertAndSummaryTest extends TestCase
         $this->alert(0);
         $this->assertCount(1, $this->sent, 'the indexers\' warning waits for the hourly status');
         $this->assertStringStartsWith('*Problem: Cron stopped · Shop*', $this->sent[0]);
-        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW]], $this->store->row('alerted:0'));
+        $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW, 'since' => self::NOW]],
+            $this->store->row('alerted:0'));
         $this->sent = [];
         $this->alert(0);
         $this->assertSame([], $this->sent, 'told already: nothing to send');

@@ -57,7 +57,10 @@ class Alert implements NotificationTypeInterface
         uksort($changes, fn ($a, $b) => $this->order($checks[$b] ?? [], $changes[$b])
             <=> $this->order($checks[$a] ?? [], $changes[$a]));
         foreach ($changes as $code => $change) {
-            return [$this->messages->alert($target, (string)$code, $checks[$code] ?? [], $change),
+            $began = isset($alerted[$code]['since']) ? (int)$alerted[$code]['since']
+                : (isset($alerted[$code]['at']) ? (int)$alerted[$code]['at'] : null);
+            return [$this->messages->alert($target, (string)$code, $checks[$code] ?? [], $change,
+                $change === AlertPlan::RECOVERED ? $began : null),
                 fn () => $this->store->save([$keys[0] => AlertPlan::told($checks, $alerted,
                     [$code => $change], $now)])];
         }

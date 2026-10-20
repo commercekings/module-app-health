@@ -221,6 +221,13 @@ class MessagesTest extends TestCase
                 ['PCI: payment card number in system.log (1×, {t:' . (self::NOW - 960) . '})']));
     }
 
+    public function testResolvedSaysHowLongItFailed(): void
+    {
+        $this->assertSame("*Resolved: Cron · Main Website Store*\n\nFailed for 2 h; OK again since 09:52.",
+            $this->messages->alert($this->target(), 'cron', ['status' => 'ok', 'since' => self::NOW - 480],
+                AlertPlan::RECOVERED, self::NOW - 480 - 7200));
+    }
+
     public function testTheHeaderNamesTheShopsDomain(): void
     {
         $target = new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC', true, 'shop.example.com');
