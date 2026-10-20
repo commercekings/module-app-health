@@ -47,7 +47,7 @@ class TestAlert
             throw new LocalizedException(__('"%1" is not a recipient the "%2" channel takes.', $target->recipient,
                 $target->channel));
         } catch (\Throwable $e) {
-            throw new LocalizedException(__('Not sent (%1): %2', get_class($e), $e->getMessage()),
+            throw new LocalizedException(__('Not sent: %1', $e->getMessage()),
                 $e instanceof \Exception ? $e : null);
         }
         if ($status !== SenderInterface::SENT) {

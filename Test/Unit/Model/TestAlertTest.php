@@ -69,7 +69,7 @@ class TestAlertTest extends TestCase
             [null, SenderInterface::SENT, 'Set a channel and a recipient'],
             [$target, new \InvalidArgumentException('x'),
                 '"not-a-channel" is not a recipient the "slack" channel takes.'],
-            [$target, new \RuntimeException('channel_not_found'), 'Not sent (RuntimeException): channel_not_found'],
+            [$target, new \RuntimeException('channel_not_found'), 'Not sent: channel_not_found'],
             [$target, SenderInterface::COOLDOWN, 'Not sent: recipient cooldown.'],
         ];
         foreach ($cases as [$caseTarget, $answer, $message]) {

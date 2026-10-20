@@ -220,6 +220,20 @@ class TeamMessageTest extends TestCase
         $this->assertStringContainsString('RuntimeException', implode("\n", $this->logs));
     }
 
+    public function testAProvidersErrorCodeIsLoggedNeverItsHint(): void
+    {
+        try {
+            $this->teamMessage(self::ROW, new \RuntimeException('Slack refused the message (channel_not_found): invite'
+                . ' the bot to C0123456789'))->deliver('app_health_alert', '1', $this->compose());
+            $this->fail('rethrown');
+        } catch (\RuntimeException) {
+        }
+        $log = implode("\n", $this->logs);
+        $this->assertStringContainsString('failed (1 in a row, RuntimeException, channel_not_found)', $log,
+            'what to fix: the code (token_revoked vs channel_not_found)');
+        $this->assertStringNotContainsString('C0123456789', $log, 'never the hint, which may name the recipient');
+    }
+
     public function testAnInvalidRecipientIsASettingNotARejectedMessage(): void
     {
         $this->teamMessage(self::ROW, new \InvalidArgumentException('No valid recipient'))

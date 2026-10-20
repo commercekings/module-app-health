@@ -149,7 +149,7 @@ class TeamMessage
                 return false;
             }
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d failed (%d in a row, %s),'
-                . ' next try in %d minutes', $type, $websiteId, $failed, get_class($e), $wait));
+                . ' next try in %d minutes', $type, $websiteId, $failed, self::reason($e), $wait));
             throw $e;
         }
         if ($status !== SenderInterface::SENT) {
@@ -180,6 +180,17 @@ class TeamMessage
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * What to log of a failure: its class, and a provider's error code when its message names one the agreed way
+     * ("Slack refused the message (channel_not_found): ...") - never the rest of the message, which may name the
+     * recipient.
+     */
+    private static function reason(\Throwable $e): string
+    {
+        $named = preg_match('/^\w+ refused the message \(([a-z][a-z0-9_]{1,40})\)/', $e->getMessage(), $m);
+        return get_class($e) . ($named ? ', ' . $m[1] : '');
     }
 
     /**
