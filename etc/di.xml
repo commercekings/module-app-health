@@ -87,6 +87,14 @@
             <argument name="amqp" xsi:type="object">Magento\Framework\Amqp\ConfigPool\Proxy</argument>
         </arguments>
     </type>
+    <!-- the heartbeat URL is a secret: not in config:dump's app/etc/config.php, not shown by config:show -->
+    <type name="Magento\Config\Model\Config\TypePool">
+        <arguments>
+            <argument name="sensitive" xsi:type="array">
+                <item name="commercekings_app_health/general/heartbeat_url" xsi:type="string">1</item>
+            </argument>
+        </arguments>
+    </type>
     <!-- the alert and the daily summary go through Notification's queue and consumer -->
     <type name="CommerceKings\Notification\Model\TypePool">
         <arguments>

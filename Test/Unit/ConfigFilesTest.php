@@ -37,6 +37,18 @@ class ConfigFilesTest extends TestCase
             'off by default: the broker connection, and alerts until a recipient is set');
     }
 
+    public function testTheHeartbeatUrlIsSensitiveAndALogFileIsOneFile(): void
+    {
+        $this->assertSame(['1'], array_map('strval', $this->xml('di.xml')->xpath('//type[@name="Magento\Config\Model'
+            . '\Config\TypePool"]//argument[@name="sensitive"]/item[@name="commercekings_app_health/general/'
+            . 'heartbeat_url"]')), 'not exported by config:dump, not shown by config:show');
+        $system = $this->xml('adminhtml/system.xml');
+        foreach (['system_log', 'exceptions'] as $group) {
+            $this->assertSame(['CommerceKings\AppHealth\Model\Config\Backend\LogFile'], array_map('strval',
+                $system->xpath('//group[@id="' . $group . '"]/field[@id="file"]/backend_model')), $group);
+        }
+    }
+
     public function testNothingOnTheStorefront(): void
     {
         $root = dirname(__DIR__, 2);

@@ -109,8 +109,7 @@ class TeamMessage
             // it is out, or may be (the provider can't tell): never again - a missed alert beats a duplicate
             $this->logger->warning(sprintf('CommerceKings_AppHealth: %s for scope %d may have been sent (%s);'
                 . ' not sent again', $type, $websiteId, get_class($e->getPrevious() ?? $e)));
-            $sent();
-            $this->markSent($mine);
+            $this->recordSent($sent, $mine);
             return true;
         } catch (TemporaryFailureException $e) {
             $wait = min(self::TEMPORARY_MAX_SECONDS, max(self::TEMPORARY_MIN_SECONDS,
@@ -141,9 +140,28 @@ class TeamMessage
                 $status));
             return false;
         }
-        $sent();
-        $this->markSent($mine);
+        $this->recordSent($sent, $mine);
         return true;
+    }
+
+    /**
+     * What was told (the type's record) and "sent" in one transaction: a crash between them can't leave it told but
+     * not sent - or sent but not told - and post it again.
+     *
+     * @param array<int|string, mixed> $mine
+     */
+    private function recordSent(\Closure $sent, array $mine): void
+    {
+        $db = $this->resource->getConnection();
+        $db->beginTransaction();
+        try {
+            $sent();
+            $this->markSent($mine);
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
     }
 
     /** @param array<int|string, mixed> $mine */

@@ -159,7 +159,7 @@
                 </field>
                 <field id="file" translate="label comment" type="text" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Log file</label>
-                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFiles</backend_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFile</backend_model>
                     <comment>A file in var/log. Default: system.log.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>
@@ -221,7 +221,7 @@
                 </field>
                 <field id="file" translate="label comment" type="text" sortOrder="80" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Log file</label>
-                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFiles</backend_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\LogFile</backend_model>
                     <comment>A file in var/log. Default: exception.log.</comment>
                     <depends><field id="enabled">1</field></depends>
                 </field>

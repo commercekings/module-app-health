@@ -42,7 +42,10 @@ class QueuesTest extends TestCase
     private function check(array $database, ?array $broker = null, bool $tables = true, array $runner = [],
         ?string $lastRunner = null): CheckResult
     {
-        $db = $this->db(['fetchPairs' => [$database], 'fetchOne' => [$lastRunner]]);
+        // the database queues (id => name), then the waiting messages per queue id
+        $ids = $database === [] ? [] : array_combine(range(1, count($database)), array_keys($database));
+        $db = $this->db(['fetchPairs' => [$ids, array_combine(array_keys($ids), array_values($database)) ?: []],
+            'fetchOne' => [$lastRunner]]);
         $db->method('isTableExists')->willReturn($tables);
         $queues = [];
         foreach (array_keys($broker ?? []) as $name) {
@@ -86,7 +89,17 @@ class QueuesTest extends TestCase
         $this->assertSame('over 200 messages', substr($this->check(['q' => 200])->detail, 3), 'counted up to the cap');
         $this->assertContains('status IN (?)', $this->wheres(), 'on the (status, updated_at) index');
         $limits = array_filter($this->calls, fn ($call) => $call[0] === 'limit');
-        $this->assertSame(200, array_values($limits)[0][1], 'capped at twice the limit');
+        $this->assertSame([200], array_values(array_unique(array_column($limits, 1))), 'capped at twice the limit');
+    }
+
+    public function testTheCapIsPerQueueSoABigQueueHidesNoOther(): void
+    {
+        $this->calls = [];
+        $result = $this->check(['big' => 200, 'commercekings.notification.send' => 150]);
+        $this->assertSame('big: over 200 messages; commercekings.notification.send: 150 messages', $result->detail);
+        $this->assertCount(2, array_filter($this->calls, fn ($call) => $call[0] === 'limit'), 'one cap per queue');
+        $this->assertContains('queue_id = ?', array_map(fn ($c) => $c[1] ?? null, array_filter($this->calls,
+            fn ($c) => $c[0] === 'where')));
     }
 
     public function testAQueueGrowingForTheWindowWarns(): void

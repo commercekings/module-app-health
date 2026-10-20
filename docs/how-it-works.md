@@ -62,7 +62,7 @@ counts, checks that had problems and checks ok all day. It is sent from its time
 | `maintenance` | `var/.maintenance.flag` | a file check |
 | `system_log` | new bytes of `var/log/system.log` (and the extra files, and other modules' sources) | *Read at most* (1 MB) per source; only WARNING and above are parsed |
 | `exceptions` | new bytes of `var/log/exception.log` after the stored offset | *Read at most* (1 MB); a larger backlog is skipped, the count marked "at least"; rotation starts the new file from its beginning |
-| `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | the `(status, updated_at)` index, at most twice the limit; no message is read or consumed |
+| `queues` | MySQL queue: new and retry messages per queue; RabbitMQ: a passive declare per queue | one statement with a part per queue, each at most twice the limit (a big queue hides no other); no message is read or consumed |
 | `email_failing` | mail transport classes among the new exception entries; failing CommerceKings notifications | the delivery state's `updated_at` index, the last hour, at most 100 rows |
 | `email_disabled` | `system/smtp/disable` per store view | configuration only |
 | `sales_emails` | orders, invoices, shipments, credit memos with `send_email = 1` and no `email_sent` | each table's `created_at` index: the last 24 hours, older than *Unsent after*, at most 100 rows each, in one query |

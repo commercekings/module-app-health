@@ -19,8 +19,9 @@ use Psr\Log\LoggerInterface;
  * The results go to the "checks" row by scope and code (with the time since the status last changed and the run
  * time), their worst status and counts to the hour's tally, their notices to "notices:<scope>". Then each scope with
  * news (AlertPlan: a change, or a notice not told yet) gets one queued alert - the shop-wide checks' to the default
- * scope's recipient, a website's own to the website's - and a complete
- * run pings the heartbeat. Nothing runs while alerts are off everywhere and no heartbeat is set.
+ * scope's recipient, a website's own to the website's - and a finished run pings the heartbeat, also when a check
+ * threw or the budget left one out ("degraded" in the report): cron runs and the run got to its end. Nothing runs
+ * while alerts are off everywhere and no heartbeat is set.
  */
 class Runner
 {
@@ -42,12 +43,14 @@ class Runner
 
     /**
      * @return array{ran: array<string, array{status: string, ms: float}>, skipped: string[], queued: int[],
-     *     complete: bool, ms: float} what the run did (queued: the scopes alerted, 0 = shop-wide)
+     *     complete: bool, degraded: bool, ms: float} what the run did (queued: the scopes alerted, 0 = shop-wide;
+     *     complete: every check ran; degraded: one threw or was left out)
      */
     public function run(): array
     {
         $started = microtime(true);
-        $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'ms' => 0.0];
+        $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'degraded' => false,
+            'ms' => 0.0];
         $targets = $this->targets->websites();
         $shopWide = $this->targets->shopWide();
         if ($shopWide !== null) {
@@ -128,7 +131,8 @@ class Runner
             $this->store->deleteOldTallies($now); // once an hour
         }
         $this->queueAlerts($targets, $checks, $now, $report);
-        if ($report['complete'] && $this->heartbeat->isConfigured()) {
+        $report['degraded'] = !$report['complete'];
+        if (empty($report['queue_failed']) && $this->heartbeat->isConfigured()) {
             $this->heartbeat->ping();
         }
         $report['ms'] = round((microtime(true) - $started) * 1000, 1);
@@ -157,7 +161,7 @@ class Runner
             } catch (\Throwable $e) {
                 $this->logger->error(sprintf('CommerceKings_AppHealth: alert for %s not queued (%s)',
                     $scope ? 'website ' . $scope : 'the shop', get_class($e)));
-                $report['complete'] = false;
+                $report['queue_failed'] = true; // alerts can't go out: no heartbeat
             }
         }
     }

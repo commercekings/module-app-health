@@ -75,6 +75,7 @@ class TeamMessageTest extends TestCase
     {
         return fn (Target $target, array $row) => ['FAIL Cron for ' . $target->name, function () {
             $this->recorded++;
+            $this->transactions[] = ['recorded', count($this->updates)];
         }];
     }
 
@@ -127,6 +128,8 @@ class TeamMessageTest extends TestCase
         $this->assertSame(['sent_at' => 'NOW()', 'queued_at' => null, 'failed_sends' => 0, 'skip_until' => null],
             $sent);
         $this->assertSame(5, $this->updates[1][2]['delivery_version = ?']);
+        $this->assertSame([['beginTransaction', 1], ['recorded', 1], ['commit', 2]], $this->transactions,
+            'what was told and "sent" in one transaction: no second post after a crash between them');
     }
 
     public function testAClaimLostToAnotherWorkerSendsNothing(): void

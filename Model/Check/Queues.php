@@ -21,7 +21,7 @@ use Psr\Log\LoggerInterface;
 /**
  * Message queue backlogs, counts only - nothing is consumed or read: "max_messages" or more waiting in a queue (fail),
  * or a queue that kept growing for "growing_minutes" (warn). Magento's database queue: new and retry messages per
- * queue, counted from queue_message_status's (status, updated_at) index and capped at twice the limit. RabbitMQ: a
+ * queue, counted from queue_message_status and capped at twice the limit per queue. RabbitMQ: a
  * passive declare per queue of the topology on an AMQP connection (the broker's message count). Off by default: it
  * opens a broker connection on every run.
  */
@@ -162,7 +162,12 @@ class Queues implements CheckInterface
         return (int)$window[count($window) - 1][1] > (int)$window[0][1];
     }
 
-    /** @return array<string, int> waiting messages by queue name in Magento's database queue, up to $cap in all */
+    /**
+     * Waiting messages by queue name in Magento's database queue, up to $cap per queue (a big queue hides no other):
+     * one statement, a capped part per queue.
+     *
+     * @return array<string, int>
+     */
     private function databaseSizes(int $cap): array
     {
         $db = $this->resource->getConnection();
@@ -170,13 +175,26 @@ class Queues implements CheckInterface
         if (!$this->hasDatabaseQueue($status)) {
             return [];
         }
-        $waiting = $db->select()->from($status, ['queue_id'])->where('status IN (?)', self::WAITING)->limit($cap);
-        $rows = $db->fetchPairs($db->select()
-            ->from(['w' => $waiting], [])
-            ->join(['q' => $this->resource->getTableName('queue')], 'q.id = w.queue_id',
-                ['name' => 'q.name', 'count' => new Expression('COUNT(*)')])
-            ->group('q.name'));
-        return array_map('intval', $rows);
+        $names = $db->fetchPairs($db->select()->from($this->resource->getTableName('queue'), ['id', 'name']));
+        if ($names === []) {
+            return [];
+        }
+        $parts = [];
+        foreach (array_keys($names) as $id) {
+            $parts[] = $db->select()->from($status, ['queue_id'])->where('queue_id = ?', (int)$id)
+                ->where('status IN (?)', self::WAITING)->limit($cap);
+        }
+        $counts = $db->fetchPairs($db->select()
+            ->from(['w' => $db->select()->union($parts, \Magento\Framework\DB\Select::SQL_UNION_ALL)],
+                ['queue_id', 'count' => new Expression('COUNT(*)')])
+            ->group('queue_id'));
+        $sizes = [];
+        foreach ($counts as $id => $count) {
+            if (isset($names[$id])) {
+                $sizes[(string)$names[$id]] = (int)$count;
+            }
+        }
+        return $sizes;
     }
 
     /** Whether Magento_MysqlMq's tables exist, checked once a day. */

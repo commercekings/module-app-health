@@ -20,6 +20,9 @@ trait Db
     /** @var array<int, array{0: mixed, 1: array<mixed>, 2: array<mixed>}> table, data, where of each update() */
     private array $updates = [];
 
+    /** @var array<int, array{0: string, 1: int}> each transaction call and how many updates came before it */
+    private array $transactions = [];
+
     /** @param array<string, array<int, mixed>> $results fetch method => its answers in order */
     private function db(array $results = []): AdapterInterface&Stub
     {
@@ -43,6 +46,12 @@ trait Db
             $this->updates[] = [$table, $data, $where];
             return $updateAnswers === [] ? 1 : array_shift($updateAnswers);
         });
+        foreach (['beginTransaction', 'commit', 'rollBack'] as $method) {
+            $db->method($method)->willReturnCallback(function () use ($method, $db) {
+                $this->transactions[] = [$method, count($this->updates)];
+                return $db;
+            });
+        }
         foreach ($results as $method => $answers) {
             $db->method($method)->willReturnOnConsecutiveCalls(...$answers);
         }

@@ -113,6 +113,21 @@ class LogSourcePoolTest extends TestCase
         $this->assertSame([], $pool->forCheck('exceptions'));
     }
 
+    public function testALogFileFieldTakesOneFile(): void
+    {
+        $backend = (new \ReflectionClass(\CommerceKings\AppHealth\Model\Config\Backend\LogFile::class))
+            ->newInstanceWithoutConstructor();
+        foreach (['a.log, b.log', "a.log\nb.log", 'a.log b.log', '../x.log'] as $bad) {
+            $backend->setValue($bad);
+            try {
+                $backend->beforeSave();
+                $this->fail('saved ' . $bad);
+            } catch (LocalizedException $e) {
+                $this->assertMatchesRegularExpression('/one log file|is not a log file name/', $e->getMessage());
+            }
+        }
+    }
+
     public function testTheAdminCannotSaveAPath(): void
     {
         $backend = (new \ReflectionClass(LogFiles::class))->newInstanceWithoutConstructor();

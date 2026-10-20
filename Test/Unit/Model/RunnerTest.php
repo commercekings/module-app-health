@@ -35,6 +35,7 @@ class RunnerTest extends TestCase
     /** @var int[] */
     private array $websites = [1];
     private bool $heartbeat = false;
+    private bool $queueThrows = false;
     /** @var array<string, mixed> */
     private array $settings = [];
 
@@ -54,6 +55,9 @@ class RunnerTest extends TestCase
         $teamMessage = $this->createStub(TeamMessage::class);
         $teamMessage->method('queue')->willReturnCallback(function ($type, $scope) {
             $this->assertSame('app_health_alert', $type);
+            if ($this->queueThrows) {
+                throw new \RuntimeException('queue down');
+            }
             $this->queued[] = $scope;
             return true;
         });
@@ -181,21 +185,32 @@ class RunnerTest extends TestCase
         $this->assertArrayNotHasKey('caches', $this->store->row('checks')[0]);
     }
 
-    public function testAThrowingCheckWarnsLogsItsClassOnlyAndSkipsTheHeartbeat(): void
+    public function testAThrowingCheckWarnsLogsItsClassOnlyAndTheRunStillPings(): void
     {
         $this->heartbeat = true;
         $this->results['cron'] = new \RuntimeException(
             'SQLSTATE: SELECT * FROM customer WHERE email = jane@example.com'
         );
         $report = $this->run5();
-        $this->assertFalse($report['complete']);
-        $this->assertSame(0, $this->pings);
+        $this->assertSame([false, true], [$report['complete'], $report['degraded']]);
+        $this->assertSame(1, $this->pings, 'the run finished: cron works, a check is degraded');
         $this->assertSame('warn', $this->store->row('checks')[0]['cron']['status']);
         $this->assertStringNotContainsString('jane', implode("\n", $this->logs) . json_encode($this->store->rows));
         $this->assertStringContainsString('RuntimeException', implode("\n", $this->logs));
         $this->results['cron'] = CheckResult::ok();
+        $this->assertFalse($this->run5()['degraded']);
+        $this->assertSame(2, $this->pings);
+    }
+
+    public function testNoHeartbeatWhenAnAlertCannotBeQueued(): void
+    {
+        $this->heartbeat = true;
+        $this->queueThrows = true;
+        $this->results['cron'] = CheckResult::fail('x');
         $this->run5();
-        $this->assertSame(1, $this->pings, 'a complete run pings');
+        $this->assertSame(0, $this->pings, 'alerts can\'t go out: the outside service should alert');
+        $this->assertStringContainsString('alert for the shop not queued (RuntimeException)',
+            implode("\n", $this->logs));
     }
 
     public function testAWebsiteCheckMissingAWebsitesResultWarnsForIt(): void
@@ -219,8 +234,8 @@ class RunnerTest extends TestCase
         $this->results['caches'] = CheckResult::ok();
         $report = $this->run5();
         $this->assertSame(['caches', 'email_disabled'], $report['skipped']);
-        $this->assertFalse($report['complete']);
-        $this->assertSame(1, $this->pings, 'only the first, complete run pinged');
+        $this->assertSame([false, true], [$report['complete'], $report['degraded']]);
+        $this->assertSame(2, $this->pings, 'a run cut by the budget finished too');
         $this->assertSame(1, $this->runs['caches']);
         $this->assertSame('fail', $this->store->row('checks')[0]['caches']['status'], 'the last result stays');
         $this->assertSame('ok', $this->store->row('checks')[1]['email_disabled']['status']);
