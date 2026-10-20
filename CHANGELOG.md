@@ -27,17 +27,21 @@ First release. Requires Magento 2.4.4 or later (`magento/framework ^103.0.4`) an
   or unhealthy fails, memory over 85 % or CPU over 90 % warns; *Send status now* and the daily summary show a table per
   server. Ready setups in `docs/examples`: systemd (a host), Docker Compose and Warden (a sidecar in a pre-built,
   pinned image behind HAProxy that passes only the container list and stats - not a container's environment, files or
-  logs; restart counts only on a host).
+  logs; restart counts only on a host). Docker that cannot be read, a project without containers or a listed container
+  that is missing is a failure of its own, never an empty, healthy-looking report.
 - **Daily summary** per website at its time: counts of the last 24 hours, what had problems, what was ok all day.
 - **Sending** through Notification's queue and consumer as service messages (no cooldown, stop list or quiet hours),
-  once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; any
-  Notification channel works.
+  once per period through its delivery state, retried until the channel takes it. Channel "slack" by default; another
+  Notification channel that sends text (not email or WhatsApp, which send templates) gets plain text, or its module's
+  format (`Api\TeamMessageRendererInterface` in `Model\Message\RendererPool`).
+- **Staging and copies stay silent:** the shop's domain is stored when App health is first switched on (or by its
+  first run); a copy at another domain sends nothing and pings no heartbeat, and the admin says so, with *Use
+  <domain>* after a real move.
 - **Heartbeat:** an encrypted URL pinged after every run while the hourly status goes out (not when it has been due
   for 10 minutes and is not delivered).
 - **Admin:** *Stores > Configuration > CommerceKings > App health*, with *Send test alert* and *Send status now* (the
   checks run now, the result posted to the global recipient; nothing else changes).
 - **Stable extension points (`@api`):** `Api\CheckInterface` (one interface: `run($websiteIds)` returns results by
   scope), `Api\Data\CheckResult` (hints on its causes, `withHint()` for a general one) and the pools' di.xml arguments
-  ("checks", "sources", "validators"), where the item name is the code.
-
-No public release has been tagged or published yet.
+  ("checks", "sources", "validators", "renderers"), where the item name is the code; `Api\Data\TeamMessageContent`
+  (what a message says, before a channel's renderer makes it text).

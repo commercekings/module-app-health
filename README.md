@@ -201,7 +201,8 @@ rule found. The sensitive-data rules and what is masked: [Sensitive data and mas
 
 ## Tested (as of 0.1.0)
 
-- **Automated tests:** 208 unit tests (on every push); integration tests that run the generated SQL on MySQL/MariaDB
+- **Automated tests:** over 300 unit tests (on every push; among them the server-status script against a scripted
+  Docker, checked by the status file's validator); integration tests that run the generated SQL on MySQL/MariaDB
   (`Test/Integration`, on copies of the tables); PHPStan level 5 and the Magento2 coding standard.
 - **End to end on Magento 2.4.9:** cron, indexers, caches, maintenance, email, exceptions, queues and sales emails
   triggered for real against a simulated Slack API – one alert, then one "recovered", the daily summary, the test
