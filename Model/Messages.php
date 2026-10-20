@@ -428,10 +428,10 @@ class Messages
         return [$worst, $counts];
     }
 
-    /** The shop's name (the global messages) or the website's (a website's own). */
+    /** The shop's name (the global messages) or the website's (a website's own), and its domain: which shop it is. */
     private function where(Target $target): string
     {
-        return $target->name;
+        return $target->name . ($target->domain !== '' ? ' · ' . $target->domain : '');
     }
 
     /** A check's label; "code@<website>" (a website's check in the global summary): "Email sending (EU Store)". */

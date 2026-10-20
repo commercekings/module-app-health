@@ -37,6 +37,7 @@ class RunnerTest extends TestCase
     private array $websites = [1];
     private bool $heartbeat = false;
     private bool $queueThrows = false;
+    private ?\CommerceKings\AppHealth\Model\SiteDomain $siteDomain = null;
     /** The hourly status's sent_at (UTC), null: never sent; queued: its queue() calls and their conditions. */
     private ?string $statusSentAt = 'recent';
     /** @var string[] */
@@ -95,7 +96,7 @@ class RunnerTest extends TestCase
         return new Runner($this->pool(['cron' => 'Cron', 'caches' => 'Caches'], ['email_disabled' => 'Email']),
             $this->config($this->settings), new RunState($this->store), $this->store, $targets, $teamMessage,
             $heartbeat, $this->clock, $logger, $deliveryState, $this->policy ?? new DefaultPolicy($this->config(
-                $this->settings)), 0.05);
+                $this->settings)), 0.05, $this->siteDomain);
     }
 
     /** @return array<string, mixed> */
@@ -222,6 +223,21 @@ class RunnerTest extends TestCase
         $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => $this->clock->now]]]);
         $this->settings = ['general/shared_to_websites' => '1'];
         $this->assertSame([1], $this->run5()['queued'], 'on: website 1, a channel of its own, gets it too');
+    }
+
+    public function testACopyOfTheShopRunsNothingAndPingsNothing(): void
+    {
+        $copy = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
+        $copy->method('matches')->willReturn(false);
+        $copy->method('stored')->willReturn('shop.example.com');
+        $copy->method('current')->willReturn('staging.example.com');
+        $this->siteDomain = $copy;
+        $this->heartbeat = true;
+        $this->results['cron'] = CheckResult::fail('no job has run');
+        $report = $this->run5();
+        $this->assertSame(['copy of shop.example.com', [], [], 0], [$report['silent'], $report['queued'],
+            $this->statusQueued, $this->pings], 'no alert, no status, no ping of production\'s heartbeat');
+        $this->assertNull($this->store->row('checks'), 'not even the checks');
     }
 
     public function testTheTimeSinceTheStatusChangedIsKept(): void

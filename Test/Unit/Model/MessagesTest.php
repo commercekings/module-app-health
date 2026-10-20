@@ -221,6 +221,15 @@ class MessagesTest extends TestCase
                 ['PCI: payment card number in system.log (1×, {t:' . (self::NOW - 960) . '})']));
     }
 
+    public function testTheHeaderNamesTheShopsDomain(): void
+    {
+        $target = new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC', true, 'shop.example.com');
+        $this->assertStringStartsWith('*Problem: Cron · Main Website Store · shop.example.com*',
+            $this->messages->alert($target, 'cron', ['status' => 'fail'], AlertPlan::PROBLEM));
+        $this->assertStringStartsWith('*Hourly status · Main Website Store · shop.example.com*',
+            $this->messages->status($target, [], [], 0, [], 0));
+    }
+
     public function testAServersNewProblemIsAProblemNotAnError(): void
     {
         $this->assertStringStartsWith('*New problem in Server status · Main Website Store*',
@@ -281,7 +290,8 @@ class MessagesTest extends TestCase
             . "*Containers · web-2*\n```\n"
             . "NAME    CPU  MEM  MEM%  RESTARTS\n"
             . "nginx  0.5%  24M     -         3\n```",
-            $this->messages->containers($servers, self::NOW, 900), 'by server; no limit: no %; a stale server left out');
+            $this->messages->containers($servers, self::NOW, 900),
+            'by server; no limit: no %; a stale server left out');
         $many = ['big' => ['generated_at' => self::NOW, 'checks' => array_map(fn ($i) => $line('c' . $i,
             ['cpu_percent' => 1.0]), range(1, Messages::CONTAINERS + 4))]];
         $text = $this->messages->containers($many, self::NOW, 900);

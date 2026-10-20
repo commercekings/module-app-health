@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CommerceKings\AppHealth\Model\Notification;
 
+use CommerceKings\AppHealth\Model\SiteDomain;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
 use CommerceKings\Notification\Api\Data\Delivery;
@@ -42,7 +43,8 @@ class TeamMessage
         private readonly QueueInterface $queue,
         private readonly SenderInterface $sender,
         private readonly Targets $targets,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly ?SiteDomain $siteDomain = null
     ) {
     }
 
@@ -84,6 +86,13 @@ class TeamMessage
     {
         $websiteId = ctype_digit($reference) ? (int)$reference : 0;
         $row = $this->deliveryState->load($type, $websiteId);
+        if ($this->siteDomain !== null && !$this->siteDomain->matches()) {
+            // a copy's queue can hold the original's messages (a database copy): dropped, never sent from here
+            $this->release($type, $websiteId, $row['queued_at'] ?? null);
+            $this->logger->info(sprintf('CommerceKings_AppHealth: %s for scope %d dropped: this looks like a copy'
+                . ' of %s', $type, $websiteId, $this->siteDomain->stored()));
+            return false;
+        }
         $queuedAt = $row['queued_at'] ?? null;
         $target = $row !== null ? $this->targets->forWebsite($websiteId) : null;
         $composed = $target !== null ? $compose($target, $row) : null;

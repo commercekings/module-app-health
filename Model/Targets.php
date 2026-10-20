@@ -5,6 +5,7 @@ namespace CommerceKings\AppHealth\Model;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\UrlInterface;
 use Magento\Framework\Stdlib\DateTime\TimezoneInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\Store;
@@ -84,8 +85,10 @@ class Targets
             return null;
         }
         $storeId = (int)$store->getId();
+        $url = $store instanceof Store ? (string)$store->getBaseUrl(UrlInterface::URL_TYPE_WEB, true) : '';
         return new Target($websiteId, $storeId, $channel, $recipient, $this->storeName($store),
-            (string)$this->timezone->getConfigTimezone(ScopeInterface::SCOPE_STORE, (string)$storeId), $ownChannel);
+            (string)$this->timezone->getConfigTimezone(ScopeInterface::SCOPE_STORE, (string)$storeId), $ownChannel,
+            strtolower((string)parse_url($url, PHP_URL_HOST)));
     }
 
     /**

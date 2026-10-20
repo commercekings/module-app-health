@@ -23,7 +23,8 @@ class TestAlertTest extends TestCase
     /** @var Delivery[] */
     private array $sent = [];
 
-    private function testAlert(?Target $target, \Throwable|string $answer = SenderInterface::SENT): TestAlert
+    private function testAlert(?Target $target, \Throwable|string $answer = SenderInterface::SENT,
+        ?\CommerceKings\AppHealth\Model\SiteDomain $domain = null): TestAlert
     {
         $targets = $this->createStub(Targets::class);
         $targets->method('global')->willReturn($target);
@@ -35,7 +36,21 @@ class TestAlertTest extends TestCase
             }
             return $answer;
         });
-        return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender);
+        return new TestAlert($targets, new Messages($this->pool([]), new Clock(self::MESSAGES_NOW)), $sender, $domain);
+    }
+
+    public function testACopyOfTheShopSendsNoTestAlert(): void
+    {
+        $copy = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
+        $copy->method('matches')->willReturn(false);
+        $copy->method('stored')->willReturn('shop.example.com');
+        $copy->method('current')->willReturn('staging.example.com');
+        try {
+            $this->testAlert(new Target(0, 1, 'slack', 'C0123', 'Shop', 'UTC'), SenderInterface::SENT, $copy)->send();
+            $this->fail('sent from a copy');
+        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+            $this->assertStringContainsString('a copy of shop.example.com (now staging.example.com)', $e->getMessage());
+        }
     }
 
     public function testSentAtOnceAsAServiceMessage(): void

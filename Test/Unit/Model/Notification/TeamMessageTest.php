@@ -39,7 +39,8 @@ class TeamMessageTest extends TestCase
      * @param int[] $updates what update() answers, in order
      */
     private function teamMessage(?array $row, \Throwable|string $send = SenderInterface::SENT, ?Target $target = null,
-        array $updates = [], ?\Throwable $publish = null): TeamMessage
+        array $updates = [], ?\Throwable $publish = null,
+        ?\CommerceKings\AppHealth\Model\SiteDomain $domain = null): TeamMessage
     {
         $state = $this->createStub(DeliveryStateInterface::class);
         $state->method('getTableName')->willReturn('ck_notification_delivery_state');
@@ -72,7 +73,7 @@ class TeamMessageTest extends TestCase
             });
         }
         return new TeamMessage($this->resource($this->db(['update' => $updates])), $state, $queue, $sender, $targets,
-            $logger);
+            $logger, $domain);
     }
 
     private function compose(): \Closure
@@ -103,6 +104,20 @@ class TeamMessageTest extends TestCase
         $this->assertSame('NOW()', $sent['sent_at'], 'sent_at: the heartbeat\'s proof');
         $this->assertStringContainsString('info: CommerceKings_AppHealth: app_health_status for scope 0 delivered'
             . ' quietly', implode("\n", $this->logs));
+    }
+
+    public function testACopyDropsWhatItsQueueHolds(): void
+    {
+        $copy = $this->createStub(\CommerceKings\AppHealth\Model\SiteDomain::class);
+        $copy->method('matches')->willReturn(false);
+        $copy->method('stored')->willReturn('shop.example.com');
+        $copy->method('current')->willReturn('staging.example.com');
+        $this->assertFalse($this->teamMessage(self::ROW, SenderInterface::SENT, null, [], null, $copy)
+            ->deliver('app_health_alert', '1', $this->compose()));
+        $this->assertSame([[], 0], [$this->sent, $this->recorded], 'nothing sent from a copy, nothing recorded');
+        $this->assertSame([['queued_at' => null]], $this->updateData(), 'its mark cleared');
+        $this->assertStringContainsString('dropped: this looks like a copy of shop.example.com',
+            implode("\n", $this->logs));
     }
 
     public function testQueueMarksFreeStateInOneStatementThenPublishes(): void

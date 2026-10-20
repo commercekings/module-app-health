@@ -26,6 +26,9 @@ use Psr\Log\LoggerInterface;
  * every*, the hourly status to the global recipient. Each run reads the status's delivery state (one query); while it
  * is due, every run queues it (queue() skips one queued or waiting to retry).
  *
+ * A copy of the shop (SiteDomain: its domain is not the one App health was set up on) runs nothing: no message and
+ * no heartbeat ping - a staging copy must not alert the team, nor ping production's heartbeat.
+ *
  * A finished run pings the heartbeat - also when a check threw or the budget left one out ("degraded" in the report):
  * cron runs and the run got to its end - unless an alert could not be queued, or (with the hourly status on) the
  * hourly status has been due for STATUS_GRACE_MINUTES (the "status" row) and is still not out: alerts can't reach
@@ -54,7 +57,8 @@ class Runner
         private readonly LoggerInterface $logger,
         private readonly DeliveryStateInterface $deliveryState,
         private readonly StatusPolicyInterface $statusPolicy,
-        private readonly float $budgetSeconds = self::BUDGET_SECONDS
+        private readonly float $budgetSeconds = self::BUDGET_SECONDS,
+        private readonly ?SiteDomain $siteDomain = null
     ) {
     }
 
@@ -70,6 +74,11 @@ class Runner
         $started = microtime(true);
         $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'degraded' => false,
             'ms' => 0.0];
+        if (!$snapshot && $this->siteDomain !== null && !$this->siteDomain->matches()) {
+            // a copy of the shop (staging, a developer's database): no message, no heartbeat ping - nothing runs
+            $report['silent'] = 'copy of ' . $this->siteDomain->stored();
+            return $report;
+        }
         $targets = $this->targets->websites();
         $shopWide = $this->targets->shopWide();
         if ($shopWide !== null) {

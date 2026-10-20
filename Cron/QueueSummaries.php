@@ -6,6 +6,7 @@ namespace CommerceKings\AppHealth\Cron;
 use CommerceKings\AppHealth\Model\Notification\Summary;
 use CommerceKings\AppHealth\Model\Notification\TeamMessage;
 use CommerceKings\AppHealth\Model\Config;
+use CommerceKings\AppHealth\Model\SiteDomain;
 use CommerceKings\AppHealth\Model\SummarySchedule;
 use CommerceKings\AppHealth\Model\Target;
 use CommerceKings\AppHealth\Model\Targets;
@@ -30,7 +31,8 @@ class QueueSummaries
         private readonly ResourceConnection $resource,
         private readonly DateTime $dateTime,
         private readonly LoggerInterface $logger,
-        private readonly DeliveryStateInterface $deliveryState
+        private readonly DeliveryStateInterface $deliveryState,
+        private readonly ?SiteDomain $siteDomain = null
     ) {
     }
 
@@ -40,7 +42,8 @@ class QueueSummaries
         $now = $this->dateTime->gmtTimestamp();
         $queued = [];
         $shopWide = $this->targets->shopWide();
-        if ($shopWide === null || !$this->config->isSummaryEnabled()) {
+        if ($shopWide === null || !$this->config->isSummaryEnabled()
+            || ($this->siteDomain !== null && !$this->siteDomain->matches())) { // a copy: silent
             return [];
         }
         // the global summary, and one per website with a channel of its own (the others are in the global one)

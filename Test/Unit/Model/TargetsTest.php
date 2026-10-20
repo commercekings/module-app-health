@@ -32,6 +32,8 @@ class TargetsTest extends TestCase
             $store = $this->createStub(Store::class);
             $store->method('getId')->willReturn($id);
             $store->method('getFrontendName')->willReturn($frontendName);
+            $store->method('getBaseUrl')->willReturn('https://' . ($id === 1 ? 'shop.example.com' : 'MOJ.example.rs')
+                . '/');
             $stores[$id] = $store;
         }
         $websites = [];
@@ -67,6 +69,8 @@ class TargetsTest extends TestCase
         $this->assertSame([1, 2], array_keys($websites));
         $this->assertSame(['C00', 'Main Website Store', false], [$websites[1]->recipient, $websites[1]->name,
             $websites[1]->ownChannel], 'no row: the global channel');
+        $this->assertSame(['shop.example.com', 'moj.example.rs'], [$shopWide->domain, $websites[2]->domain],
+            'the host of its store view\'s secure base URL, for the header');
         $this->assertSame(['C02', 'Moj Planer', 2, true],
             [$websites[2]->recipient, $websites[2]->name, $websites[2]->storeId, $websites[2]->ownChannel],
             'its row; a website-scope setting is not read; the Store Information name first');

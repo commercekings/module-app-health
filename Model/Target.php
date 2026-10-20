@@ -6,7 +6,7 @@ namespace CommerceKings\AppHealth\Model;
 /**
  * Where a message goes: the global one's (scope 0, sent from the default store view; the shop's name and time zone)
  * or one website's (its *Website channels* row, else the global channel - ownChannel false; sent from its default
- * store view; its name and time zone).
+ * store view; its name, time zone and domain - the host of its store view's secure base URL).
  */
 class Target
 {
@@ -17,7 +17,8 @@ class Target
         public readonly string $recipient,
         public readonly string $name,
         public readonly string $timezone,
-        public readonly bool $ownChannel = true
+        public readonly bool $ownChannel = true,
+        public readonly string $domain = ''
     ) {
     }
 
