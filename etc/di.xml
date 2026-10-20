@@ -15,6 +15,7 @@
                 <item name="email_failing" xsi:type="object">CommerceKings\AppHealth\Model\Check\EmailFailing</item>
                 <item name="sales_emails" xsi:type="object">CommerceKings\AppHealth\Model\Check\SalesEmails</item>
                 <item name="system_log" xsi:type="object">CommerceKings\AppHealth\Model\Check\SystemLog</item>
+                <item name="sensitive_data" xsi:type="object">CommerceKings\AppHealth\Model\Check\SensitiveData</item>
             </argument>
         </arguments>
     </type>
@@ -45,6 +46,38 @@
                     <item name="parser" xsi:type="object">CommerceKings\AppHealth\Model\Log\MonologLineParser</item>
                     <item name="check" xsi:type="string">exceptions</item>
                 </item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- sensitive-data rule sets: every module's etc/app_health_rules.xml, merged by ruleset and rule code -->
+    <virtualType name="CommerceKingsAppHealthRulesReader" type="Magento\Framework\Config\Reader\Filesystem">
+        <arguments>
+            <argument name="converter" xsi:type="object">CommerceKings\AppHealth\Model\Sensitive\Config\Converter</argument>
+            <argument name="schemaLocator" xsi:type="object">CommerceKings\AppHealth\Model\Sensitive\Config\SchemaLocator</argument>
+            <argument name="fileName" xsi:type="string">app_health_rules.xml</argument>
+            <argument name="idAttributes" xsi:type="array">
+                <item name="/config/ruleset" xsi:type="string">code</item>
+                <item name="/config/ruleset/rule" xsi:type="string">code</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="CommerceKingsAppHealthRulesData" type="Magento\Framework\Config\Data">
+        <arguments>
+            <argument name="reader" xsi:type="object">CommerceKingsAppHealthRulesReader</argument>
+            <argument name="cacheId" xsi:type="string">commercekings_app_health_rules</argument>
+        </arguments>
+    </virtualType>
+    <type name="CommerceKings\AppHealth\Model\Sensitive\Rules">
+        <arguments>
+            <argument name="ruleSets" xsi:type="object">CommerceKingsAppHealthRulesData</argument>
+        </arguments>
+    </type>
+    <!-- validators rule sets use by code (argument "validators": name => SensitiveDataValidatorInterface) -->
+    <type name="CommerceKings\AppHealth\Model\Sensitive\ValidatorPool">
+        <arguments>
+            <argument name="validators" xsi:type="array">
+                <item name="luhn" xsi:type="object">CommerceKings\AppHealth\Model\Sensitive\Validator\Luhn</item>
+                <item name="iban" xsi:type="object">CommerceKings\AppHealth\Model\Sensitive\Validator\Iban</item>
             </argument>
         </arguments>
     </type>

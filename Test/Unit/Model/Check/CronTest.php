@@ -5,7 +5,6 @@ namespace CommerceKings\AppHealth\Test\Unit\Model\Check;
 
 use CommerceKings\AppHealth\Api\Data\CheckResult;
 use CommerceKings\AppHealth\Model\Check\Cron;
-use CommerceKings\AppHealth\Model\Log\Normalizer;
 use CommerceKings\AppHealth\Model\RunState;
 use CommerceKings\AppHealth\Test\Unit\Stub\Clock;
 use CommerceKings\AppHealth\Test\Unit\Stub\Db;
@@ -18,6 +17,7 @@ class CronTest extends TestCase
 {
     use Db;
     use Settings;
+    use \CommerceKings\AppHealth\Test\Unit\Stub\Sensitive;
 
     private const NOW = 1792483200;
 
@@ -46,7 +46,7 @@ class CronTest extends TestCase
         $cronConfig->method('getJobs')->willReturn($groups);
         $db = $this->db(['fetchAll' => [$finished], 'fetchPairs' => $pairs, 'fetchOne' => $one]);
         return (new Cron($this->resource($db), $cronConfig, $this->config(['cron/stale_minutes' => '5',
-            'cron/running_minutes' => '60']), $this->state, new Clock(self::NOW), new Normalizer()))->run();
+            'cron/running_minutes' => '60']), $this->state, new Clock(self::NOW), $this->normalizer()))->run();
     }
 
     private function ago(int $seconds): string

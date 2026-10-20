@@ -164,6 +164,29 @@
                     <depends><field id="enabled">1</field></depends>
                 </field>
             </group>
+            <group id="sensitive_data" translate="label comment" sortOrder="58" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Sensitive data in logs (all websites)</label>
+                <fieldset_css>commercekings-config-section</fieldset_css>
+                <comment>Card numbers, secrets and personal data written into the logs, by rule sets (PCI, Credentials, Personal data, and those of other modules' etc/app_health_rules.xml). A finding is a high alert at once - the rule and where, never the value.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="rule_settings" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Rule settings</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\RuleSettings</frontend_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\SensitiveRules</backend_model>
+                    <comment>Turn a rule set or a rule off or on, or give it another severity: e.g. "personal" 0, or "pci/card_cvv" with warning. Codes: README.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+                <field id="custom_rules" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Custom rules</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\CustomRules</frontend_model>
+                    <backend_model>CommerceKings\AppHealth\Model\Config\Backend\SensitiveRules</backend_model>
+                    <comment>Regex rules of your own (PCRE with delimiters, at most 300 characters, checked on save), in a shipped rule set or a new one; "At least" counts matches per entry (e.g. 5 for bulk data).</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
             <group id="exceptions" translate="label comment" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Exceptions (all websites)</label>
                 <fieldset_css>commercekings-config-section</fieldset_css>

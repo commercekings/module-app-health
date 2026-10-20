@@ -38,6 +38,9 @@
                 <max_read_kb>1024</max_read_kb>
                 <file>exception.log</file>
             </exceptions>
+            <sensitive_data>
+                <enabled>1</enabled>
+            </sensitive_data>
             <system_log>
                 <enabled>1</enabled>
                 <error_count>20</error_count>

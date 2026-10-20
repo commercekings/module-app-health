@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace CommerceKings\AppHealth\Model\Log;
 
 use CommerceKings\AppHealth\Api\Data\LogEntry;
+use CommerceKings\AppHealth\Model\Sensitive\Detector;
 
 /**
  * What of a log entry may leave the server, whichever parser read it: the level and channel (checked), exception class
@@ -17,25 +18,47 @@ use CommerceKings\AppHealth\Api\Data\LogEntry;
  */
 class Normalizer
 {
+    public function __construct(
+        private readonly Detector $detector
+    ) {
+    }
+
     public const LABEL_WORDS = 8;
     public const MESSAGE_LENGTH = 160;
-    /** WARNING = 1, ERROR = 2, CRITICAL and above = 3. */
+    /** WARNING = 1, ERROR = 2, CRITICAL and above = 3; below WARNING 0. */
     public const RANKS = ['WARNING' => 1, 'ERROR' => 2, 'CRITICAL' => 3, 'ALERT' => 3, 'EMERGENCY' => 3];
     private const CLASS_NAME = '/^[A-Za-z_][A-Za-z0-9_\\\\]{0,119}$/D';
     /** Mail transport failures: Magento's MailException, Symfony Mailer and Laminas Mail exceptions. */
     private const MAIL_CLASS = '/(^|\\\\)MailException$|^Symfony\\\\Component\\\\Mailer\\\\|^Laminas\\\\Mail\\\\/';
+    /** Known mail transport failures, by the raw message: pattern, what it means. */
+    private const MAIL_REASONS = [
+        'dns' => ['/getaddrinfo|Name or service not known|nodename nor servname|No such host'
+            . '|php_network_getaddresses/i',
+            'the mail server\'s host name was not found (DNS)'],
+        'tls' => ['/certificate verify failed|SSL operation failed|TLS|crypto|OpenSSL/i',
+            'the secure (TLS) connection to the mail server failed'],
+        'auth' => ['/authenticat|535|Username and Password not accepted|Invalid login/i',
+            'the mail server refused the login'],
+        'timeout' => ['/timed? ?out|Connection timed out|Operation timed out/i',
+            'the mail server did not answer (timed out)'],
+        'refused' => ['/Connection refused|Unable to connect|could not be established|Connection reset/i',
+            'the mail server refused the connection'],
+    ];
     /** ... and Magento's own messages for them (system.log: the mail transport and the sales email senders). */
     private const MAIL_MESSAGE = '/Transport error while sending email|Unable to send mail|Transport error: Unable/i';
 
     /**
      * @return array{rank: int, level: string, channel: string, classes: string[], location: ?string,
-     *     fingerprint: string, label: string, message: ?string, time: ?int, mail: bool}|null null below WARNING or
-     *     for an unknown level; mail: a mail transport failure
+     *     fingerprint: string, label: string, message: ?string, time: ?int, mail: bool,
+     *     sensitive: array<string, int>}|null null below WARNING (rank 0 only with sensitive data found) or for an
+     *     unknown level; mail: a mail transport failure; sensitive: rule key => matches (Sensitive\Detector)
      */
     public function safe(LogEntry $entry, string $root, bool $withMessage): ?array
     {
         $rank = self::RANKS[strtoupper($entry->level)] ?? 0;
-        if ($rank === 0) {
+        // sensitive data first, on the raw text, before anything is masked; below WARNING nothing else is kept
+        $sensitive = $this->detector->detect($entry->text !== '' ? $entry->text : $entry->message);
+        if ($rank === 0 && $sensitive === []) {
             return null;
         }
         $level = strtoupper($entry->level);
@@ -54,8 +77,10 @@ class Normalizer
             'label' => $class !== '' ? $class : $this->label($normalized),
             'message' => $withMessage ? $this->mask($entry->message) : null,
             'time' => $entry->time,
-            'mail' => preg_match(self::MAIL_MESSAGE, $entry->message) === 1
+            'mail' => $mail = preg_match(self::MAIL_MESSAGE, $entry->message) === 1
                 || array_filter($classes, fn ($class) => preg_match(self::MAIL_CLASS, $class)) !== [],
+            'mail_reason' => $mail ? $this->mailReason($entry->message) : null,
+            'sensitive' => $sensitive,
         ];
     }
 
@@ -80,22 +105,48 @@ class Normalizer
         return trim((string)preg_replace('/\s+/u', ' ', $normalized));
     }
 
-    /** One line of at most MESSAGE_LENGTH characters; emails, phones, long numbers, tokens, URLs and quotes as ***. */
+    /**
+     * One line of at most MESSAGE_LENGTH characters; emails, phones, long numbers, tokens, URLs and quotes as ***.
+     * PHP's function prefixes ("stream_socket_client(): ") and repeated *** go first; a longer message keeps its
+     * trailing reason ("(Connection refused)") and loses its middle ("…").
+     */
     public function mask(string $message): string
     {
+        $message = (string)preg_replace('/\b[a-z_]+\(\): /', '', $message);
         // tokens before numbers: a token's digits masked first would leave the rest of it
         $patterns = [
-            '#\b[a-z][a-z0-9+.-]{1,9}://\S+#i',
-            '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/',
             '/"[^"]{0,500}"|\'[^\']{0,500}\'|“[^”]{0,500}”|`[^`]{0,500}`/u',
+            '#\b[a-z][a-z0-9+.-]{1,9}://[^\s"\'()]+#i',
+            '/[^\s@<>"\'()]+@[^\s@<>"\'()]+/',
             '/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{12,}\b/',
             '/[A-Za-z0-9+\/_-]{24,}={0,2}/',
             '/\+?\d[\d ()\/.-]{5,}\d/',
             '/\d{4,}/',
         ];
         $masked = trim((string)preg_replace('/\s+/u', ' ', (string)preg_replace($patterns, '***', $message)));
-        return mb_strlen($masked) > self::MESSAGE_LENGTH
-            ? mb_substr($masked, 0, self::MESSAGE_LENGTH - 1) . '…' : $masked;
+        $masked = (string)preg_replace('/\*\*\*(?:[:\/@ ]*\*\*\*)+/', '***', $masked);
+        if (mb_strlen($masked) <= self::MESSAGE_LENGTH) {
+            return $masked;
+        }
+        $tail = preg_match('/\([^()]{3,60}\)\.?$/u', $masked, $reason) ? ' ' . $reason[0] : '';
+        return mb_substr($masked, 0, self::MESSAGE_LENGTH - 1 - mb_strlen($tail)) . '…' . $tail;
+    }
+
+    /**
+     * What kind of mail transport failure the raw message is, and the port when it names one (never the host):
+     * refused, timeout, auth, tls, dns or other.
+     *
+     * @return array{code: string, reason: string, port: ?int}
+     */
+    public function mailReason(string $message): array
+    {
+        $port = preg_match('/[\w.\]-]:(\d{2,5})\b/', $message, $match) ? (int)$match[1] : null;
+        foreach (self::MAIL_REASONS as $code => [$pattern, $reason]) {
+            if (preg_match($pattern, $message)) {
+                return ['code' => $code, 'reason' => $reason, 'port' => $port];
+            }
+        }
+        return ['code' => 'other', 'reason' => 'the mail server could not be used', 'port' => $port];
     }
 
     /** The first words, every placeholder and name-like word as ***. */

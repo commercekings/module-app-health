@@ -5,7 +5,8 @@ namespace CommerceKings\AppHealth\Api\Data;
 
 /**
  * One log entry as a parser read it. Nothing of it is sent as it is: App health builds the fingerprint, the safe
- * label and the optional masked message from $message and $classes, and shows $file relative to the Magento root.
+ * label and the optional masked message from $message and $classes, shows $file relative to the Magento root, and
+ * scans $message and $text for sensitive data (rule names and counts only).
  *
  * @api
  */
@@ -17,6 +18,7 @@ class LogEntry
      * @param string[] $classes exception class names, the outermost first
      * @param string|null $file where it happened, an absolute path; null when unknown
      * @param int|null $time unix time; null when unknown
+     * @param string $text the whole entry as read (context, trace) - only scanned for sensitive data, never kept
      */
     public function __construct(
         public readonly string $level,
@@ -25,7 +27,8 @@ class LogEntry
         public readonly array $classes = [],
         public readonly ?string $file = null,
         public readonly ?int $line = null,
-        public readonly ?int $time = null
+        public readonly ?int $time = null,
+        public readonly string $text = ''
     ) {
     }
 }

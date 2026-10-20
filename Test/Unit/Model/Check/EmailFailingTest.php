@@ -46,15 +46,18 @@ class EmailFailingTest extends TestCase
         $this->assertSame(CheckResult::OK, $this->check([], [self::entry(false, 'other', 1)],
             ['cart_reminder' => 2])->status);
         $result = $this->check([self::entry(true, 'Unable to send mail. Please try again later.', 100)],
-            [self::entry(true, 'Transport error while sending email: Connection to *** refused', 200,
-                'vendor/magento/module-email/Model/Transport.php:240')], []);
+            [self::entry(true, 'Transport error while sending email: Connection could not be established with host ***'
+                . ' (Connection refused)', 200, 'vendor/magento/module-email/Model/Transport.php:240')
+                + ['mail_reason' => ['code' => 'refused', 'reason' => 'the mail server refused the connection',
+                    'port' => 465]]], []);
         $this->assertSame([CheckResult::FAIL, 'Mail sending failing'], [$result->status, $result->title]);
-        $this->assertSame('2 new mail transport errors', $result->detail);
+        $this->assertSame('2 new mail transport errors: the mail server refused the connection', $result->detail);
         $this->assertSame(['mail errors' => 2], $result->counts);
-        $this->assertSame('mail_transport', $result->causes[0]->code);
-        $this->assertSame('the mail server refused or could not be reached: Transport error while sending email:'
-            . ' Connection to *** refused (vendor/magento/module-email/Model/Transport.php:240)',
-            $result->causes[0]->detail, 'the latest one');
+        $this->assertSame('mail_refused', $result->causes[0]->code);
+        $this->assertSame('The mail server refused the connection (port 465): Transport error while sending email:'
+            . ' Connection could not be established with host *** (Connection refused)'
+            . ' (vendor/magento/module-email/Model/Transport.php:240)', $result->causes[0]->detail, 'the latest one');
+        $this->assertStringContainsString('firewall', $result->causes[0]->hint);
     }
 
     public function testFailingNotifications(): void

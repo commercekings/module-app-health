@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- The shipped sensitive-data rule sets. Another module adds its own sets in its etc/app_health_rules.xml, overrides
+     a rule by its code (attributes, pattern), or turns a rule or a set off (enabled="false"). Patterns are PCRE with
+     delimiters; "validator" confirms each match (Model\Sensitive\ValidatorPool). A match is never stored or sent. -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:CommerceKings_AppHealth:etc/app_health_rules.xsd">
+    <ruleset code="pci" label="PCI" severity="critical" sortOrder="10">
+        <hint>Stop logging it at the source, then rotate or remove the log: card data in logs breaks PCI DSS.</hint>
+        <!-- 13-19 digits, spaces or dashes between, a known card prefix and a valid Luhn check -->
+        <rule code="card_number" label="payment card number" type="validator" validator="luhn"/>
+        <rule code="card_cvv" label="card security code (CVV)">
+            <pattern><![CDATA[/\b(?:cvv2?|cvc2?|cid|card_?code|security_?code)["']?\s*[:=]\s*["']?\d{3,4}\b/i]]></pattern>
+        </rule>
+        <rule code="card_track" label="card track data">
+            <pattern><![CDATA[/%B\d{13,19}\^[^^\r\n]{2,26}\^\d{4}|;\d{13,19}=\d{4}\d*\?/]]></pattern>
+        </rule>
+    </ruleset>
+    <ruleset code="credentials" label="Credentials" severity="critical" sortOrder="20">
+        <hint>Rotate the secret now, then stop logging it at the source and remove the log.</hint>
+        <rule code="private_key" label="private key">
+            <pattern><![CDATA[/-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/]]></pattern>
+        </rule>
+        <rule code="jwt" label="JSON web token">
+            <pattern><![CDATA[/\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/]]></pattern>
+        </rule>
+        <rule code="auth_header" label="authorization header">
+            <pattern><![CDATA[/\bauthorization["']?\s*[:=]\s*["']?(?:bearer|basic)\s+[A-Za-z0-9._~+\/=-]{8,}/i]]></pattern>
+        </rule>
+        <rule code="password_field" label="password">
+            <pattern><![CDATA[/["']?\b(?:password|passwd|pwd)["']?\s*[:=]\s*["']?(?!\*)[^\s"',;}]{3,}/i]]></pattern>
+        </rule>
+        <rule code="api_key" label="API key or secret">
+            <pattern><![CDATA[/\b(?:[sr]k_live_[0-9A-Za-z]{16,}|xox[abprs]-[0-9A-Za-z-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|gh[pousr]_[0-9A-Za-z]{36})\b/]]></pattern>
+        </rule>
+    </ruleset>
+    <ruleset code="personal" label="Personal data" severity="warning" sortOrder="30">
+        <hint>Log ids instead of personal data, then remove those lines if you can.</hint>
+        <rule code="iban" label="bank account number (IBAN)" type="validator" validator="iban"/>
+        <rule code="bulk_emails" label="5 or more email addresses in one entry" min="5">
+            <pattern><![CDATA[/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/]]></pattern>
+        </rule>
+        <rule code="bulk_phones" label="5 or more phone numbers in one entry" min="5">
+            <pattern><![CDATA[/(?<![\w.])\+?\d[\d ()\/.-]{7,}\d(?![\w.])/]]></pattern>
+        </rule>
+    </ruleset>
+</config>

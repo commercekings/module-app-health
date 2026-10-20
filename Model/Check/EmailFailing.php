@@ -26,6 +26,16 @@ use Magento\Framework\Stdlib\DateTime\DateTime;
 class EmailFailing implements CheckInterface
 {
     public const CODE = 'email_failing';
+    /** Where to look, by the kind of mail transport failure (Normalizer::mailReason()). */
+    private const HINTS = [
+        'refused' => 'Is the mail server running and reachable from this server (host, port, firewall)?',
+        'timeout' => 'A firewall may drop the connection: check the host, the port (25, 465, 587) and outgoing rules.',
+        'auth' => 'The mail login: the username and password (or app password) in the mail settings.',
+        'tls' => 'TLS: the port and encryption setting (SSL on 465, STARTTLS on 587) and the server\'s certificate.',
+        'dns' => 'The mail server\'s host name in the mail settings, and DNS on this server.',
+        'other' => 'The mail server or the email provider\'s settings: host, port, login, and whether it accepts mail'
+            . ' from this server.',
+    ];
     private const CAP = 100;
 
     public function __construct(
@@ -62,13 +72,17 @@ class EmailFailing implements CheckInterface
         $parts = [];
         $causes = [];
         if ($mail > 0) {
-            $parts[] = sprintf('%d new mail transport %s', $mail, $mail === 1 ? 'error' : 'errors');
             usort($mailEntries, fn ($a, $b) => (int)($b['time'] ?? 0) <=> (int)($a['time'] ?? 0));
             $latest = $mailEntries[0];
-            $causes[] = new Cause('mail_transport', 'the mail server refused or could not be reached: '
+            $reason = (array)($latest['mail_reason'] ?? []) + ['code' => 'other', 'reason' => 'mail sending failed',
+                'port' => null];
+            $parts[] = sprintf('%d new mail transport %s: %s', $mail, $mail === 1 ? 'error' : 'errors',
+                $reason['reason']);
+            $causes[] = new Cause('mail_' . $reason['code'], ucfirst((string)$reason['reason'])
+                . ($reason['port'] ? ' (port ' . (int)$reason['port'] . ')' : '') . ': '
                 . ((string)($latest['message'] ?? '') !== '' ? $latest['message'] : $latest['label'])
-                . ($latest['location'] ? ' (' . $latest['location'] . ')' : ''), (string)__('The mail server or'
-                . ' the email provider\'s settings: host, port, login, and whether it accepts mail from this server.'));
+                . ($latest['location'] ? ' (' . $latest['location'] . ')' : ''),
+                (string)__(self::HINTS[$reason['code']] ?? self::HINTS['other']));
         }
         if (array_sum($failing) >= $this->config->getInt(self::CODE, 'failed_reminders', 3)) {
             $parts[] = sprintf('%d notifications failing (%s)', array_sum($failing), Format::top($failing));

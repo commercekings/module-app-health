@@ -24,7 +24,7 @@ class Cause
         if (!preg_match('/^[a-z0-9_]{1,40}$/D', $code)) {
             throw new \InvalidArgumentException('A cause code is [a-z0-9_], at most 40 characters.');
         }
-        $this->detail = CheckResult::clean($detail, CheckResult::DETAIL_LENGTH);
+        $this->detail = CheckResult::clean($detail, CheckResult::NOTICE_LENGTH);
         $this->hint = CheckResult::clean($hint, CheckResult::DETAIL_LENGTH);
     }
 

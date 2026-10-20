@@ -6,6 +6,8 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 
 **Hear about a broken cron, a stuck indexer or emails that don't go out before your customers do.**
 
+- **Sensitive data in your logs.** A card number, a secret or personal data in bulk written into a log is a high
+  alert at once – the rule and where, never the value.
 - **Ten checks, every 5 minutes.** Cron, indexers, caches, maintenance mode, email settings, `system.log` and
   `exception.log` (new errors, with where they happened), queue backlogs, and sales emails that don't go out.
 - **Only news.** A message when something breaks and one when it is back ("recovered"); a check still failing is
@@ -34,6 +36,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 | exception.log | an exception never seen before (NEW); 20 or more new entries in 15 min, with the top 3 exception classes | all websites |
 | Queues (off) | 1,000 or more messages in a queue; a queue growing for 15 min (warning) | all websites |
 | Sending | a mail transport error in `exception.log`; 3 or more CommerceKings notifications failing | all websites |
+| Sensitive data in logs | a card number, a secret or personal data in bulk in any log entry (every level): a high alert at once | all websites |
 | Email sending | *Disable Email Communications* on for any of the website's store views | the website |
 | Sales emails | 3 or more orders, invoices, shipments or credit memos not emailed after 30 min | the website |
 
@@ -48,7 +51,7 @@ Each alert says why, as far as Magento's own data shows it, and where to look (`
 | Caches | which type: disabled, or invalidated since when |
 | Maintenance mode | on since when; "likely left on after a deployment" after 30 min |
 | Queues | which queue and its consumer; whether cron starts the consumers (`cron_consumers_runner` in env.php) and when `consumers_runner` last ran |
-| Sending | the latest mail transport error (masked); the failing CommerceKings notifications |
+| Sending | the kind of mail transport failure – refused, timed out, login refused, TLS, host not found (DNS) – with the port and the latest error (masked); the failing CommerceKings notifications |
 | Email sending | the scope that disables it (default, website, store view, or env.php) |
 | Sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
 
@@ -152,13 +155,59 @@ alerts; a **website** inherits them unless it sets its own. Send a test alert fr
 
 Details and examples: [how it works](docs/how-it-works.md).
 
+## Sensitive data in logs
+
+A log that holds card data, secrets or personal data is a security problem of its own (for card data, a PCI DSS
+breach). Every new log entry – every level, every log source – is scanned before anything is masked, and a finding is
+a high alert at once, with the rule, how often, the last time and where – never the value:
+
+```
+🚨 *Sensitive data in logs – Main Website Store (all websites)*
+> 🚨 Possible PCI: payment card number in system.log (×3, last 14:02) at app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+> Check: Stop logging it at the source, then rotate or remove the log: card data in logs breaks PCI DSS.
+```
+
+| Rule set (severity) | Rules |
+|---|---|
+| `pci` – PCI (critical) | `card_number` 13–19 digits with a card scheme's prefix and a valid Luhn check digit; `card_cvv` cvv/cvc/cid fields; `card_track` magnetic stripe track data |
+| `credentials` – Credentials (critical) | `private_key` PEM private keys; `jwt` JSON web tokens; `auth_header` Bearer/Basic authorization headers; `password_field` password=… / "password": …; `api_key` Stripe live keys, Slack tokens, AWS access keys, Google API keys, GitHub tokens |
+| `personal` – Personal data (warning) | `iban` IBANs with a valid checksum; `bulk_emails` 5+ email addresses in one entry; `bulk_phones` 5+ phone numbers in one entry |
+
+Country-specific ID formats and other rules can come as rule-set modules.
+
+- **Add a rule set from a module:** one file, no PHP – `etc/app_health_rules.xml`, merged with ours by code. The same
+  file overrides a shipped rule (by its code) or turns a rule or a set off:
+
+  ```xml
+  <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="urn:magento:module:CommerceKings_AppHealth:etc/app_health_rules.xsd">
+      <ruleset code="loyalty" label="Loyalty" severity="critical">
+          <hint>Log the customer id instead of the loyalty card number.</hint>
+          <rule code="loyalty_card" label="loyalty card number">
+              <pattern><![CDATA[/\bLC-\d{8}\b/]]></pattern>
+          </rule>
+      </ruleset>
+      <ruleset code="pci"><rule code="card_cvv" severity="warning"/></ruleset>
+      <ruleset code="personal" enabled="false"/>
+  </config>
+  ```
+
+- **Add a validator** (a check a pattern can't do, like Luhn): a class implementing
+  `Api\SensitiveDataValidatorInterface` (`getCode()`, `getPattern()` for its candidates, `isValid($match)`) and one item
+  in `Model\Sensitive\ValidatorPool`'s "validators"; then `validator="your_code"` (and `type="validator"` to use its
+  pattern) in any rule set.
+- **In the admin** (*Sensitive data in logs*): *Rule settings* turn a set or a rule (`pci`, `pci/card_cvv`) on or off
+  or change its severity; *Custom rules* add regex rules to a shipped set or a new one, checked on save (they compile,
+  at most 300 characters, no nested quantifiers, fast on long lines).
+
 ## What is masked
 
 A log line never leaves the server as it is. An error is shown by file:line (relative to the Magento root), an
 8-character fingerprint and:
 
 - **The masked message (default):** its first 160 characters, one line, with **emails, phone numbers, numbers of 4
-  digits or more, tokens, URLs and quoted values** as `***` (an exception's class first). **Not masked:** names and
+  digits or more, tokens, URLs and quoted values** as `***` (an exception's class first). PHP's function prefixes go
+  first, and a long message keeps its trailing reason ("… (Connection refused)"). **Not masked:** names and
   other free text, e.g. "Customer jane doe not found" or SQL. The masked message is also kept in the module's table
   for the summary (the latest per error, at most 500 errors).
 - **The label only** (*Add the masked log message* = No): the exception class, else the message's first 8 words with

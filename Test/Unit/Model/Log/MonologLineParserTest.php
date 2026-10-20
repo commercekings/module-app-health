@@ -20,8 +20,10 @@ class MonologLineParserTest extends TestCase
             . "[2026-10-20T08:00:02.000000+00:00] payment.WARNING: Slow in /var/www/html/app/code/A/B.php:7 [] []\n"
             . "[2026-10-20T08:00:03.000000+00:00] main.CRITICAL: plain {\"a\":1} {\"b\":2}\n";
         $entries = (new MonologLineParser())->parse($data);
-        $this->assertCount(3, $entries, 'INFO left out');
-        [$error, $warning, $critical] = $entries;
+        $this->assertCount(4, $entries, 'every level: below WARNING only scanned for sensitive data');
+        [$info, $error, $warning, $critical] = $entries;
+        $this->assertSame(['INFO', "[2026-10-20T08:00:00.000000+00:00] main.INFO: Cron Job x is run [] []\n"],
+            [$info->level, $info->text], 'the whole entry as read');
         $this->assertSame(['ERROR', 'main', 'Could not save'], [$error->level, $error->channel, $error->message]);
         $this->assertSame(['Magento\\Framework\\Exception\\CouldNotSaveException', 'PDOException'], $error->classes);
         $this->assertSame(['/var/www/html/vendor/magento/module-quote/Model/QuoteRepository.php', 84],

@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- Sensitive-data rule sets (etc/app_health_rules.xml), merged across modules by ruleset and rule code: a module
+     overrides a shipped rule's attributes or pattern, or turns a rule or a whole set off (enabled="false"). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+    <xs:element name="config">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="ruleset" type="rulesetType" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+        <xs:unique name="uniqueRulesetCode">
+            <xs:selector xpath="ruleset"/>
+            <xs:field xpath="@code"/>
+        </xs:unique>
+    </xs:element>
+    <xs:complexType name="rulesetType">
+        <xs:sequence>
+            <xs:element name="hint" type="xs:string" minOccurs="0"/>
+            <xs:element name="rule" type="ruleType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="code" type="codeType" use="required"/>
+        <xs:attribute name="label" type="xs:string"/>
+        <xs:attribute name="severity" type="severityType"/>
+        <xs:attribute name="enabled" type="xs:boolean"/>
+        <xs:attribute name="sortOrder" type="xs:int"/>
+    </xs:complexType>
+    <xs:complexType name="ruleType">
+        <xs:sequence>
+            <xs:element name="pattern" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="code" type="codeType" use="required"/>
+        <xs:attribute name="label" type="xs:string"/>
+        <xs:attribute name="type">
+            <xs:simpleType>
+                <xs:restriction base="xs:string">
+                    <xs:enumeration value="regex"/>
+                    <xs:enumeration value="validator"/>
+                </xs:restriction>
+            </xs:simpleType>
+        </xs:attribute>
+        <xs:attribute name="validator" type="codeType"/>
+        <xs:attribute name="severity" type="severityType"/>
+        <xs:attribute name="enabled" type="xs:boolean"/>
+        <xs:attribute name="min" type="xs:positiveInteger"/>
+    </xs:complexType>
+    <xs:simpleType name="codeType">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[a-z0-9_]{1,40}"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="severityType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="critical"/>
+            <xs:enumeration value="warning"/>
+        </xs:restriction>
+    </xs:simpleType>
+</xs:schema>

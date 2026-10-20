@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- A test module's rule sets: a set of its own with a validator of its own, an override of a shipped rule, and a
+     shipped set turned off. -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:CommerceKings_AppHealth:etc/app_health_rules.xsd">
+    <ruleset code="loyalty" label="Loyalty" severity="critical">
+        <hint>Loyalty card numbers are personal: log the customer id instead.</hint>
+        <rule code="loyalty_card" label="loyalty card number" type="validator" validator="fixture_loyalty"/>
+    </ruleset>
+    <ruleset code="pci">
+        <rule code="card_cvv" severity="warning"/>
+    </ruleset>
+    <ruleset code="personal" enabled="false"/>
+</config>

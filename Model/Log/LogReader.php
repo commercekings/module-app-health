@@ -33,16 +33,18 @@ class LogReader
     }
 
     /**
-     * @return array{entries: list<array<string, mixed>>, partial: bool} Normalizer::safe() entries of all the
-     *     check's sources, and whether any source had more waiting than it could read
+     * @return array{entries: list<array<string, mixed>>, partial: bool, sensitive: list<array<string, mixed>>}
+     *     Normalizer::safe() entries of all the check's sources at WARNING and above, whether any source had more
+     *     waiting than it could read, and the entries of any level with sensitive data found ("source": its name)
      */
     public function entries(string $check): array
     {
-        $result = ['entries' => [], 'partial' => false];
+        $result = ['entries' => [], 'partial' => false, 'sensitive' => []];
         $cap = $this->config->getInt($check, 'max_read_kb', 1024) * 1024;
         foreach ($this->pool->forCheck($check) as $code => $item) {
             $read = $this->state->memo(self::class . '|' . $code, fn () => $this->read($code, $item, $cap));
             array_push($result['entries'], ...$read['entries']);
+            array_push($result['sensitive'], ...$read['sensitive']);
             $result['partial'] = $result['partial'] || $read['partial'];
         }
         return $result;
@@ -69,20 +71,28 @@ class LogReader
             $this->state->set($key, $next + [self::READ_AT => $now]);
         }
         if ($chunk->data === '') {
-            return ['entries' => [], 'partial' => $chunk->partial];
+            return ['entries' => [], 'partial' => $chunk->partial, 'sensitive' => []];
         }
+        $source = $item['source'] instanceof FileLogSource ? $item['source']->getFile() : $code;
         $root = $this->directoryList->getRoot();
         $withMessage = $this->config->isLogMessageIncluded();
         $entries = [];
+        $sensitive = [];
         foreach ($item['parser']->parse($chunk->data) as $entry) {
             if ($readAt > 0 && $entry->time !== null && $entry->time < $readAt - self::OLD_SECONDS) {
                 continue; // read before, or an old line of a log cut back in place
             }
             $safe = $this->normalizer->safe($entry, $root, $withMessage);
-            if ($safe !== null) {
+            if ($safe === null) {
+                continue;
+            }
+            if ($safe['sensitive'] !== []) {
+                $sensitive[] = $safe + ['source' => $source];
+            }
+            if ($safe['rank'] > 0) {
                 $entries[] = $safe;
             }
         }
-        return ['entries' => $entries, 'partial' => $chunk->partial];
+        return ['entries' => $entries, 'partial' => $chunk->partial, 'sensitive' => $sensitive];
     }
 }

@@ -21,6 +21,8 @@ use Magento\Framework\Filesystem\File\ReadFactory;
 /** A temporary var/log with Magento's real directory reader. */
 trait LogDir
 {
+    use Sensitive;
+
     private string $logDir = '';
     private Filesystem $filesystem;
     /** The reader's clock; the default Clock when unset. */
@@ -61,7 +63,7 @@ trait LogDir
         ], $extra));
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getRoot')->willReturn('/var/www/html');
-        return new LogReader($pool, new Normalizer(), $state, $config, $directoryList,
+        return new LogReader($pool, new Normalizer($this->detector()), $state, $config, $directoryList,
             $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock());
     }
 

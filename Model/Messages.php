@@ -23,6 +23,8 @@ class Messages
     /** Checks with a section of their own in the summary (their counts there, not in "OK all day"). */
     private const LOGS = ['system_log', 'exceptions'];
     private const EMAIL = ['sales_emails', 'email_failing'];
+    /** A check's notices with a title of their own (the high alert for sensitive data in logs). */
+    private const NOTICE_TITLES = ['sensitive_data' => '🚨 *Sensitive data in logs'];
     /** Causes shown per alert. */
     private const CAUSES = 4;
     /** The summary's log entries per level: its title and how many. */
@@ -87,11 +89,14 @@ class Messages
      */
     public function notices(Target $target, string $code, array $notices): string
     {
-        $lines = ['🔴 *New errors: ' . $this->pool->getLabel($code) . ' – ' . $this->where($target) . '*'];
+        $lines = [(self::NOTICE_TITLES[$code] ?? '🔴 *New errors: ' . $this->pool->getLabel($code)) . ' – '
+            . $this->where($target) . '*'];
+        $hinted = false;
         foreach ($notices as $notice) {
             $lines[] = $this->times($target, $notice);
+            $hinted = $hinted || preg_match('/^(> )?Check: /', $notice) === 1;
         }
-        $hint = $this->pool->getHint($code);
+        $hint = $hinted ? '' : $this->pool->getHint($code);
         if ($hint !== '') {
             $lines[] = 'Check: ' . $hint;
         }

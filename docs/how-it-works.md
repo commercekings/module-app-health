@@ -130,6 +130,21 @@ A file in Magento's own format needs no code: a `Model\Log\FileLogSource` virtua
 and `Model\Log\MonologLineParser` – or just the admin's *Extra log files*. The parser hands over what it read; the
 Normalizer masks it, so a third-party parser can't send a line as it is.
 
+### Sensitive data
+
+`Model\Log\Normalizer` scans every entry's raw text (`LogEntry::$text`, every level, the first 16 KB) with
+`Model\Sensitive\Detector` before anything else, so it covers every log source and parser:
+
+- **Rules** (`Model\Sensitive\Rules`): every module's `etc/app_health_rules.xml` (`etc/app_health_rules.xsd`; merged by
+  ruleset and rule code, read through Magento's config reader and cached like other XML config), then the admin's
+  *Rule settings* and *Custom rules*. A rule is a PCRE pattern, or a validator's pattern (`type="validator"`),
+  optionally confirmed by a validator (`Model\Sensitive\ValidatorPool`, `Api\SensitiveDataValidatorInterface`), with a
+  severity and a minimum per entry ("5 or more emails"). Each pattern must pass `Model\Sensitive\RegexGuard`; the
+  detector runs them under a backtracking limit and skips a rule that hits it.
+- **Out:** only "<set>/<rule>" and the number of matches. The `sensitive_data` check keeps findings per rule and
+  fingerprint (the `sensitive` row, at most 200) and makes each a notice once, and again after the repeat interval
+  while it goes on, under the title "🚨 Sensitive data in logs".
+
 ## Privacy
 
 Messages carry the shop's name (its *Store Information* name, else the store's frontend name), check labels, statuses,
@@ -148,6 +163,7 @@ logged or sent. Logs name the check, the scope and exception classes, never a me
 | `alerted:<scope>` | what that team was last told per check: status and time |
 | `cursor:<name>` | what a check remembers: cron's last run, first-seen times, samples; `cursor:log:<source>` a log source's cursor |
 | `fingerprints` | the log errors seen: label, level, channel, where, first and last seen, count, last told (at most 500) |
+| `sensitive` | sensitive-data findings per rule and fingerprint: first, last, count, last told (at most 200) |
 | `notices:<scope>`, `noticed:<scope>` | one-off news (e.g. NEW errors) waiting for the next alert, and the last told per check |
 | `tally:<YmdH>` | an hour's worst status and counts per scope and check; kept 26 hours |
 
