@@ -212,7 +212,7 @@ run. No token, port, URL or Magento command: nothing is exposed and Magento is n
 | Does | Never |
 |---|---|
 | Asks Docker for each container's state, restarts and health; `df` for disks, `/proc` for memory and load; optionally `systemctl`, a backup's marker file and `openssl` for certificates | Starts Magento or PHP |
-| Writes `status-<server>.json` to a temporary file in the same folder, then renames it: Magento reads a whole file or none | Reads env files (only its own `CK_` settings), passwords, tokens or Magento's data |
+| Writes `status-<server>.json` as the folder's owner (the web server's user) – a temporary file in the same folder, then renamed: Magento reads a whole file or none | Reads env files (only its own `CK_` settings), passwords, tokens or Magento's data; writes in `var/` as root |
 | Puts names and numbers only into the file (`"Disk /", 87 %, "13G free"`) | Sends anything over the network |
 
 **What App health does with it:**
@@ -225,10 +225,13 @@ run. No token, port, URL or Magento command: nothing is exposed and Magento is n
 | A file breaks a rule (below) | a warning naming the file and the rule, never its content; the last good status still counts |
 | The whole server is down | nothing can run on it – the heartbeat and an outside uptime check tell you (see *Before going live*) |
 
-**Set up** (as root on the server):
+**Set up** (as root on the server). Root only collects the readings (Docker needs it); the file is written as the
+owner of `var/app-health` – the web server's user, by its numeric id, also under Docker's user namespaces. That folder
+is the web user's to write, so root never works in it: a temporary file there could be swapped for a link to any file
+on the server, and root would write through it. The script refuses when the folder (or `var/`, before the folder exists) is owned by root.
 
 1. Copy [docs/examples/host-status.sh](docs/examples/host-status.sh) to `/usr/local/bin/host-status.sh` (mode 0755);
-   it needs `bash`, `jq` and – for containers – `docker`.
+   it needs `bash`, `jq`, `setpriv` (util-linux) and – for containers – `docker`.
 2. Put its settings in `/etc/ck-host-status.env` (mode 0600): `CK_STATUS_DIR` (Magento's `var/app-health`, as this
    server sees it), and as needed the server's name, the containers that must run, disks, a backup marker file,
    the host names whose certificates to watch – the script's header lists them.
@@ -264,7 +267,7 @@ run. No token, port, URL or Magento command: nothing is exposed and Magento is n
 
 | Hosting | `CK_STATUS_DIR` and permissions |
 |---|---|
-| Docker Compose (e.g. m2_infra), Warden | the host folder mounted as Magento's `var/`, e.g. `<APP_PATH>/shared/var/app-health` – the script runs on the host, not in a container (read-only containers are fine: the shared `var/` is writable). The script makes the file owned like the folder (the PHP user, also under Docker's user namespaces) and readable for all |
+| Docker Compose (e.g. m2_infra), Warden | the host folder mounted as Magento's `var/`, e.g. `<APP_PATH>/shared/var/app-health` – the script runs on the host, not in a container (read-only containers are fine: the shared `var/` is writable). The file is written as the folder's owner (the PHP user, also under Docker's user namespaces) and readable for all |
 | A server or VM without Docker | `<Magento root>/var/app-health`; set `CK_CONTAINERS=` (empty) and list the services instead (`CK_SERVICES="nginx php8.3-fpm mariadb"`) |
 | Several nodes | each node runs the script with its own `CK_SOURCE` into the `var/` that Magento's cron reads (a shared `var/`); one file per node, at most 20 |
 | Managed hosting without access to the server | not possible – the checks inside Magento and the heartbeat still work |

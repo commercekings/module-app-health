@@ -20,7 +20,7 @@
 #                    (default 14 / 7)
 # Options: --dry-run prints the JSON instead of writing it.
 #
-# Needs bash, jq, docker; openssl for CK_SSL_HOSTS; systemctl for CK_SERVICES.
+# Needs bash, jq, docker, setpriv (util-linux) when run as root; openssl for CK_SSL_HOSTS; systemctl for CK_SERVICES.
 set -euo pipefail
 umask 077
 
@@ -139,16 +139,32 @@ if (( dry_run )); then
     jq . <<< "$report"
     exit 0
 fi
-# Magento creates the folder on its first check run; when the script runs first, it creates it owned like var/
-if [[ ! -d "$CK_STATUS_DIR" ]]; then
-    mkdir -p -m 0775 "$CK_STATUS_DIR"
-    chown --reference="$(dirname "$CK_STATUS_DIR")" "$CK_STATUS_DIR" 2>/dev/null || true
+# Root only collects. The file is written by the owner of Magento's var/app-health (the web server's user): that
+# folder is the web user's to write, so as root a temporary file in it could be swapped for a link to any file, and
+# root would write or chown through it. As the owner nothing is gained. Numeric ids: under Docker's user namespaces
+# the owner has no name on the host. The folder - or var/, when Magento has not made the folder yet and the owner
+# creates it there - must not be root's.
+dir="${CK_STATUS_DIR%/}"
+owner_of="$dir"
+[[ -d "$owner_of" ]] || owner_of="$(dirname "$dir")"
+if [[ ! -d "$owner_of" ]]; then
+    echo "host-status: $owner_of does not exist (CK_STATUS_DIR is Magento's var/app-health)" >&2
+    exit 1
 fi
-tmp=$(mktemp "$CK_STATUS_DIR/.status-$source_name.json.XXXXXX")
-trap 'rm -f "$tmp"' EXIT
-printf '%s\n' "$report" > "$tmp"
-chmod 0644 "$tmp"
-# owned like the folder (the web server's user, also under Docker's user namespaces), so Magento can manage it
-chown --reference="$CK_STATUS_DIR" "$tmp" 2>/dev/null || true
-mv -f "$tmp" "$CK_STATUS_DIR/status-$source_name.json"
-trap - EXIT
+if [[ "$(stat -c %u "$owner_of")" == 0 ]]; then
+    echo "host-status: $owner_of is owned by root; it must be the web server's user's (Magento's var/)" >&2
+    exit 1
+fi
+uid=$(stat -c %u "$owner_of")
+gid=$(stat -c %g "$owner_of")
+# as the owner: the folder if missing, a temporary file, then renamed into place (Magento reads it whole or not at all)
+write='umask 022; mkdir -p "$1" && t=$(mktemp "$1/.status-$2.json.XXXXXX") && { cat > "$t" && chmod 0644 "$t" && mv -f "$t" "$1/status-$2.json" || { rm -f "$t"; exit 1; }; }'
+if [[ "$(id -u)" == "$uid" ]]; then
+    bash -c "$write" host-status "$dir" "$source_name" <<< "$report"
+elif [[ "$(id -u)" == 0 ]]; then
+    setpriv --reuid="$uid" --regid="$gid" --clear-groups --no-new-privs \
+        bash -c "$write" host-status "$dir" "$source_name" <<< "$report"
+else
+    echo "host-status: run as root or as the owner of $owner_of (uid $uid)" >&2
+    exit 1
+fi
