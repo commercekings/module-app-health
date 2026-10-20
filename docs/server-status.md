@@ -44,9 +44,11 @@ holds it can start a privileged container: root on the host. And even a read-onl
 `/containers/<id>/json` has its environment (database and queue passwords), `/archive` any file in it, `/logs` and
 `/export` the rest. A proxy that allows "every GET under /containers" lets all of that through. The examples use
 HAProxy with [an exact list](examples/docker-socket-proxy/haproxy.cfg) instead: `GET /containers/json` (the
-list: names, states, health), `GET /containers/<id>/stats` and the Docker CLI's `/_ping` and `/version` – everything
-else, any other path or method, gets 403. The list still shows each container's command line, labels and mounts:
-keep secrets out of them (environment variables or files, not arguments). Restart counts would need
+list), `GET /containers/<id>/stats` and the Docker CLI's `/_ping` and `/version` – everything else, any other path
+or method, gets 403. **The list is more than names and states:** Docker returns each container's command line
+(its arguments), labels, image, ports and mounts with it, and the proxy cannot cut fields out of an answer. The script
+uses only names, states and health, but anything that can read the proxy can read the rest: keep secrets out of
+command lines and labels (environment variables or files instead). Restart counts would need
 `/containers/<id>/json`, so behind the proxy the table shows them as "-" (`CK_CONTAINER_RESTARTS=0`); on a host the
 script reads them. Proxy and script share an internal network that nothing else reaches, and neither reaches the
 internet: the script's tools are built into [its image](examples/host-status-image/Dockerfile), and both images

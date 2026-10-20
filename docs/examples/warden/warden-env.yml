@@ -7,7 +7,8 @@
 # Why a proxy, and this one: Docker's socket - even mounted :ro - is the whole Docker API (start a privileged
 # container = root on the host), and even its GETs leak: a container's /json has its environment (database and queue
 # passwords), /archive any file, /logs and /export the rest. HAProxy with haproxy.cfg passes exactly the container
-# list and each container's stats (plus the CLI's /_ping and /version); everything else gets 403. Restarts would need
+# list and each container's stats (plus the CLI's /_ping and /version); everything else gets 403.
+# The list also has each container's command line and labels: keep secrets out of them. Restarts would need
 # /json, so the script runs without them here. Both containers sit on an internal network only; the script's tools
 # are built into its image (nothing is installed at runtime). It runs as Warden php-fpm's www-data (1000) and mounts
 # only Magento's var/app-health (a subpath of Warden's "appdata" volume, the Magento root).

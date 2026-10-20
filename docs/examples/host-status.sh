@@ -29,6 +29,8 @@
 #
 # Needs bash, jq, docker, setpriv (util-linux) when run as root; openssl for CK_SSL_HOSTS; systemctl for CK_SERVICES.
 set -euo pipefail
+# no globbing: the lists in the settings (disks, services, hosts) are words, never file patterns
+set -f
 umask 077
 
 env_file="${CK_ENV_FILE:-/etc/ck-host-status.env}"
