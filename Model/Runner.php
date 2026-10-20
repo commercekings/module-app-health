@@ -31,6 +31,10 @@ use Psr\Log\LoggerInterface;
  * hourly status has been due for STATUS_GRACE_MINUTES (the "status" row) and is still not out: alerts can't reach
  * the team, and the outside service is the one to tell them. Nothing runs while app health is off and no heartbeat
  * is set.
+ *
+ * A snapshot (run(snapshot: true), "Send status now") runs the same checks the same way and returns their results,
+ * then stops: nothing is stored - the checks' own cursors included, so the next run still sees what this one saw -
+ * nothing is queued or pinged, and the alerts, "Resolved" and the hourly status keep their timing.
  */
 class Runner
 {
@@ -55,11 +59,13 @@ class Runner
     }
 
     /**
+     * @param bool $snapshot only the results: nothing stored, queued or pinged
      * @return array{ran: array<string, array{status: string, ms: float}>, skipped: string[], queued: int[],
-     *     complete: bool, degraded: bool, ms: float} what the run did (queued: the scopes alerted, 0 = shop-wide;
-     *     complete: every check ran; degraded: one threw or was left out)
+     *     complete: bool, degraded: bool, ms: float, checks?: array<int, array<string, array<mixed>>>,
+     *     notices?: array<int, array<string, string[]>>} what the run did (queued: the scopes alerted, 0 = shop-wide;
+     *     complete: every check ran; degraded: one threw or was left out); a snapshot's checks and notices by scope
      */
-    public function run(): array
+    public function run(bool $snapshot = false): array
     {
         $started = microtime(true);
         $report = ['ran' => [], 'skipped' => [], 'queued' => [], 'complete' => true, 'degraded' => false,
@@ -134,6 +140,12 @@ class Runner
                 ];
             }
             $report['ran'][$code] = ['status' => CheckResult::fromRank($worst), 'ms' => $ms];
+        }
+        if ($snapshot) {
+            // the checks' changes stay in this RunState: never committed
+            $report['degraded'] = !$report['complete'];
+            $report['ms'] = round((microtime(true) - $started) * 1000, 1);
+            return $report + ['checks' => $checks, 'notices' => $notices];
         }
         if ($report['skipped'] !== []) {
             $this->logger->warning(sprintf('CommerceKings_AppHealth: time budget used up; skipped %s',

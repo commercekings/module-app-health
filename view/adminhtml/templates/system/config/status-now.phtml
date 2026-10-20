@@ -1,0 +1,14 @@
+<?php
+/** @var \CommerceKings\AppHealth\Block\Adminhtml\System\Config\StatusNow $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$available = $block->isAvailable();
+$config = ['CommerceKings_AppHealth/js/test-alert' => ['url' => $block->getSendUrl(),
+    'failed' => (string)__('The status could not be posted. Try again.')]];
+?>
+<div<?php if ($available): ?> data-mage-init="<?= $escaper->escapeHtmlAttr(json_encode($config)) ?>"<?php endif ?>>
+    <button type="button" class="action-default" data-role="send"<?= $available ? '' : ' disabled="disabled"' ?>>
+        <span><?= $escaper->escapeHtml(__('Send status now')) ?></span>
+    </button>
+    <p class="note" data-role="result" aria-live="polite"><?= $available ? ''
+        : $escaper->escapeHtml(__('Set a channel and recipient under Alerts first.')) ?></p>
+</div>

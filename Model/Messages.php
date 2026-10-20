@@ -166,11 +166,12 @@ class Messages
      * @param list<array{0: string, 1: string}> $warnings the label and detail of the checks warning
      * @param list<array{0: string, 1: int, 2: bool}> $errors label, count, first seen since the last status
      * @param list<array{0: string, 1: string}> $idle the label and detail of the checks with nothing to check yet
+     * @param string $heading "Hourly status", or "Status now" for the admin's button
      */
     public function status(Target $target, array $problems, array $warnings, int $errorCount, array $errors,
-        int $moreErrors, array $idle = []): string
+        int $moreErrors, array $idle = [], string $heading = 'Hourly status'): string
     {
-        $text = '*Hourly status · ' . $this->where($target) . "*\n\n" . match (true) {
+        $text = '*' . $heading . ' · ' . $this->where($target) . "*\n\n" . match (true) {
             $problems !== [] => Format::many(count($problems), 'problems') . ': ' . implode(', ', $problems),
             $warnings !== [] => 'No problems',
             default => 'All checks OK',

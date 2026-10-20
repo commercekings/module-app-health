@@ -145,6 +145,32 @@ class RunnerTest extends TestCase
         $this->assertSame('ok', $checks[1]['email_disabled']['status']);
     }
 
+    public function testASnapshotReturnsTheResultsAndChangesNothing(): void
+    {
+        $this->heartbeat = true;
+        $this->websites = [1, 2];
+        $this->run5();
+        $rows = $this->store->rows;
+        $statements = $this->store->statements;
+        [$pings, $queued, $statusQueued] = [$this->pings, $this->queued, $this->statusQueued];
+        $this->results['cron'] = new CheckResult('fail', 'cron stopped', [], ['NEW ERROR x']);
+        $this->results['email_disabled'] = [1 => CheckResult::ok(), 2 => CheckResult::warn('emails are off')];
+        $this->clock->now += 3600;
+        $snapshot = $this->runner()->run(snapshot: true);
+        $this->assertSame(['fail', 'ok', 'warn'], [$snapshot['checks'][0]['cron']['status'],
+            $snapshot['checks'][1]['email_disabled']['status'], $snapshot['checks'][2]['email_disabled']['status']]);
+        $this->assertSame('NEW ERROR x', $snapshot['notices'][0]['cron'][0]);
+        $this->assertTrue($snapshot['complete']);
+        $this->assertSame($rows, $this->store->rows, 'nothing stored: no checks, tally, notices or status row');
+        $this->assertSame(1, $this->store->statements - $statements, 'the one read');
+        $this->assertSame([$pings, $queued, $statusQueued], [$this->pings, $this->queued, $this->statusQueued],
+            'nothing queued, no alert and no hourly status, no ping');
+        $this->runner()->run();
+        $this->assertSame($this->clock->now, $this->store->row('checks')[0]['cron']['since'],
+            'the next run sees the change as new: the snapshot told no one');
+        $this->assertContains(0, $this->queued, 'and alerts it');
+    }
+
     public function testAFailingCheckCountsAsCouldNotRunWhereItRanLastTime(): void
     {
         $this->websites = [1, 2];

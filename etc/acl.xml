@@ -7,7 +7,9 @@
                 <resource id="Magento_Backend::stores">
                     <resource id="Magento_Backend::stores_settings">
                         <resource id="Magento_Config::config">
-                            <resource id="CommerceKings_AppHealth::config" title="CommerceKings App health"/>
+                            <resource id="CommerceKings_AppHealth::config" title="CommerceKings App health">
+                                <resource id="CommerceKings_AppHealth::send_status" title="Send status now"/>
+                            </resource>
                         </resource>
                     </resource>
                 </resource>

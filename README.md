@@ -90,6 +90,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
 | WARNING log entries | the daily summary | global |
 | The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with problems, warnings or new errors – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
+| *Send status now* (admin) | when you press it: the checks run now and what they find is posted as "Status now" (problems, warnings, what is not set up, the log errors since the last hourly status) – nothing else changes: no alert is marked told, the hourly status keeps its time | global |
 | The daily summary | once a day at *Daily summary at*: a global one (the shared checks, and websites without a channel of their own, named) and one per website channel (its own items, in its time zone) | global, each website channel |
 
 ```
@@ -114,7 +115,7 @@ Every setting is global (*Stores > Configuration > CommerceKings > App health*, 
 
 | Messages | Go to |
 |---|---|
-| The shared checks (cron, indexers, caches, maintenance, logs, queues, sending, server status), the hourly status, *Send test alert* | the global channel and recipient |
+| The shared checks (cron, indexers, caches, maintenance, logs, queues, sending, server status), the hourly status, *Send test alert*, *Send status now* | the global channel and recipient |
 | Security findings (sensitive data in logs) | the global channel – always, never a website channel |
 | A website's own checks (*Email sending*, *Sales emails*) | its *Website channels* row – else the global channel, the website named ("Email sending (EU Store)") |
 | The daily summary | a global one; and one per *Website channels* row with only that website's items |
@@ -198,7 +199,7 @@ delivery state rows of the types `app_health_*` in `ck_notification_delivery_sta
 
 | Group | Fields (default) |
 |---|---|
-| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert* |
+| Alerts | Enabled (No); Channel (slack); Recipient (e.g. a Slack channel ID); Website channels (website, channel, recipient; none); Also post shared problems to website channels (No); Daily summary (Yes) at 08:00 (the default store's time zone; a website channel's in the website's); Repeat a failing check after (6 hours); Resolved after (2 OK runs in a row; window checks); New log errors at most every (30 minutes); Hourly status (Yes) every (60 minutes); Add the masked log message (Yes); Heartbeat URL (empty); *Send test alert*; *Send status now* (its own ACL resource, *Send status now*; off until app health is on with a channel and recipient) |
 | System log, Exceptions | Log file (system.log, exception.log); Extra log files (more var/log files, e.g. payment.log; never debug.log) |
 | Per check | Enabled, and its thresholds (see above); Queues off by default (it connects to the broker on every run) |
 

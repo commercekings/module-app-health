@@ -95,6 +95,11 @@
                     <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\TestAlert</frontend_model>
                     <comment>Sends one message now to the saved global channel and recipient. Save first.</comment>
                 </field>
+                <field id="status_now" translate="label comment" type="button" sortOrder="85" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Status</label>
+                    <frontend_model>CommerceKings\AppHealth\Block\Adminhtml\System\Config\StatusNow</frontend_model>
+                    <comment>Runs the checks now and posts the result to the global recipient: problems, warnings, what is not set up, recent log errors. Alerts and the hourly status keep their timing.</comment>
+                </field>
             </group>
             <group id="cron" translate="label comment" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Cron</label>

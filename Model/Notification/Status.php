@@ -67,48 +67,18 @@ class Status implements NotificationTypeInterface
             $from = $sentAt !== '' ? (int)strtotime($sentAt . ' UTC')
                 : $now - self::intervalMinutes($this->policy, $target->websiteId) * 60;
             $rows = $this->store->load(['checks', Fingerprints::KEY, Fingerprints::ERRORS_KEY, self::POSTED_KEY]);
-            $problems = [];
-            $warnings = [];
-            $idle = [];
-            foreach ((array)($rows['checks'] ?? []) as $checks) {
-                foreach ((array)$checks as $code => $check) {
-                    $status = $check['status'] ?? CheckResult::OK;
-                    if (!empty($check['idle'])) {
-                        $idle[(string)$code] ??= [$this->pool->getLabel((string)$code),
-                            (string)($check['detail'] ?? '')];
-                    } elseif ($status === CheckResult::FAIL) {
-                        $problems[(string)$code] = $this->pool->getLabel((string)$code);
-                    } elseif ($status === CheckResult::WARN) {
-                        $warnings[(string)$code] ??= [$this->pool->getLabel((string)$code),
-                            (string)($check['detail'] ?? '')];
-                    }
-                }
-            }
-            $byFingerprint = [];
-            foreach ((array)($rows[Fingerprints::ERRORS_KEY] ?? []) as [$time, $fp, $count, $new]) {
-                if ((int)$time > $from) {
-                    $byFingerprint[$fp] ??= ['count' => 0, 'new' => false];
-                    $byFingerprint[$fp]['count'] += (int)$count;
-                    $byFingerprint[$fp]['new'] = $byFingerprint[$fp]['new'] || (bool)$new;
-                }
-            }
-            uasort($byFingerprint, fn ($a, $b) => $b['count'] <=> $a['count']);
-            $known = (array)($rows[Fingerprints::KEY] ?? []);
-            $errors = [];
-            foreach (array_slice($byFingerprint, 0, self::ERRORS, true) as $fp => $error) {
-                $errors[] = [Fingerprints::name((array)($known[$fp] ?? ['label' => '#' . $fp])), $error['count'],
-                    $error['new']];
-            }
-            $errorCount = array_sum(array_column($byFingerprint, 'count'));
+            $parts = $this->parts((array)($rows['checks'] ?? []), (array)($rows[Fingerprints::KEY] ?? []),
+                (array)($rows[Fingerprints::ERRORS_KEY] ?? []), $from);
+            ['problems' => $problems, 'warnings' => $warnings, 'errorCount' => $errorCount, 'errors' => $errors]
+                = $parts;
             $posted = (array)($rows[self::POSTED_KEY] ?? []);
             $mine = (array)($posted[$target->websiteId] ?? []);
-            $report = new StatusReport($target->websiteId, $this->localNow($target, $now), array_values($problems),
+            $report = new StatusReport($target->websiteId, $this->localNow($target, $now), $problems,
                 array_column($warnings, 1, 0), $errorCount,
                 array_map(fn ($e) => ['label' => $e[0], 'count' => $e[1], 'new' => $e[2]], $errors),
                 isset($mine['at']) ? (int)$mine['at'] : null, isset($mine['ok_at']) ? (int)$mine['ok_at'] : null);
             $post = $this->policy->shouldPost($report);
-            $text = $this->messages->status($target, array_values($problems), array_values($warnings), $errorCount,
-                $errors, count($byFingerprint) - count($errors), array_values($idle));
+            $text = $this->text($target, $parts);
             return [$text, function () use ($post, $report, $posted, $mine, $now, $target): void {
                 if ($post) {
                     $posted[$target->websiteId] = ['at' => $now] + ($report->isAllOk() ? ['ok_at' => $now] : $mine);
@@ -116,6 +86,61 @@ class Status implements NotificationTypeInterface
                 }
             }, $post];
         });
+    }
+
+    /**
+     * What a status says, from the "checks" row (by scope and code) and the log errors (the "fingerprints" and
+     * "errors:recent" rows) since $from - for the hourly status and for "Send status now" (a snapshot's rows).
+     *
+     * @param array<int|string, array<string, array<mixed>>> $checks
+     * @param array<string, array<mixed>> $fingerprints
+     * @param list<array<int, mixed>> $recentErrors
+     * @return array{problems: string[], warnings: list<array{0: string, 1: string}>,
+     *     idle: list<array{0: string, 1: string}>, errorCount: int, errors: list<array{0: string, 1: int, 2: bool}>,
+     *     moreErrors: int}
+     */
+    public function parts(array $checks, array $fingerprints, array $recentErrors, int $from): array
+    {
+        $problems = [];
+        $warnings = [];
+        $idle = [];
+        foreach ($checks as $byCode) {
+            foreach ((array)$byCode as $code => $check) {
+                $status = $check['status'] ?? CheckResult::OK;
+                if (!empty($check['idle'])) {
+                    $idle[(string)$code] ??= [$this->pool->getLabel((string)$code), (string)($check['detail'] ?? '')];
+                } elseif ($status === CheckResult::FAIL) {
+                    $problems[(string)$code] = $this->pool->getLabel((string)$code);
+                } elseif ($status === CheckResult::WARN) {
+                    $warnings[(string)$code] ??= [$this->pool->getLabel((string)$code),
+                        (string)($check['detail'] ?? '')];
+                }
+            }
+        }
+        $byFingerprint = [];
+        foreach ($recentErrors as [$time, $fp, $count, $new]) {
+            if ((int)$time > $from) {
+                $byFingerprint[$fp] ??= ['count' => 0, 'new' => false];
+                $byFingerprint[$fp]['count'] += (int)$count;
+                $byFingerprint[$fp]['new'] = $byFingerprint[$fp]['new'] || (bool)$new;
+            }
+        }
+        uasort($byFingerprint, fn ($a, $b) => $b['count'] <=> $a['count']);
+        $errors = [];
+        foreach (array_slice($byFingerprint, 0, self::ERRORS, true) as $fp => $error) {
+            $errors[] = [Fingerprints::name((array)($fingerprints[$fp] ?? ['label' => '#' . $fp])), $error['count'],
+                $error['new']];
+        }
+        return ['problems' => array_values($problems), 'warnings' => array_values($warnings),
+            'idle' => array_values($idle), 'errorCount' => array_sum(array_column($byFingerprint, 'count')),
+            'errors' => $errors, 'moreErrors' => count($byFingerprint) - count($errors)];
+    }
+
+    /** @param array<string, mixed> $parts parts() */
+    public function text(Target $target, array $parts, string $heading = 'Hourly status'): string
+    {
+        return $this->messages->status($target, $parts['problems'], $parts['warnings'], $parts['errorCount'],
+            $parts['errors'], $parts['moreErrors'], $parts['idle'], $heading);
     }
 
     private function localNow(Target $target, int $now): \DateTimeImmutable
