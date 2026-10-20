@@ -13,6 +13,7 @@
 "A job running for over (minutes)","A job running for over (minutes)"
 "A server that reported before and is silent this long is a problem. Default: 15.","A server that reported before and is silent this long is a problem. Default: 15."
 "A status every hour through the alerts' queue: posted when something is not OK, and once a day as ""All checks OK"". More: README > When you hear about what.","A status every hour through the alerts' queue: posted when something is not OK, and once a day as ""All checks OK"". More: README > When you hear about what."
+"A status was sent %1 seconds ago. Try again in %2 seconds.","A status was sent %1 seconds ago. Try again in %2 seconds."
 "A website's own messages (its email settings, unsent sales emails, its daily summary) to its own channel. Without a row: the global channel.","A website's own messages (its email settings, unsent sales emails, its daily summary) to its own channel. Without a row: the global channel."
 "Add a rule","Add a rule"
 "Add a setting","Add a setting"
