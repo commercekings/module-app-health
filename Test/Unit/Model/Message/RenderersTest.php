@@ -126,6 +126,18 @@ class RenderersTest extends TestCase
         $this->assertStringStartsWith('*Problem: Cron stopped · Shop*', $pool->render('slack', $message));
     }
 
+    /** Escaping is the provider's (module-notification-slack escapes & and <): the renderer passes data on as is. */
+    public function testRenderersLeaveEscapingToTheProvider(): void
+    {
+        $message = new TeamMessageContent('New error in system.log · A&B <!channel>', TeamMessageContent::NOTICE,
+            [new TeamMessageSection(['Error: <https://evil.test|click> &amp; more'])], ['Ask <@U0123ABCD>.']);
+        $this->assertSame("*New error in system.log · A&B <!channel>*\n\nError: <https://evil.test|click> &amp; more"
+            . "\n\nWhat to do: Ask <@U0123ABCD>.", (new SlackRenderer())->render($message),
+            'unescaped here: escaped once, by the provider, not twice');
+        $this->assertStringContainsString('MUST escape & and <', (string)(new \ReflectionClass(
+            TeamMessageRendererInterface::class))->getDocComment(), 'the contract says so');
+    }
+
     public function testARendererThatIsNoneOrAKeyThatIsNoCodeIsRefused(): void
     {
         foreach ([['teams' => new \stdClass()], ['Teams!' => new PlainTextRenderer()]] as $renderers) {

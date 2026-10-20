@@ -18,7 +18,9 @@ use CommerceKings\AppHealth\Api\TeamMessageRendererInterface;
  *
  *   What to do: Is the cron container (or crontab) running? ...
  *
- * The provider (module-notification-slack) escapes the text it posts.
+ * It does not escape: the "slack" provider (module-notification-slack's SlackProvider) escapes & and < in what it
+ * posts, so shop data never becomes a mention or a link - a provider replacing it MUST do the same (see
+ * TeamMessageRendererInterface).
  */
 class SlackRenderer implements TeamMessageRendererInterface
 {
