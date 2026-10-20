@@ -110,6 +110,7 @@ The logs are read every 5 minutes; what you hear, and when:
 | A check's *Warning* | the hourly status ("Warnings: Queue (…)") and the daily summary | global (a website's own: its summary) |
 | Sensitive data in a log (*Security*) | at once – then at most one message per check every 30 min, what comes in between in the next | global |
 | A new CRITICAL log entry (and exceptions) | at once – the same 30-minute limit | global |
+| New CRITICAL log entries in the first hour after install | one digest when the hour is over ("First hour: N errors seen for the first time: …"); one coming 10+ times in that hour at once | global |
 | ERROR log entries | the hourly status: "New errors this hour: N" and the 5 most frequent | global |
 | WARNING log entries | the daily summary | global |
 | The hourly status | queued and delivered every hour (the heartbeat's proof); **posted** only with news since the last posted one – a new problem or warning, a new error, or a known one 10+ times in the hour (a "Still open: …" line names what it told before) – and "All checks OK" once a day, at the first status from *Daily summary at* | global – for all websites |
