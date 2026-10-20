@@ -123,6 +123,8 @@ class RulesTest extends TestCase
         $this->assertStringContainsString('realistic log sample', $guard->check('/(?:\w|\d)*x/'),
             'no nested quantifier, fine on long runs of one character, but not on a mixed log');
         $this->assertSame('', $guard->check('/(?:\w|\d)*x/', false), 'the cheap check (every run) skips the sample');
+        $this->assertStringContainsString('too slow on long lines', $guard->check('/\w*\w*\w*secret_\d/', false),
+            'fast while its literal is missing, but not after a long word run that ends in it');
         $this->assertStringContainsString('too slow', (new RegexGuard(0.0))->check('/\bsecret\b/'),
             'slower than the time limit on the sample');
         foreach ($this->detector()->rules() as $key => $rule) {

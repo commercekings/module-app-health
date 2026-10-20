@@ -19,10 +19,19 @@ class Detector
     /** @var array<string, int> rule key => entries where it hit the backtracking limit */
     private array $slow = [];
 
+    /** @var array<string, float> rule key => seconds spent since until() */
+    private array $timings = [];
+    private ?string $lastRule = null;
+    private ?string $cutAfter = null;
+    /** @var \Closure(): float */
+    private \Closure $clock;
+
     public function __construct(
         private readonly Rules $rules,
-        private readonly ValidatorPool $validators
+        private readonly ValidatorPool $validators,
+        ?\Closure $clock = null
     ) {
+        $this->clock = $clock ?? fn (): float => microtime(true);
     }
 
     /** @return array<string, int> "<set>/<rule>" => matches */
@@ -38,12 +47,16 @@ class Detector
         ini_set('pcre.backtrack_limit', (string)RegexGuard::BACKTRACK_LIMIT);
         try {
             foreach ($rules as $rule) {
-                if ($this->deadline !== null && microtime(true) > $this->deadline) {
+                if ($this->deadline !== null && ($this->clock)() > $this->deadline) {
                     $this->cut = true;
+                    $this->cutAfter = $this->lastRule; // the rule running when the time ran out
                     break;
                 }
                 // patterns passed RegexGuard: they compile; false = the backtracking limit hit
+                $started = ($this->clock)();
                 $hits = preg_match_all($rule['pattern'], $text, $matches);
+                $this->timings[$rule['key']] = ($this->timings[$rule['key']] ?? 0.0) + ($this->clock)() - $started;
+                $this->lastRule = $rule['key'];
                 if ($hits === false) {
                     $this->slow[$rule['key']] = ($this->slow[$rule['key']] ?? 0) + 1;
                     continue;
@@ -70,6 +83,21 @@ class Detector
     {
         $this->deadline = $deadline;
         $this->cut = false;
+    }
+
+    /**
+     * Where the time went since until(): the rule that was running when a scan was cut (null: none cut) and the three
+     * slowest rules in milliseconds; then starts over.
+     *
+     * @return array{rule: ?string, slowest: array<string, float>}
+     */
+    public function takeCut(): array
+    {
+        arsort($this->timings);
+        $cut = ['rule' => $this->cutAfter, 'slowest' => array_map(fn (float $seconds) => round($seconds * 1000, 1),
+            array_slice($this->timings, 0, 3, true))];
+        [$this->timings, $this->cutAfter, $this->lastRule] = [[], null, null];
+        return $cut;
     }
 
     /** Whether a scan stopped at the deadline since until(). */

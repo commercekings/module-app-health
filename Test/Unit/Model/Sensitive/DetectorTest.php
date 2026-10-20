@@ -76,6 +76,26 @@ class DetectorTest extends TestCase
         $this->assertFalse($detector->wasCut());
     }
 
+    public function testACutScanSaysWhichRuleRanAndTheSlowest(): void
+    {
+        $time = 0.0;
+        $base = $this->detector();
+        $detector = new \CommerceKings\AppHealth\Model\Sensitive\Detector(
+            (new \ReflectionProperty($base, 'rules'))->getValue($base),
+            (new \ReflectionProperty($base, 'validators'))->getValue($base),
+            function () use (&$time): float {
+                return $time++; // every reading of the clock a second later
+            }
+        );
+        $detector->until(2.5);
+        $detector->detect('card 4111 1111 1111 1111');
+        $this->assertTrue($detector->wasCut());
+        $first = array_key_first($detector->rules());
+        $this->assertSame(['rule' => $first, 'slowest' => [$first => 1000.0]], $detector->takeCut(),
+            'the first rule took a second (by the clock), the deadline passed before the second');
+        $this->assertSame(['rule' => null, 'slowest' => []], $detector->takeCut(), 'taken once');
+    }
+
     public function testALongEntryIsScannedFastAndCapped(): void
     {
         $text = str_repeat('Lorem ipsum dolor sit amet 12345 ', 2000) . ' 4111 1111 1111 1111';

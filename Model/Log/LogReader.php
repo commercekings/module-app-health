@@ -96,10 +96,12 @@ class LogReader
         $entries = [];
         $sensitive = [];
         $partial = $chunk->partial;
+        $outOfTime = false;
         $this->detector->until($deadline);
+        $this->detector->takeCut(); // the timings of this source only
         foreach ($item['parser']->parse($chunk->data) as $entry) {
             if (microtime(true) > $deadline) {
-                $partial = true; // out of time: the rest is not scanned (its bytes are read, the cursor moves on)
+                $outOfTime = true; // the rest is not scanned (its bytes are read, the cursor moves on)
                 break;
             }
             if ($readAt > 0 && $entry->time !== null && $entry->time < $readAt - self::OLD_SECONDS) {
@@ -116,8 +118,16 @@ class LogReader
                 $entries[] = $safe;
             }
         }
-        $partial = $partial || $this->detector->wasCut();
+        $outOfTime = $outOfTime || $this->detector->wasCut();
         $this->detector->until(null);
+        $cut = $this->detector->takeCut();
+        if ($outOfTime) {
+            $partial = true;
+            $this->logger->warning(sprintf('CommerceKings_AppHealth: the scan of %s stopped at its time budget (%d ms)'
+                . '%s; the slowest sensitive-data rules: %s', $source, (int)($this->budgetSeconds * 1000),
+                $cut['rule'] !== null ? ' during rule ' . $cut['rule'] : '', implode(', ', array_map(fn ($rule, $ms)
+                    => $rule . ' ' . $ms . ' ms', array_keys($cut['slowest']), $cut['slowest'])) ?: '-'));
+        }
         foreach ($this->detector->takeSlowRules() as $rule => $entriesHit) {
             $this->logger->warning(sprintf('CommerceKings_AppHealth: sensitive-data rule %s hit the backtracking limit'
                 . ' on %d entries of %s and found nothing there: make its pattern simpler', $rule, $entriesHit,

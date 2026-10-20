@@ -27,6 +27,8 @@ trait LogDir
     private Filesystem $filesystem;
     /** The reader's clock; the default Clock when unset. */
     private ?\Magento\Framework\Stdlib\DateTime\DateTime $logClock = null;
+    /** @var string[] the reader's warnings */
+    private array $logWarnings = [];
 
     private function logFilesystem(): Filesystem
     {
@@ -64,9 +66,12 @@ trait LogDir
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getRoot')->willReturn('/var/www/html');
         $detector = $this->detector();
+        $logger = $this->createStub(\Psr\Log\LoggerInterface::class);
+        $logger->method('warning')->willReturnCallback(function ($message) {
+            $this->logWarnings[] = $message;
+        });
         return new LogReader($pool, new Normalizer($detector), $state, $config, $directoryList,
-            $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock(), $detector,
-            $this->createStub(\Psr\Log\LoggerInterface::class), $budget);
+            $this->logClock ?? new \CommerceKings\AppHealth\Test\Unit\Stub\Clock(), $detector, $logger, $budget);
     }
 
     private function removeLogDir(): void

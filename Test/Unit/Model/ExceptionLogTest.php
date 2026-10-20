@@ -91,6 +91,8 @@ class ExceptionLogTest extends TestCase
         $entries = $log->newEntries();
         $this->state->commit();
         $this->assertSame([0, true], [$entries['entries'], $entries['partial']], 'no time left: nothing scanned');
+        $this->assertSame(['CommerceKings_AppHealth: the scan of exception.log stopped at its time budget (0 ms); the'
+            . ' slowest sensitive-data rules: -'], $this->logWarnings, 'said, with where the time went');
     }
 
     public function testABacklogOverTheCapReadsTheNewestAndReportsWhatWasSkipped(): void

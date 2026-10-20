@@ -6,9 +6,11 @@ namespace CommerceKings\AppHealth\Model\Sensitive;
 /**
  * Whether a rule's pattern is safe to run on every log entry: a PCRE pattern with delimiters, at most MAX_LENGTH
  * characters, that compiles, has no nested quantifier (the usual catastrophic backtracking, e.g. "(a+)+"), and finishes
- * worst-case samples within the backtracking limit Detector uses. When a rule is saved, also a realistic log sample
- * (sample(): about 80 KB of Monolog lines, JSON context, stack traces, SQL, tokens) within that limit and within
- * $maxMilliseconds - a pattern can be fine on one repeated character and still slow on a mixed log.
+ * worst-case samples within the backtracking limit Detector uses: long runs of one character, and long word and digit
+ * runs that end in the pattern's own literals (a pattern is often fast only while its literal is missing). When a
+ * rule is saved, also a realistic log sample (sample(): about 80 KB of Monolog lines, JSON context, stack traces,
+ * SQL, tokens) within that limit and within $maxMilliseconds - a pattern can be fine on one repeated character and
+ * still slow on a mixed log.
  */
 class RegexGuard
 {
@@ -44,7 +46,7 @@ class RegexGuard
         $limit = ini_get('pcre.backtrack_limit');
         ini_set('pcre.backtrack_limit', (string)self::BACKTRACK_LIMIT);
         try {
-            foreach ([str_repeat('a', 5000) . '!', str_repeat('1 ', 2500), str_repeat('a@b.', 1000)] as $sample) {
+            foreach ($this->samples($pattern) as $sample) {
                 if ($this->quietly(fn () => preg_match_all($pattern, $sample)) === false) {
                     return 'the pattern is too slow on long lines';
                 }
@@ -64,6 +66,29 @@ class RegexGuard
             ini_set('pcre.backtrack_limit', (string)$limit);
         }
         return '';
+    }
+
+    /**
+     * Long runs of one character, then each of the pattern's first literals (3+ plain characters outside classes and
+     * escapes) after a long word run, a digit run and a mixed one, followed by a character that breaks the match.
+     *
+     * @return string[]
+     */
+    private function samples(string $pattern): array
+    {
+        $samples = [str_repeat('a', 5000) . '!', str_repeat('1 ', 2500), str_repeat('a@b.', 1000)];
+        $body = (string)preg_replace('/^(.)(.*)\1[a-zA-Z]*$/s', '$2', $pattern);
+        // classes, escapes like \d and counts out; an escaped character is a literal
+        $body = (string)preg_replace(['/\[(?:\\\\.|[^\]\\\\])*\]/', '/\\\\[a-zA-Z]/', '/\{\d+(?:,\d*)?\}/'], ' ',
+            $body);
+        $body = (string)preg_replace('/\\\\(.)/', '$1', $body);
+        preg_match_all('/[A-Za-z0-9_=:@\/-]{3,}/', $body, $literals);
+        foreach (array_slice(array_unique($literals[0]), 0, 3) as $literal) {
+            foreach ([str_repeat('a', 5000), str_repeat('1', 5000), str_repeat('a1_', 1700)] as $run) {
+                $samples[] = $run . $literal . '!';
+            }
+        }
+        return $samples;
     }
 
     /** About 80 KB of log text as Magento writes it: entries with JSON context, stack traces, SQL errors, tokens. */
