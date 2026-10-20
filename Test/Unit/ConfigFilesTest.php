@@ -69,6 +69,8 @@ class ConfigFilesTest extends TestCase
         $this->assertNotEmpty($system->xpath('//group[@id="general"]/field[@id="website_channels"]/backend_model'));
         $this->assertSame('0', (string)$this->xml('config.xml')->default->commercekings_app_health->general
             ->shared_to_websites, 'shared problems to website channels: off by default');
+        $this->assertSame('0', (string)$this->xml('config.xml')->default->commercekings_app_health->general
+            ->include_log_message, 'the masked log message: off by default (type, count, time and file:line only)');
     }
 
     public function testNothingOnTheStorefront(): void

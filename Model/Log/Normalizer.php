@@ -9,8 +9,8 @@ use CommerceKings\AppHealth\Model\Sensitive\Detector;
 /**
  * What of a log entry may leave the server, whichever parser read it: the level and channel (checked), exception class
  * names (checked), where it happened (relative to the Magento root, else the last two path segments, plus the line),
- * a fingerprint, a safe label and - unless *Add the masked log message* is off (it is on by default) - the message
- * masked.
+ * a fingerprint, a safe label and - only when *Add the masked log message* is on (it is off by default) - the
+ * message masked.
  *
  * First, for all of them, the value after a secret's key word ("password hunter2", "pin=12") and the name after a
  * person's ("customer jane doe") become ***. Normalizing (the fingerprint and the label): URLs, emails, quoted

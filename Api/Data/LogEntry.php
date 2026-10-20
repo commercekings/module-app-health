@@ -5,7 +5,7 @@ namespace CommerceKings\AppHealth\Api\Data;
 
 /**
  * One log entry as a parser read it. Nothing of it is sent as it is: App health builds the fingerprint, the safe
- * label and the masked message (on by default) from $message and $classes, shows $file relative to the Magento root,
+ * label and the masked message (off by default) from $message and $classes, shows $file relative to the Magento root,
  * and scans $message and $text for sensitive data (rule names and counts only).
  *
  * @api

@@ -120,7 +120,7 @@ class Config
         return preg_match('#^https?://[^\s/]+#i', $url) ? $url : '';
     }
 
-    /** Alerts about log errors add their message, masked (on by default; off: labels only). */
+    /** Alerts about log errors add their message, masked (off by default: type, count, time and file:line only). */
     public function isLogMessageIncluded(): bool
     {
         return $this->scopeConfig->isSetFlag(self::GENERAL . 'include_log_message');

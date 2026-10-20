@@ -129,6 +129,9 @@ class PrivacyTest extends TestCase
         $this->assertStringContainsString("New errors this hour: 1\n• login failed: password (1×, new)", $everything,
             'an error: in the hourly status');
         $this->assertStringContainsString('1 new mail transport error', $everything);
+        $this->assertStringNotContainsString('Message: ', $everything, 'off (the default): no message line');
+        $this->assertMatchesRegularExpression('/Critical: Payment gateway down \([^)]+\)\nWhere: [^\n]+:\d+/',
+            $everything, 'label, count and time, then Where');
     }
 
     public function testTheMaskedMessageKeepsNoAddressNumberTokenUrlOrQuote(): void
