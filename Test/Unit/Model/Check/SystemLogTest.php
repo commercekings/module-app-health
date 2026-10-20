@@ -89,23 +89,36 @@ class SystemLogTest extends TestCase
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the window passed');
     }
 
-    public function testTheFirstDayIsOneDigestNotABurst(): void
+    public function testTheFirstHourIsOneDigestNotABurst(): void
     {
         $this->store->rows = []; // a fresh install: nothing known yet
         $this->run5();
         $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices,
-            'the first day: learning what this shop logs anyway');
+            'the first hour: learning what this shop logs anyway');
         $this->assertSame([], $this->run5(self::line('CRITICAL', 'Disk full on 7'))->notices);
-        $this->clock->now += 86400;
+        $this->clock->now += Fingerprints::LEARNING_SECONDS;
         $digest = $this->run5()->notices;
-        $this->assertSame('First day: 2 errors seen for the first time: Payment gateway down, Disk full on.'
+        $this->assertSame('First hour: 2 errors seen for the first time: Payment gateway down, Disk full on.'
             . ' The daily summary lists them; a new one is sent at once from now on.', $digest[0], 'one digest');
         $this->assertCount(2, $digest, 'and where to look');
         $this->assertSame([], $this->run5(self::line('CRITICAL', 'Payment gateway down'))->notices,
-            'known from the first day: told again only after the repeat interval');
+            'known from the first hour: told again only after the repeat interval');
         $this->assertStringStartsWith('Critical: Brand new failure',
             $this->run5(self::line('CRITICAL', 'Brand new failure'))->notices[0] ?? '', 'new: at once');
         $this->assertNull($this->store->row(Fingerprints::LEARNING_KEY), 'learned');
+    }
+
+    public function testACriticalRepeatingInTheFirstHourIsToldAtOnce(): void
+    {
+        $this->store->rows = [];
+        $this->run5();
+        $this->assertSame([], $this->run5(str_repeat(self::line('CRITICAL', 'Payment gateway down'), 4), 1)->notices);
+        $told = $this->run5(str_repeat(self::line('CRITICAL', 'Payment gateway down'), 6), 1)->notices;
+        $this->assertStringStartsWith('Critical: Payment gateway down', $told[0] ?? '',
+            '10 times within the hour: not background noise - at once');
+        $this->clock->now += Fingerprints::LEARNING_SECONDS;
+        $this->assertStringStartsWith('First hour over: no error seen for the first time', $this->run5()->notices[0],
+            'told already: not in the digest');
     }
 
     public function testACriticalIsToldAgainAfterTheRepeatInterval(): void

@@ -25,9 +25,13 @@ class Fingerprints
     public const RECENT_LIMIT = 2000;
     public const RECENT_SECONDS = 86400;
     public const ERRORS_KEY = 'errors:recent';
-    /** The first day after install: {until, seen: [labels]} - new criticals counted, not told one by one. */
+    /**
+     * The first hour after install: {until, seen: fingerprint => label, counts: fingerprint => n} - new criticals
+     * counted, not told one by one; one coming LEARNING_REPEATS times in it is told at once (not background noise).
+     */
     public const LEARNING_KEY = 'fingerprints:learning';
-    public const LEARNING_SECONDS = 86400;
+    public const LEARNING_SECONDS = 3600;
+    public const LEARNING_REPEATS = 10;
     public const RECENT_ERRORS_HOURS = 3;
     public const RECENT_ERRORS_LIMIT = 500;
     public const LEVELS = ['CRITICAL' => 'Critical', 'ERROR' => 'Error', 'WARNING' => 'Warning'];
@@ -56,13 +60,13 @@ class Fingerprints
         }
         $learning = $this->state->get(self::LEARNING_KEY);
         if ($learning === null && $this->state->get(self::KEY) === null) {
-            // a fresh install: the first day's "new" errors are what this shop logs anyway - one digest, no burst
+            // a fresh install: the first hour's "new" errors are what this shop logs anyway - one digest, no burst
             $this->state->set(self::LEARNING_KEY, $learning = ['until' => $now + self::LEARNING_SECONDS, 'seen' => []]);
         }
         $known = (array)($this->state->get(self::KEY) ?? []);
         $digest = [];
         if ($learning !== null && (int)($learning['until'] ?? 0) <= $now) {
-            // the day is over: one digest, and it counts as telling them (their repeats wait from now)
+            // the hour is over: one digest, and it counts as telling them (their repeats wait from now)
             $digest = [['kind' => 'DIGEST', 'seen' => array_values((array)($learning['seen'] ?? []))]];
             foreach (array_keys((array)($learning['seen'] ?? [])) as $fp) {
                 if (isset($known[$fp])) {
@@ -102,14 +106,20 @@ class Fingerprints
                 $repeatCritical && $level === 'CRITICAL' && (int)($seen['told'] ?? 0) <= $now - $repeat => 'CRITICAL',
                 default => null,
             };
-            if ($kind === 'NEW' && $learning !== null) {
-                // learning: counted for the digest, and told now as far as repeats go
-                if (count($learning['seen']) < self::LIMIT) {
-                    $learning['seen'][(string)$fp] = self::name($run);
+            if ($learning !== null && $level === 'CRITICAL' && ($kind === 'NEW' || isset($learning['seen'][$fp]))) {
+                // learning: counted for the digest, and told now as far as repeats go - unless it keeps coming
+                $learning['counts'][$fp] = (int)($learning['counts'][$fp] ?? 0) + (int)$run['count'];
+                if ($learning['counts'][$fp] >= self::LEARNING_REPEATS) {
+                    unset($learning['seen'][$fp]);
+                    $kind = 'NEW';
+                } else {
+                    if (count((array)$learning['seen']) < self::LIMIT) {
+                        $learning['seen'][(string)$fp] = self::name($run);
+                    }
+                    $kind = null;
                 }
                 $this->state->set(self::LEARNING_KEY, $learning);
-                $kind = null;
-                $seen = ['first' => $now, 'told' => $now];
+                $seen ??= ['first' => $now, 'told' => $now];
             }
             $known[$fp] = ['label' => $run['label'], 'level' => $level, 'channel' => $run['channel'],
                 'location' => $run['location'], 'message' => $run['message'] ?? null,
@@ -169,8 +179,8 @@ class Fingerprints
     {
         if (($news['kind'] ?? '') === 'DIGEST') {
             $seen = (array)$news['seen'];
-            return $seen === [] ? 'First day over: no error seen for the first time. A new one is sent at once from'
-                . ' now on.' : sprintf('First day: %s seen for the first time: %s. The daily summary lists them; a'
+            return $seen === [] ? 'First hour over: no error seen for the first time. A new one is sent at once from'
+                . ' now on.' : sprintf('First hour: %s seen for the first time: %s. The daily summary lists them; a'
                 . ' new one is sent at once from now on.', Format::many(count($seen), 'errors'),
                 implode(', ', array_slice($seen, 0, 5)) . (count($seen) > 5 ? ' and ' . (count($seen) - 5)
                 . ' more' : ''));
