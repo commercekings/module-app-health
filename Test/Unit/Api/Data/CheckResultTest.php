@@ -27,6 +27,17 @@ class CheckResultTest extends TestCase
         $this->assertStringEndsWith('…', $long);
     }
 
+    public function testANoticeKeepsItsLinesEachCleaned(): void
+    {
+        $result = new CheckResult(CheckResult::OK, '', [],
+            ["Error: x  of jane.doe@example.com\n\n  Where: a.php:1 \n"]);
+        $this->assertSame(["Error: x of [address]\nWhere: a.php:1"], $result->notices);
+        $long = (new CheckResult(CheckResult::OK, '', [], [str_repeat('x', 300) . "\n" . str_repeat('y', 300)]))
+            ->notices[0];
+        $this->assertSame(CheckResult::NOTICE_LENGTH, mb_strlen($long), 'at most NOTICE_LENGTH in all');
+        $this->assertStringEndsWith('y…', $long);
+    }
+
     public function testCountsAreNamesWithWholeNumbers(): void
     {
         $counts = ['runs' => 3, 'errors:sitemap_generate' => 1, 'exceptions:Magento\\Framework\\Exception\\X' => 2,

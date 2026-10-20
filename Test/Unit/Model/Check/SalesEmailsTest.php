@@ -53,7 +53,7 @@ class SalesEmailsTest extends TestCase
             $results[1]->causes[0]->detail);
         $this->assertStringContainsString('sales_send_order_emails cron', $results[1]->causes[0]->hint,
             'asynchronous sending');
-        $this->assertSame(['unsent' => 4], $results[1]->gauges);
+        $this->assertSame(['unsent' => 4, 'oldest' => self::NOW - 5400], $results[1]->gauges);
         $this->assertSame(CheckResult::OK, $results[2]->status, 'under the limit on website 2');
     }
 

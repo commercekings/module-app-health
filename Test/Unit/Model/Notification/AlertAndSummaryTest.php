@@ -79,8 +79,8 @@ class AlertAndSummaryTest extends TestCase
     {
         $this->alert(0);
         $this->assertCount(2, $this->sent);
-        $this->assertStringStartsWith('🔴 *Cron stopped – Shop (all websites)*', $this->sent[0]);
-        $this->assertStringStartsWith('🟡 *Indexers warning – Shop (all websites)*', $this->sent[1]);
+        $this->assertStringStartsWith('*Problem: Cron stopped · Shop (all websites)*', $this->sent[0]);
+        $this->assertStringStartsWith('*Warning: Indexers · Shop (all websites)*', $this->sent[1]);
         $this->assertSame(['cron' => ['status' => 'fail', 'at' => self::NOW],
             'indexers' => ['status' => 'warn', 'at' => self::NOW]], $this->store->row('alerted:0'));
         $this->sent = [];
@@ -92,12 +92,12 @@ class AlertAndSummaryTest extends TestCase
     {
         $this->store->seed(['alerted:0' => ['cron' => ['status' => 'fail', 'at' => self::NOW],
             'indexers' => ['status' => 'warn', 'at' => self::NOW]],
-            AlertPlan::NOTICES . '0' => AlertPlan::addNotices([], ['system_log' => ['NEW ERROR main: a x1 #11111111',
-                'NEW ERROR main: b x2 #22222222']], self::NOW)]);
+            AlertPlan::NOTICES . '0' => AlertPlan::addNotices([], ['system_log' => ["Error: a (07:00)\nWhere: a.php:1",
+                'Error: b (2×, 07:10)']], self::NOW)]);
         $this->alert(0);
         $this->assertCount(1, $this->sent);
-        $this->assertStringContainsString("\n\n> NEW ERROR main: a x1 #11111111\n"
-            . "> NEW ERROR main: b x2 #22222222\n\n> Check: ",
+        $this->assertStringContainsString("*New errors in system.log · Shop (all websites)*\n\n"
+            . "Error: a (07:00)\nWhere: a.php:1\n\nError: b (2×, 07:10)\n\nWhat to do: ",
             $this->sent[0]);
         $this->assertSame(['system_log' => 2], $this->store->row(AlertPlan::NOTICED . '0'));
         $this->sent = [];
@@ -118,7 +118,8 @@ class AlertAndSummaryTest extends TestCase
     public function testAWebsitesAlertCarriesOnlyItsOwnChecks(): void
     {
         $this->alert(2);
-        $this->assertSame(["🔴 *Emails disabled – Shop*\n\n> Emails are disabled.\n\n> Check: Look at Email sending."],
+        $this->assertSame(["*Problem: Emails disabled · Shop*\n\nEmails are disabled.\n\n"
+            . 'What to do: Look at Email sending.'],
             $this->sent);
         $this->sent = [];
         $this->alert(1);
@@ -136,10 +137,10 @@ class AlertAndSummaryTest extends TestCase
     {
         $this->summary(['general/summary' => '1', 'general/summary_time' => '07,30,00']);
         $this->assertCount(1, $this->sent);
-        $this->assertStringStartsWith("*Daily summary – Shop – 20 Oct*\n\n*Problems (3)*\n"
-            . "> 🔴 Cron: no job has run since 07:48 (12 min)\n> 🟡 Indexers: x invalid for 2 h\n"
-            . "> 🔴 Email sending: emails are disabled\n\n", $this->sent[0]);
-        $this->assertStringEndsWith("\n\n*OK all day*\n> Caches", $this->sent[0],
+        $this->assertStringStartsWith("*Shop · daily summary · 20 Oct*\n\n*Needs attention*\n"
+            . "• Cron: no job has run since 07:48 (12 min)\n• Indexers: x invalid for 2 h\n"
+            . "• Email sending: emails are disabled\n\n", $this->sent[0]);
+        $this->assertStringEndsWith("\n\n*All OK*\n• Caches", $this->sent[0],
             'the tally of 25 hours ago is left out');
     }
 

@@ -39,7 +39,7 @@ class Exceptions implements CheckInterface
 
     public function getHint(): string
     {
-        return (string)__('var/log/exception.log: look for the class or the fingerprint around that time.');
+        return (string)__('var/log/exception.log: look for the class around that time, in the file it names.');
     }
 
     public function getLabel(): string
@@ -74,7 +74,7 @@ class Exceptions implements CheckInterface
         $news = $this->fingerprints->record($new['safe'], $now, false);
         $notices = array_map([Fingerprints::class, 'notice'], array_slice($news, 0, SystemLog::NOTICES));
         if (count($news) > SystemLog::NOTICES) {
-            $notices[] = sprintf('+%d more new exceptions (see the daily summary)', count($news) - SystemLog::NOTICES);
+            $notices[] = sprintf('…and %d more (see the daily summary)', count($news) - SystemLog::NOTICES);
         }
         $total = 0;
         $partial = false;
@@ -83,6 +83,7 @@ class Exceptions implements CheckInterface
             $total += (int)$sample[1];
             $partial = $partial || !empty($sample[3]);
             foreach ((array)$sample[2] as $class => $count) {
+                $class = substr((string)strrchr('\\' . $class, '\\'), 1); // without its namespace
                 $byClass[$class] = ($byClass[$class] ?? 0) + (int)$count;
             }
         }

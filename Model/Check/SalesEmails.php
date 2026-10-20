@@ -74,11 +74,12 @@ class SalesEmails implements WebsiteCheckInterface
         $results = [];
         foreach ($unsent as $websiteId => $counts) {
             $total = array_sum($counts);
+            $gauges = ['unsent' => $total] + ($total > 0 ? ['oldest' => $oldest[$websiteId] ?? 0] : []);
             $results[$websiteId] = $total < $threshold
-                ? new CheckResult(CheckResult::OK, '', [], [], '', ['unsent' => $total])
+                ? new CheckResult(CheckResult::OK, '', [], [], '', $gauges)
                 : new CheckResult(CheckResult::FAIL, sprintf('%d sales emails not sent after %s (%s)', $total,
                     Format::duration($minutes * 60), Format::top($counts)), [], [], 'Sales emails not sent',
-                    ['unsent' => $total], [new Cause('sales_emails_unsent', sprintf('%d unsent (%s), the oldest'
+                    $gauges, [new Cause('sales_emails_unsent', sprintf('%d unsent (%s), the oldest'
                     . ' from %s', $total, Format::top($counts), Format::at($oldest[$websiteId] ?? 0)), $async
                     ? (string)__('Asynchronous sending is on: is the sales_send_order_emails cron running? Then the'
                         . ' mail server (see Sending).')

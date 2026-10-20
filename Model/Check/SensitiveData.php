@@ -96,8 +96,8 @@ class SensitiveData implements CheckInterface
     }
 
     /**
-     * "> 🚨 Possible PCI: payment card number in system.log (×3, last {t}) at Payment/Model/Gateway.php:120 · #fp",
-     * the most serious first, then each category's hint once.
+     * "PCI: payment card number in system.log (3×, last {t})" and "Where: Payment/Model/Gateway.php:120" per finding,
+     * the most serious first, then each category's hint once ("Check: ...").
      *
      * @param list<array<string, mixed>> $news
      * @param array<string, array<string, mixed>> $rules
@@ -109,19 +109,18 @@ class SensitiveData implements CheckInterface
         $hints = [];
         foreach (array_slice($news, 0, self::NOTICES) as $finding) {
             $rule = $rules[$finding['rule']];
-            $lines[] = '> ' . ($finding['severity'] === 'critical' ? '🚨' : '🟡') . ' Possible ' . $rule['setLabel']
-                . ': ' . $rule['label'] . ' in ' . $finding['source'] . ' (×' . Format::number($finding['count'])
-                . ', last ' . Format::at($finding['last']) . ')'
-                . ($finding['location'] ? ' at ' . $finding['location'] : '') . ' · #' . $finding['fp'];
+            $lines[] = $rule['setLabel'] . ': ' . $rule['label'] . ' in ' . $finding['source'] . ' ('
+                . Format::number($finding['count']) . '×, last ' . Format::at($finding['last']) . ')'
+                . ($finding['location'] ? "\nWhere: " . $finding['location'] : '');
             if ($rule['hint'] !== '') {
                 $hints[$rule['hint']] = true;
             }
         }
         if (count($news) > self::NOTICES) {
-            $lines[] = '> …and ' . (count($news) - self::NOTICES) . ' more';
+            $lines[] = '…and ' . (count($news) - self::NOTICES) . ' more';
         }
         foreach (array_keys($hints) as $hint) {
-            $lines[] = '> Check: ' . $hint;
+            $lines[] = 'Check: ' . $hint;
         }
         return $lines;
     }

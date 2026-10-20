@@ -44,7 +44,7 @@ class SystemLog implements CheckInterface
 
     public function getHint(): string
     {
-        return (string)__('var/log/system.log: look for the fingerprint\'s error around that time.');
+        return (string)__('var/log/system.log: look for the error around that time, in the file it names.');
     }
 
     public function getLabel(): string
@@ -86,7 +86,7 @@ class SystemLog implements CheckInterface
         if ($errors > 0) {
             $top = [];
             foreach (array_slice($byFingerprint, 0, 3, true) as $fp => $count) {
-                $top[$labels[$fp] . ' #' . $fp] = $count;
+                $top[$labels[$fp]] = ($top[$labels[$fp]] ?? 0) + $count;
             }
             $samples[] = [$now, $errors, $top, $read['partial']];
         }
@@ -119,7 +119,7 @@ class SystemLog implements CheckInterface
         $notices = array_map([Fingerprints::class, 'notice'], array_slice($news, 0, self::NOTICES));
         $more = count($news) - self::NOTICES;
         if ($more > 0) {
-            $notices[] = sprintf('+%d more new or critical errors (see the daily summary)', $more);
+            $notices[] = sprintf('…and %d more (see the daily summary)', $more);
         }
         return $notices;
     }

@@ -11,8 +11,8 @@ use CommerceKings\AppHealth\Test\Unit\Stub\Pool;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The approved layout: one problem per alert, its first line what and where, status emoji, then a blank line, one fact
- * per quote line, a blank line and where to look; summary sections apart, empty ones left out.
+ * The approved layout (Variation B): no emoji; a bold first line that says what and where, a blank line, one fact per
+ * line, a blank line and what to do; the summary's sections as bold headings with "• " lines, empty ones left out.
  */
 class MessagesTest extends TestCase
 {
@@ -34,16 +34,16 @@ class MessagesTest extends TestCase
         return new Target($websiteId, 1, 'slack', 'C0123456789', 'Main Website Store', 'Europe/Belgrade');
     }
 
-    public function testAProblemSaysWhatAndWhereThenWhyAndWhereToLook(): void
+    public function testAProblemSaysWhatAndWhereThenWhyAndWhatToDo(): void
     {
         $check = ['status' => 'fail', 'title' => 'Cron stopped', 'since' => self::NOW - 600,
             'detail' => 'no job has run since {t:' . (self::NOW - 3900) . '} (65 min)'];
-        $this->assertSame("🔴 *Cron stopped – Main Website Store (all websites)*\n\n"
-            . "> No job has run since 08:55 (65 min).\n\n"
-            . '> Check: Look at Cron.', $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
+        $this->assertSame("*Problem: Cron stopped · Main Website Store (all websites)*\n\n"
+            . "No job has run since 08:55 (65 min).\n\n"
+            . 'What to do: Look at Cron.', $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
     }
 
-    public function testCausesSayWhyAndWhereToLook(): void
+    public function testCausesOneFactPerLine(): void
     {
         $check = ['status' => 'fail', 'title' => 'Cron jobs stuck', 'since' => self::NOW,
             'detail' => 'indexer_reindex_all_invalid running for 3 h', 'causes' => [
@@ -51,10 +51,10 @@ class MessagesTest extends TestCase
                     . '})', 'The process may have crashed: restart cron, then clear the stuck job.'],
                 ['cron_group_waiting', '12 other jobs in its group are waiting', ''],
             ]];
-        $this->assertSame("🔴 *Cron jobs stuck – Main Website Store (all websites)*\n\n"
-            . "> Job indexer_reindex_all_invalid running for 3 h (since 07:00).\n"
-            . "> 12 other jobs in its group are waiting.\n\n"
-            . '> Check: The process may have crashed: restart cron, then clear the stuck job.',
+        $this->assertSame("*Problem: Cron jobs stuck · Main Website Store (all websites)*\n\n"
+            . "Job indexer_reindex_all_invalid running for 3 h (since 07:00).\n"
+            . "12 other jobs in its group are waiting.\n\n"
+            . 'What to do: The process may have crashed: restart cron, then clear the stuck job.',
             $this->messages->alert($this->target(), 'cron', $check, AlertPlan::PROBLEM));
     }
 
@@ -62,25 +62,42 @@ class MessagesTest extends TestCase
     {
         $warn = ['status' => 'warn', 'title' => 'Cache invalidated', 'detail' => 'config invalidated for 2 h',
             'since' => self::NOW - 7200];
-        $this->assertStringStartsWith('🟡 *Cache invalidated – Main Website Store*',
-            $this->messages->alert($this->target(1), 'caches', $warn, AlertPlan::PROBLEM));
+        $this->assertSame("*Warning: Cache invalidated · Main Website Store*\n\nConfig invalidated for 2 h.\n\n"
+            . 'What to do: Look at Caches.', $this->messages->alert($this->target(1), 'caches', $warn,
+                AlertPlan::PROBLEM));
         $fail = ['status' => 'fail', 'detail' => 'catalog_product_price invalid for 7 h',
             'since' => self::NOW - 25 * 3600];
-        $this->assertSame("🔴 *Still: Indexers failing – Main Website Store (all websites)*\n\n"
-            . "> catalog_product_price invalid for 7 h.\n> Failing since 19 Oct 09:00.\n\n> Check: Look at Indexers.",
+        $this->assertSame("*Problem: Indexers · Main Website Store (all websites)*\n\n"
+            . "catalog_product_price invalid for 7 h.\nStill failing since 19 Oct 09:00.\n\n"
+            . 'What to do: Look at Indexers.',
             $this->messages->alert($this->target(), 'indexers', $fail, AlertPlan::REPEAT),
-            'no title: "<label> failing"');
-        $this->assertSame("✅ *Recovered: Cron – Main Website Store (all websites)*\n\n> OK again since 09:52.",
+            'no title: the label; the same header as the first alert');
+        $this->assertSame("*Resolved: Cron · Main Website Store (all websites)*\n\nOK again since 09:52.",
             $this->messages->alert($this->target(), 'cron', ['status' => 'ok', 'since' => self::NOW - 480],
                 AlertPlan::RECOVERED));
     }
 
-    public function testNewErrorsOfOneCheckInOneMessage(): void
+    public function testANewError(): void
     {
-        $this->assertSame("🔴 *New errors: system.log – Main Website Store (all websites)*\n\n"
-            . "> NEW ERROR main: Unable to send *** x3 #a1b2c3d4\n\n> Check: Look at system.log.",
+        $this->assertSame("*New error in system.log · Main Website Store (all websites)*\n\n"
+            . "Error: Unable to send order (09:50)\nWhere: app/code/A/B.php:84\n\nWhat to do: Look at system.log.",
             $this->messages->notices($this->target(), 'system_log',
-                [7 => 'NEW ERROR main: Unable to send *** x3 #a1b2c3d4']));
+                [7 => "Error: Unable to send order ({t:" . (self::NOW - 600) . "})\nWhere: app/code/A/B.php:84"]));
+    }
+
+    public function testSeveralNewErrorsApartByABlankLine(): void
+    {
+        $this->assertSame("*New errors in exception.log · Main Website Store (all websites)*\n\n"
+            . "Critical: PaymentException (3×, 09:50)\nWhere: app/code/A/B.php:84\nMessage: Card *** declined\n\n"
+            . "Critical: NoSuchEntityException (09:55)\n\n"
+            . "…and 2 more (see the daily summary)\n\n"
+            . 'What to do: Look at exception.log.',
+            $this->messages->notices($this->target(), 'exceptions', [
+                "Critical: PaymentException (3×, {t:" . (self::NOW - 600) . "})\nWhere: app/code/A/B.php:84\n"
+                    . 'Message: Card *** declined',
+                'Critical: NoSuchEntityException ({t:' . (self::NOW - 300) . '})',
+                '…and 2 more (see the daily summary)',
+            ]));
     }
 
     public function testTheDailySummary(): void
@@ -101,26 +118,42 @@ class MessagesTest extends TestCase
                 'fp:dddddddd' => 12]], 'email_failing' => ['w' => 0, 'c' => ['mail errors' => 0]]],
         ];
         $fingerprints = [
-            'aaaaaaaa' => ['label' => 'Unable to send order ***', 'level' => 'ERROR', 'message' => 'Unable to send'
+            'aaaaaaaa' => ['label' => 'Unable to send order', 'level' => 'ERROR', 'message' => 'Unable to send'
                 . ' order *** to ***', 'location' => 'app/code/A/B.php:84', 'first' => self::NOW - 3600,
                 'last' => self::NOW - 600],
             'bbbbbbbb' => ['label' => 'Magento\\Framework\\Exception\\NoSuchEntityException', 'level' => 'CRITICAL',
                 'message' => 'No such entity with ***', 'first' => 1, 'last' => self::NOW - 7200],
             'cccccccc' => ['label' => 'Payment gateway down', 'level' => 'CRITICAL', 'first' => 1,
                 'last' => self::NOW - 60, 'location' => '…/pay/Client.php:88'],
-            'dddddddd' => ['label' => 'Slow response ***', 'level' => 'WARNING', 'first' => 1, 'last' => self::NOW],
+            'dddddddd' => ['label' => 'Slow response', 'level' => 'WARNING', 'first' => 1, 'last' => self::NOW],
         ];
-        $this->assertSame("*Daily summary – Main Website Store – 20 Oct*\n\n"
-            . "*Problems (2)*\n> 🔴 Cron: no job has run since 09:00 (60 min)\n> ✅ Caches: warned earlier, ok now\n\n"
-            . "*Logs (24 h)*\n> system.log: 1 critical · 14 errors · 52 warnings\n> exception.log: 5\n\n"
-            . "🔴 *Critical*\n"
-            . "> Payment gateway down ×1 · 09:59 · …/pay/Client.php:88 · #cccccccc\n"
-            . "> NoSuchEntityException: No such entity with *** ×5 · 08:00 · #bbbbbbbb\n\n"
-            . "🟠 *Errors*\n> 🆕 Unable to send order *** to *** ×14 · 09:50 · app/code/A/B.php:84 · #aaaaaaaa\n\n"
-            . "🟡 *Warnings*\n> Slow response *** ×52 · 10:00 · #dddddddd\n\n"
-            . "*Email*\n> Sales emails unsent: 0\n> Mail errors: 0\n\n"
-            . "*OK all day*\n> Indexers · Sending · Email sending",
-            $this->messages->summary($this->target(1), $checks, $tallies, self::NOW, $fingerprints));
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n"
+            . "*Needs attention*\n• Cron: no job has run since 09:00 (60 min)\n• Caches: warned earlier, OK now\n\n"
+            . "*Errors, last 24 h*\n"
+            . "• Critical: Payment gateway down (1×, 09:59)\n"
+            . "• Critical: NoSuchEntityException (5×, 08:00)\n"
+            . "• Error: Unable to send order (14×, 09:50, new)\n"
+            . "• Warning: Slow response (52×, 10:00)\n\n"
+            . "*Email*\n• All order emails sent, no mail errors\n\n"
+            . "*All OK*\n• Indexers, sending, email sending",
+            $this->messages->summary($this->target(1), $checks, $tallies, self::NOW, $fingerprints),
+            'no fingerprints, no file paths, no masked messages');
+    }
+
+    public function testUnsentEmailsAndMailErrorsALineEach(): void
+    {
+        $checks = ['sales_emails' => ['status' => 'ok', 'gauges' => ['unsent' => 2, 'oldest' => self::NOW - 2880]],
+            'email_failing' => ['status' => 'ok', 'gauges' => ['last error' => self::NOW - 1200]]];
+        $tallies = [['email_failing' => ['w' => 0, 'c' => ['mail errors' => 3]]]];
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n"
+            . "*Email*\n• 2 order emails not sent, oldest 09:12\n• 3 mail errors, last 09:40\n\n*All OK*\n• Sending",
+            $this->messages->summary($this->target(1), $checks, $tallies, self::NOW));
+        $checks['sales_emails']['gauges'] = ['unsent' => 0];
+        $this->assertStringContainsString("*Email*\n• All order emails sent\n• 3 mail errors, last 09:40",
+            $this->messages->summary($this->target(1), $checks, $tallies, self::NOW));
+        $this->assertStringContainsString("*Email*\n• 1 order email not sent, oldest 09:12\n• No mail errors\n",
+            $this->messages->summary($this->target(1), ['sales_emails' => ['status' => 'ok', 'gauges' => [
+                'unsent' => 1, 'oldest' => self::NOW - 2880]]] + $checks, [], self::NOW));
     }
 
     public function testEachLevelIsCappedThenCounted(): void
@@ -132,30 +165,43 @@ class MessagesTest extends TestCase
             $fingerprints[$fp] = ['label' => 'w' . $i, 'level' => 'WARNING', 'first' => 1, 'last' => self::NOW - $i];
             $counts['fp:' . $fp] = 1;
         }
-        $text = $this->messages->summary($this->target(1), ['system_log' => ['status' => 'ok']],
-            [['system_log' => ['w' => 0, 'c' => $counts]]], self::NOW, $fingerprints);
-        $this->assertStringContainsString("🟡 *Warnings*\n> w0 ×1 · 10:00 · #00000000\n> w1 ×1", $text,
-            'the latest first');
-        $this->assertStringContainsString("> w2 ×1 · 09:59 · #00000002\n> …and 2 more", $text);
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n*Errors, last 24 h*\n"
+            . "• Warning: w0 (1×, 10:00)\n• Warning: w1 (1×, 09:59)\n• Warning: w2 (1×, 09:59)\n• …and 2 more",
+            $this->messages->summary($this->target(1), ['system_log' => ['status' => 'ok']],
+                [['system_log' => ['w' => 0, 'c' => $counts]]], self::NOW, $fingerprints), 'the latest first');
     }
 
     public function testEmptySectionsAreLeftOut(): void
     {
-        $this->assertSame("*Daily summary – Main Website Store – 20 Oct*\n\n*OK all day*\n> Indexers",
-            $this->messages->summary($this->target(1), ['indexers' => ['status' => 'ok']], [], self::NOW));
-    }
-
-    public function testOtherCountsOneCheckPerLineTheirNumbersApart(): void
-    {
-        $text = $this->messages->summary($this->target(1), ['caches' => ['status' => 'ok']],
-            [['caches' => ['w' => 0, 'c' => ['flushes' => 3, 'invalidated' => 1]]]], self::NOW);
-        $this->assertSame("*Daily summary – Main Website Store – 20 Oct*\n\n"
-            . "*Other (24 h)*\n> Caches: 3 flushes · 1 invalidated\n\n*OK all day*\n> Caches", $text);
+        $this->assertSame("*Main Website Store · daily summary · 20 Oct*\n\n*All OK*\n"
+            . '• Indexers, caches, email sending',
+            $this->messages->summary($this->target(1), ['indexers' => ['status' => 'ok'],
+                'caches' => ['status' => 'ok'], 'email_disabled' => ['status' => 'ok'],
+                'sensitive_data' => ['status' => 'ok']], [], self::NOW), 'sensitive data: its alerts only');
+        $this->assertSame('*Main Website Store (all websites) · daily summary · 20 Oct*',
+            $this->messages->summary($this->target(), [], [], self::NOW));
     }
 
     public function testTestMessagesSayWhatTheChannelGets(): void
     {
-        $this->assertStringContainsString('checks for all websites', $this->messages->test($this->target()));
+        $this->assertStringStartsWith("*Test alert · Main Website Store (all websites)*\n\nThis channel gets the alerts"
+            . ' of the checks for all websites', $this->messages->test($this->target()));
         $this->assertStringContainsString('this website\'s alerts', $this->messages->test($this->target(2)));
+    }
+
+    public function testNoEmojiAnywhere(): void
+    {
+        $texts = [$this->messages->test($this->target()),
+            $this->messages->alert($this->target(), 'cron', ['status' => 'fail', 'detail' => 'x'], AlertPlan::PROBLEM),
+            $this->messages->alert($this->target(), 'cron', ['status' => 'warn'], AlertPlan::REPEAT),
+            $this->messages->alert($this->target(), 'cron', ['status' => 'ok'], AlertPlan::RECOVERED),
+            $this->messages->notices($this->target(), 'sensitive_data', ['PCI: x (1×, last 09:00)']),
+            $this->messages->summary($this->target(1), ['cron' => ['status' => 'fail'],
+                'caches' => ['status' => 'warn'], 'indexers' => ['status' => 'ok']], [], self::NOW)];
+        foreach ($texts as $text) {
+            $this->assertDoesNotMatchRegularExpression('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}]/u', $text, $text);
+        }
+        $this->assertStringStartsWith('*Security: sensitive data in logs · Main Website Store (all websites)*',
+            $texts[4]);
     }
 }

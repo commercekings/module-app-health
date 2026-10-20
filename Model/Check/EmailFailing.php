@@ -33,6 +33,8 @@ class EmailFailing implements CheckInterface
     public const CODE = 'email_failing';
     /** While sending is broken: since, the last error, its reason and cause. */
     private const CURSOR = 'cursor:email_failing';
+    /** The latest mail transport error, for the daily summary ("last 09:40"). */
+    private const LAST = 'cursor:email_failing_last';
     /** Where to look, by the kind of mail transport failure (Normalizer::mailReason()). */
     private const HINTS = [
         'refused' => 'Is the mail server running and reachable from this server (host, port, firewall)?',
@@ -84,6 +86,7 @@ class EmailFailing implements CheckInterface
         if ($mail > 0) {
             usort($mailEntries, fn ($a, $b) => (int)($b['time'] ?? 0) <=> (int)($a['time'] ?? 0));
             $latest = $mailEntries[0];
+            $this->state->set(self::LAST, ['at' => (int)($latest['time'] ?? $now)]);
             $reason = (array)($latest['mail_reason'] ?? []) + ['code' => 'other', 'reason' => 'mail sending failed',
                 'port' => null];
             $parts[] = sprintf('%s: %s', Format::many($mail, 'new mail transport errors'), $reason['reason']);
@@ -117,8 +120,9 @@ class EmailFailing implements CheckInterface
                 . ' settings and status; var/log/system.log for the failed sends.'));
         }
         $counts = ['mail errors' => $mail];
-        return $parts === [] ? CheckResult::ok('', $counts)
-            : CheckResult::fail(implode('; ', $parts), $counts, 'Mail sending failing')->withCauses($causes);
+        $gauges = ['last error' => (int)($this->state->get(self::LAST)['at'] ?? 0)];
+        return new CheckResult($parts === [] ? CheckResult::OK : CheckResult::FAIL, implode('; ', $parts), $counts,
+            [], $parts === [] ? '' : 'Mail sending failing', $gauges, $causes);
     }
 
     /**

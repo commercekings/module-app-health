@@ -58,14 +58,13 @@ class SystemLogTest extends TestCase
             array_intersect_key($first->counts, ['critical' => 1, 'errors' => 1, 'warnings' => 1]));
         $this->assertSame(CheckResult::OK, $first->status);
         $this->assertCount(1, $first->notices, 'one error, twice');
-        $this->assertMatchesRegularExpression('/^🆕 🟠 Unable to send order \*\*\* ×2 · \{t:\d+\}'
-            . ' · #[0-9a-f]{8}$/u',
+        $this->assertMatchesRegularExpression('/^Error: Unable to send order \*\*\* \(2×, \{t:\d+\}\)$/u',
             $first->notices[0]);
         $again = $this->run5(self::line('ERROR', 'Unable to send order 5'));
         $this->assertSame([], $again->notices, 'seen before');
         $this->assertSame(CheckResult::FAIL, $again->status, '3 errors within 5 minutes');
         $this->assertSame('Error spike', $again->title);
-        $this->assertMatchesRegularExpression('/^3 errors in 5 min \(Unable to send order \*\*\* #[0-9a-f]{8} x3\)$/',
+        $this->assertMatchesRegularExpression('/^3 errors in 5 min \(Unable to send order \*\*\* x3\)$/',
             $again->detail);
         $this->assertSame(CheckResult::OK, $this->run5()->status, 'the window passed');
     }
@@ -78,7 +77,7 @@ class SystemLogTest extends TestCase
         $this->clock->now += 6 * 3600;
         $again = $this->run5(self::line('CRITICAL', 'Payment gateway down'));
         $this->assertCount(1, $again->notices);
-        $this->assertStringStartsWith('🔴 Payment gateway down ×1', $again->notices[0], 'not "NEW"');
+        $this->assertStringStartsWith('Critical: Payment gateway down ({t:', $again->notices[0], 'not "NEW"');
     }
 
     public function testTheFingerprintMemoryIsBounded(): void
@@ -92,6 +91,6 @@ class SystemLogTest extends TestCase
         $result = $this->run5($lines);
         $this->assertCount(Fingerprints::LIMIT, $this->store->row(Fingerprints::KEY));
         $this->assertCount(SystemLog::NOTICES + 1, $result->notices, 'five, then "+N more"');
-        $this->assertStringStartsWith('+515 more', $result->notices[SystemLog::NOTICES]);
+        $this->assertStringStartsWith('…and 515 more', $result->notices[SystemLog::NOTICES]);
     }
 }

@@ -18,7 +18,7 @@ class Fingerprints
 {
     public const KEY = 'fingerprints';
     public const LIMIT = 500;
-    public const EMOJI = ['CRITICAL' => '🔴', 'ERROR' => '🟠', 'WARNING' => '🟡'];
+    public const LEVELS = ['CRITICAL' => 'Critical', 'ERROR' => 'Error', 'WARNING' => 'Warning'];
 
     public function __construct(
         private readonly RunState $state,
@@ -76,28 +76,44 @@ class Fingerprints
     }
 
     /**
-     * One error as alerts and the summary show it: "🆕 PaymentException: Card *** declined ×3 · 14:02 ·
-     * app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4" - the masked message when there is one, else the label;
-     * "{t:...}" is the last time, shown in each recipient's time zone.
+     * One error as the summary shows it: "Unable to send order (14×, 09:50, new)" - its label (an exception's class
+     * without its namespace), the count, the last time ("{t:...}", shown in each recipient's time zone) and "new" when
+     * first seen within the day.
      *
      * @param array<string, mixed> $known the fingerprint's entry
      */
-    public static function line(string $fp, array $known, int $count, bool $new, bool $emoji): string
+    public static function line(array $known, int $count, bool $new): string
     {
-        $label = (string)($known['label'] ?? '#' . $fp);
-        $class = preg_match('/^[A-Za-z_][A-Za-z0-9_\\\\]*$/D', $label) && str_contains($label, '\\')
-            ? substr((string)strrchr($label, '\\'), 1) : '';
-        $message = (string)($known['message'] ?? '');
-        $text = $class !== '' ? $class . ($message !== '' ? ': ' . $message : '')
-            : ($message !== '' ? $message : $label);
-        return ($new ? '🆕 ' : '') . ($emoji ? (self::EMOJI[$known['level'] ?? 'ERROR'] ?? '🟠') . ' ' : '') . $text
-            . ' ×' . Format::number($count) . (!empty($known['last']) ? ' · ' . Format::at((int)$known['last']) : '')
-            . (!empty($known['location']) ? ' · ' . $known['location'] : '') . ' · #' . $fp;
+        return self::name($known) . ' (' . Format::number($count) . '×'
+            . (!empty($known['last']) ? ', ' . Format::at((int)$known['last']) : '') . ($new ? ', new' : '') . ')';
     }
 
-    /** A notice for the live alert: the same line, with the level's emoji. */
+    /**
+     * A notice for the live alert, one fact per line: "Error: Unable to send order (09:50)", "Where:
+     * app/code/A/B.php:84" and, when it is on, "Message: <the masked message>".
+     *
+     * @param array<string, mixed> $news a Fingerprints::record() item
+     */
     public static function notice(array $news): string
     {
-        return self::line((string)$news['fingerprint'], $news, (int)$news['count'], $news['kind'] === 'NEW', true);
+        $count = (int)$news['count'];
+        $lines = [(self::LEVELS[$news['level'] ?? 'ERROR'] ?? 'Error') . ': ' . self::name($news) . ' ('
+            . ($count > 1 ? Format::number($count) . '×, ' : '') . Format::at((int)$news['last']) . ')'];
+        if (!empty($news['location'])) {
+            $lines[] = 'Where: ' . $news['location'];
+        }
+        $message = (string)($news['message'] ?? '');
+        if ($message !== '' && $message !== (string)($news['label'] ?? '')) {
+            $lines[] = 'Message: ' . $message;
+        }
+        return implode("\n", $lines);
+    }
+
+    /** @param array<string, mixed> $known */
+    private static function name(array $known): string
+    {
+        $label = (string)($known['label'] ?? 'Unknown error');
+        return preg_match('/^[A-Za-z_][A-Za-z0-9_\\\\]*$/D', $label) && str_contains($label, '\\')
+            ? substr((string)strrchr($label, '\\'), 1) : $label;
     }
 }

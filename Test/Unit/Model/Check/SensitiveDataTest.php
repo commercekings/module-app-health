@@ -73,20 +73,24 @@ class SensitiveDataTest extends TestCase
             'found:credentials.password_field' => 2, 'found:credentials.api_key' => 2], $result->counts,
             'each match: the exception entry carries its message twice (message and context)');
         $notices = implode("\n", $result->notices);
-        $this->assertStringContainsString('> 🚨 Possible PCI: payment card number in system.log (×2, last {t:',
+        $this->assertStringContainsString('PCI: payment card number in system.log (2×, last {t:',
             $notices);
-        $this->assertStringContainsString(') at app/code/Vendor/Payment/Model/Gateway.php:120 · #', $notices,
+        $this->assertStringContainsString(")\nWhere: app/code/Vendor/Payment/Model/Gateway.php:120\n", $notices,
             'below WARNING too: scanned, where it happened');
-        $this->assertStringContainsString('> 🚨 Possible Credentials: password in exception.log', $notices);
-        $this->assertStringContainsString('> 🟡 Possible Personal data: bank account number (IBAN) in system.log',
+        $this->assertStringContainsString('Credentials: password in exception.log', $notices);
+        $this->assertStringContainsString('Personal data: bank account number (IBAN) in system.log',
             $notices);
-        $this->assertStringContainsString('> Check: Stop logging it at the source, then rotate or remove the log: card'
+        $this->assertStringContainsString('Check: Stop logging it at the source, then rotate or remove the log: card'
             . ' data in logs breaks PCI DSS.', $notices);
         $text = (new Messages($this->pool(['sensitive_data' => 'Sensitive data in logs']), $this->clock))
             ->notices(new Target(0, 1, 'slack', 'C0', 'Main Website Store', 'UTC'), 'sensitive_data',
                 $result->notices);
-        $this->assertStringStartsWith("🚨 *Sensitive data in logs – Main Website Store (all websites)*\n\n> 🚨 Possible",
-            $text);
+        $this->assertStringStartsWith("*Security: sensitive data in logs · Main Website Store (all websites)*\n\n"
+            . "PCI: payment card number in system.log (2×, last 08:01)\n"
+            . 'Where: app/code/Vendor/Payment/Model/Gateway.php:120'
+            . "\n\nCredentials: password in exception.log", $text);
+        $this->assertStringContainsString("\n\nWhat to do: Stop logging it at the source, then rotate or remove the"
+            . ' log: card data in logs breaks PCI DSS.', $text);
         $everything = $text . json_encode($result) . json_encode($this->store->rows);
         foreach (self::VALUES as $value) {
             $this->assertStringNotContainsString($value, $everything, $value);

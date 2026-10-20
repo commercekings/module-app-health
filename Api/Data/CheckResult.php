@@ -52,7 +52,7 @@ class CheckResult
 
     /**
      * @param array<string, int> $counts
-     * @param string[] $notices
+     * @param string[] $notices each of one or more lines
      * @param array<string, int> $gauges
      * @param Cause[] $causes
      * @throws \InvalidArgumentException for an unknown status, a count key that is not a name or a negative count
@@ -76,7 +76,7 @@ class CheckResult
         }
         $this->detail = self::clean($detail, self::DETAIL_LENGTH);
         $this->counts = $counts;
-        $this->notices = array_values(array_filter(array_map(fn ($notice) => self::clean((string)$notice,
+        $this->notices = array_values(array_filter(array_map(fn ($notice) => self::lines((string)$notice,
             self::NOTICE_LENGTH), $notices), fn ($notice) => $notice !== ''));
         $this->title = self::clean($title, 60);
         $this->gauges = $gauges;
@@ -129,6 +129,21 @@ class CheckResult
     }
 
     /** One line, no email addresses, at most $length characters. */
+    /** clean() for each line of a text of several lines, the empty ones dropped, at most $length in all. */
+    private static function lines(string $text, int $length): string
+    {
+        $kept = [];
+        $left = $length;
+        foreach (explode("\n", $text) as $line) {
+            $line = self::clean($line, max(1, $left));
+            if ($line !== '' && $left > 0) {
+                $kept[] = $line;
+                $left -= mb_strlen($line) + 1;
+            }
+        }
+        return implode("\n", $kept);
+    }
+
     public static function clean(string $text, int $length): string
     {
         $text = trim((string)preg_replace('/\s+/u', ' ', $text));

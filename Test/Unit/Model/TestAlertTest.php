@@ -43,7 +43,8 @@ class TestAlertTest extends TestCase
         $this->assertSame('C0123', $this->testAlert(new Target(0, 1, 'slack', 'C0123', 'Shop', 'UTC'))->send(0));
         $this->assertSame([false, false, 'app_health_test'], [$this->sent[0]->useCooldown, $this->sent[0]->stoppable,
             $this->sent[0]->type]);
-        $this->assertStringStartsWith('✅ *Test alert – Shop (all websites)*', ($this->sent[0]->content)()->text);
+        $this->assertStringStartsWith("*Test alert · Shop (all websites)*\n\nThis channel gets",
+            ($this->sent[0]->content)()->text);
     }
 
     public function testTheAdminSeesWhyNot(): void

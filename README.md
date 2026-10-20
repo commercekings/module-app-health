@@ -18,7 +18,7 @@ Works with Magento 2.4.4+ · PHP 8.1–8.5 · RabbitMQ or MySQL queue · Slack o
 - **Light.** Admin, cron and Notification's queue only – nothing on the storefront or in checkout. Indexed, bounded
   queries; only the new bytes of the exception log; a 5-second budget per run.
 - **Private.** Log errors are sent as a safe label (the exception class, or the message's first words with every
-  variable part as `***`), file:line and a fingerprint – never the line itself. Optionally the message, masked.
+  variable part as `***`) and, in alerts, file:line – never the line itself. Optionally the message, masked.
 - **When the server itself is down.** An optional heartbeat lets an outside service alert you when the pings stop.
 
 Sends through [Notification](https://github.com/commercekings/module-notification): Slack with
@@ -42,7 +42,7 @@ Sends through [Notification](https://github.com/commercekings/module-notificatio
 
 ### Why it fails
 
-Each alert says why, as far as Magento's own data shows it, and where to look (`> Check: …`):
+Each alert says why, as far as Magento's own data shows it, and what to do (`What to do: …`):
 
 | Check | Causes |
 |---|---|
@@ -56,12 +56,12 @@ Each alert says why, as far as Magento's own data shows it, and where to look (`
 | Sales emails | how many are unsent and the oldest; asynchronous sending or refused at checkout |
 
 ```
-🔴 *Cron jobs stuck – Main Website Store (all websites)*
+*Problem: Cron jobs stuck · Main Website Store (all websites)*
 
-> Job indexer_reindex_all_invalid running for 3 h (since 08:12).
-> 12 other jobs in its group are waiting.
+Job indexer_reindex_all_invalid running for 3 h (since 08:12).
+12 other jobs in its group are waiting.
 
-> Check: The process may have crashed: restart cron, then clear the stuck job (status "running" in cron_schedule).
+What to do: The process may have crashed: restart cron, then clear the stuck job (status "running" in cron_schedule).
 ```
 
 A check of another module gives its own causes the same way (`Api\Data\Cause` on its `CheckResult`).
@@ -69,57 +69,60 @@ A check of another module gives its own causes the same way (`Api\Data\Cause` on
 **All websites** checks alert once, to the default scope's recipient. **The website** checks, and the daily summary,
 go to the website's recipient (the default one unless the website sets its own).
 
-One message per problem; its first line is what a phone notification shows, then one fact per line and where to look:
+One message per problem, in plain Slack text without emoji: a bold first line that says what and where (what a phone
+notification shows; *Problem*, *Warning*, *Resolved*, *New error*, *Security*), then one fact per line and what to do:
 
 ```
-🔴 *Cron stopped – Main Website Store (all websites)*
+*Problem: Cron stopped · Main Website Store (all websites)*
 
-> No job has run since 10:39 (65 min).
+No job has run since 10:39 (65 min).
 
-> Check: Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.
+What to do: Is the cron container (or crontab) running? bin/magento cron:run by hand shows errors.
 ```
 
-```
-✅ *Recovered: Cron – Main Website Store (all websites)*
-
-> OK again since 11:52.
-```
+A failing check told again after the repeat interval ends with "Still failing since 19 Oct 09:00.".
 
 ```
-🔴 *New errors: system.log – Main Website Store (all websites)*
+*Resolved: Cron · Main Website Store (all websites)*
 
-> 🆕 🔴 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
-
-> Check: var/log/system.log: look for the fingerprint's error around that time.
+OK again since 11:52.
 ```
 
 ```
-*Daily summary – Main Website Store – 20 Oct*
+*New error in system.log · Main Website Store (all websites)*
 
-*Problems (1)*
-> 🔴 Cron: no job has run since 10:39 (65 min)
+Critical: PaymentException (3×, 14:02)
+Where: app/code/Vendor/Pay/Model/Gateway.php:120
+Message: Card *** declined for order ***
 
-*Logs (24 h)*
-> system.log: 1 critical · 14 errors · 52 warnings
-> exception.log: 14
+What to do: var/log/system.log: look for the error around that time, in the file it names.
+```
 
-🔴 *Critical*
-> 🆕 PaymentException: Card *** declined for order *** ×3 · 14:02 · app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+The daily summary leaves out file paths and messages, and any section without content:
 
-🟠 *Errors*
-> Unable to send the order *** ×9 · 13:40 · app/code/Vendor/Mail/Model/Sender.php:84 · #5e6f7a8b
-> NoSuchEntityException: No such entity with *** ×5 · 11:02 · #0c1d2e3f
+```
+*Main Website Store · daily summary · 20 Oct*
 
-🟡 *Warnings*
-> Slow response from *** ×52 · 14:10 · #9a8b7c6d
+*Needs attention*
+• Cron: no job has run since 10:39 (65 min)
+• Caches: warned earlier, OK now
+
+*Errors, last 24 h*
+• Critical: PaymentException (3×, 14:02, new)
+• Error: Unable to send the order *** (9×, 13:40)
+• Error: NoSuchEntityException (5×, 11:02)
+• Warning: Slow response from *** (52×, 14:10)
 
 *Email*
-> Sales emails unsent: 0
-> Mail errors: 0
+• 2 order emails not sent, oldest 09:12
+• 3 mail errors, last 09:40
 
-*OK all day*
-> Indexers · Caches · Maintenance · Queue · Sending · Email sending
+*All OK*
+• Indexers, maintenance, queue, sending, email sending
 ```
+
+At most 5 critical, 10 errors and 3 warnings, the latest first, then "• …and N more". With nothing unsent and no mail
+errors, *Email* is "• All order emails sent, no mail errors".
 
 ## Installation
 
@@ -173,11 +176,12 @@ breach). Every new log entry – every level, every log source – is scanned be
 a high alert at once, with the rule, how often, the last time and where – never the value:
 
 ```
-🚨 *Sensitive data in logs – Main Website Store (all websites)*
+*Security: sensitive data in logs · Main Website Store (all websites)*
 
-> 🚨 Possible PCI: payment card number in system.log (×3, last 14:02) at app/code/Vendor/Pay/Model/Gateway.php:120 · #a1b2c3d4
+PCI: payment card number in system.log (3×, last 14:02)
+Where: app/code/Vendor/Pay/Model/Gateway.php:120
 
-> Check: Stop logging it at the source, then rotate or remove the log: card data in logs breaks PCI DSS.
+What to do: Stop logging it at the source, then rotate or remove the log: card data in logs breaks PCI DSS.
 ```
 
 | Rule set (severity) | Rules |

@@ -70,6 +70,8 @@ class EmailFailingTest extends TestCase
         $this->assertSame([CheckResult::FAIL, 'Mail sending failing'], [$result->status, $result->title]);
         $this->assertSame('2 new mail transport errors: the mail server refused the connection', $result->detail);
         $this->assertSame(['mail errors' => 2], $result->counts);
+        $this->assertSame(['last error' => 200], $result->gauges, 'the latest, for the daily summary');
+        $this->assertSame(['last error' => 200], $this->check([], [], [], [1])->gauges, 'kept after the recovery');
         $this->assertSame('mail_refused', $result->causes[0]->code);
         $this->assertSame('The mail server refused the connection (port 465): Transport error while sending email:'
             . ' Connection could not be established with host *** (Connection refused)'

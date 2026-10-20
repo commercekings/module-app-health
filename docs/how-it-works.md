@@ -143,7 +143,7 @@ Normalizer masks it, so a third-party parser can't send a line as it is.
   detector runs them under a backtracking limit and skips a rule that hits it.
 - **Out:** only "<set>/<rule>" and the number of matches. The `sensitive_data` check keeps findings per rule and
   fingerprint (the `sensitive` row, at most 200) and makes each a notice once, and again after the repeat interval
-  while it goes on, under the title "🚨 Sensitive data in logs".
+  while it goes on, under the title "Security: sensitive data in logs".
 
 ## Privacy
 

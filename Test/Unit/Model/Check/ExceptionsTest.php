@@ -58,11 +58,11 @@ class ExceptionsTest extends TestCase
         $this->assertSame([2, 1], array_values(array_filter($first->counts,
             fn ($key) => str_starts_with($key, 'fp:'), ARRAY_FILTER_USE_KEY)), 'by fingerprint, for the summary');
         $this->assertCount(2, $first->notices, 'two exceptions never seen before');
-        $this->assertMatchesRegularExpression('/^🆕 🔴 PaymentException ×2 · \{t:1792483262\}'
-            . ' · vendor\/magento\/x.php:12 · #[0-9a-f]{8}$/u', $first->notices[0], 'the entry\'s own time');
+        $this->assertSame("Critical: PaymentException (2×, {t:1792483262})\nWhere: vendor/magento/x.php:12",
+            $first->notices[0], 'the entry\'s own time');
         $spike = $this->run5(self::entry('A\\PaymentException', 'p') . self::entry('C\\Other', 'o'));
         $this->assertSame(CheckResult::FAIL, $spike->status);
-        $this->assertSame('5 exceptions in 15 min (A\\PaymentException x3, B\\NoSuch x1, C\\Other x1)', $spike->detail);
+        $this->assertSame('5 exceptions in 15 min (PaymentException x3, NoSuch x1, Other x1)', $spike->detail);
         $this->assertCount(1, $spike->notices, 'only C is new');
         $this->assertSame('Exception spike', $spike->title);
         $this->assertSame(CheckResult::FAIL, $this->run5()->status, 'still within the window');
